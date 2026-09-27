@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { connect, type Connection } from '../connection';
 import type { SourceService } from '../source/service';
 import type { SourceNode } from '../views/sourceTree';
+import { confirmModal } from '../views/confirm';
 import { runReport, runsInProgress, startRun } from './fitness';
 
 /** Run a crew's fitness from the Crew Sources view, and read a run's report. */
@@ -42,6 +43,6 @@ export class FitnessCommands {
 
   private async confirmBusy(runs: string[]): Promise<boolean> {
     const message = `A fitness run is already in progress (${runs.join(', ')}). Crews share the GPUs, so two runs at once measure contention, not the crew. Start anyway?`;
-    return (await vscode.window.showWarningMessage(message, { modal: true }, 'Start anyway')) === 'Start anyway';
+    return confirmModal(message, 'Start anyway');
   }
 }

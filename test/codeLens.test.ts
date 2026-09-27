@@ -89,6 +89,23 @@ describe('CrewCodeLens', () => {
     expect(lenses[1].command?.arguments?.[0]).toMatchObject({ kind: 'resource', drift: { kind: 'PromptModule', name: 'demo-rules' } });
   });
 
+  it('drops lenses once the source is no longer deployed or cannot be read', async () => {
+    const sources = tree();
+    const lens = new CrewCodeLens(sources);
+    const [source] = await sources.getChildren();
+    await sources.getChildren(source);
+    expect(lens.provideCodeLenses(document(`${CHART}/templates/crew.yaml`))).toHaveLength(2);
+    cluster.objects = [];
+    await sources.getChildren(source);
+    expect(lens.provideCodeLenses(document(`${CHART}/templates/crew.yaml`))).toEqual([]);
+    cluster.add(obj('Crew', 'demo', 'team-a', { description: 'old' }));
+    await sources.getChildren(source);
+    expect(lens.provideCodeLenses(document(`${CHART}/templates/crew.yaml`))).not.toEqual([]);
+    cluster.failures.set('/apis/kubemoot.ai/v1alpha1/crews', new Error('offline'));
+    await sources.getChildren(source);
+    expect(lens.provideCodeLenses(document(`${CHART}/templates/crew.yaml`))).toEqual([]);
+  });
+
   it('ignores files outside every crew source', async () => {
     const sources = tree();
     await sources.getChildren();

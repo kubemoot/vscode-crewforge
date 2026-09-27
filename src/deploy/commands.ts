@@ -3,7 +3,8 @@ import * as os from 'node:os';
 import * as vscode from 'vscode';
 import { connect, type Connection } from '../connection';
 import { nameProblem } from '../k8s/paths';
-import { deployedAtByRevision, type Channel, type Deployment } from '../source/deployments';
+import { deployedAtByRevision, stripDirty, type Channel, type Deployment } from '../source/deployments';
+import { confirmModal } from '../views/confirm';
 import { identify } from '../source/identity';
 import type { RenderDeps } from '../source/render';
 import type { SourceEntry } from '../source/service';
@@ -79,7 +80,7 @@ export class DeployCommands {
     if (node?.kind !== 'deployment') return;
     const { entry, deployment } = node;
     if (deployment.channel === 'flux') return gitOpsGuidance(deployment, 'revert the commit instead');
-    const current = deployment.revision?.replace(/-dirty$/, '');
+    const current = stripDirty(deployment.revision);
     const history = deployedAtByRevision(deployment);
     const revisions = await listRevisions(this.deps.exec, entry.source);
     const choice = await vscode.window.showQuickPick(
@@ -172,8 +173,7 @@ async function pickChannel(options: ChannelOption[]): Promise<DeployChannel | un
 
 async function confirm(warnings: string[], action: string): Promise<boolean> {
   if (warnings.length === 0) return true;
-  const answer = await vscode.window.showWarningMessage(warnings.join('\n\n'), { modal: true }, action);
-  return answer === action;
+  return confirmModal(warnings.join('\n\n'), action);
 }
 
 function revisionNote(date: string, current: boolean, deployedAt?: string): string {

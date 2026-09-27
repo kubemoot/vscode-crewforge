@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { channelOf, deployedAtByRevision, deploymentDescription, deploymentsOf, historyLines, ANNOTATIONS } from '../src/source/deployments';
+import { channelOf, deployedAtByRevision, stripDirty, deploymentDescription, deploymentsOf, historyLines, ANNOTATIONS } from '../src/source/deployments';
 import { discoverSources, type CrewSource } from '../src/source/discover';
 import { identify, normalizeRemote } from '../src/source/identity';
 import { crewOf, isKubemoot, objectKey, parseManifests, toYaml } from '../src/source/manifests';
@@ -206,6 +206,9 @@ describe('deployments', () => {
     expect([...deployedAtByRevision(d)]).toEqual([['abc1234', '2026-09-27T10:00:00Z']]);
     const bare = deploymentsOf('x', 'demo', [crew('b')])[0];
     expect(historyLines(bare)).toEqual([]);
+    expect(stripDirty('abc-dirty')).toBe('abc');
+    expect(stripDirty('abc')).toBe('abc');
+    expect(stripDirty(undefined)).toBeUndefined();
     expect(deployedAtByRevision({ ...bare, crew: { ...bare.crew, revisions: [{ revision: 'f00' }] } }).get('f00')).toBe('');
   });
 });

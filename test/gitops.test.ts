@@ -155,6 +155,14 @@ describe('GitOps in the tree and the Follow command', () => {
     expect(tree.getTreeItem(node).tooltip).toContain('Flux: cannot read the HelmRelease (forbidden)');
   });
 
+  it('leaves out an empty Flux message', async () => {
+    const service = new SourceService({ exec: async (cmd) => ({ code: cmd === 'git' ? 128 : 0, stdout: cmd === 'git' ? '' : 'apiVersion: kubemoot.ai/v1alpha1\nkind: Crew\nmetadata:\n  name: demo\n', stderr: '' }), readText: async () => '', readYamlFiles: async () => [], listFiles: async () => ({ charts: [], yamls: [] }) });
+    const client = clusterWith([hr('0.2.0', 'True', { message: '' })]);
+    const tree = new SourceTreeProvider(service, () => ({ source: '/k', context: 'lab', client: client as unknown as KubeClient }));
+    const [node] = await (tree as unknown as { loadDeployments(e: unknown): Promise<unknown[]> }).loadDeployments(entry) as never[];
+    expect(String(tree.getTreeItem(node).tooltip)).not.toMatch(/\n\n|\n$/);
+  });
+
   it('follows a rollout to Ready and reports progress', async () => {
     let refreshed = 0;
     const client = clusterWith([hr('0.1.0'), hr('0.2.0')]);

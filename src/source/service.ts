@@ -85,8 +85,9 @@ export class SourceService {
   private async yamlIn(folder: string): Promise<Manifest[]> {
     try {
       return (await this.deps.readYamlFiles(folder)).flatMap(({ text }) => parseManifests(text));
-    } catch {
-      return [];
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') return [];
+      throw err;
     }
   }
 

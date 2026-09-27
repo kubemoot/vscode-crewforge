@@ -98,7 +98,8 @@ function deps(folders: Record<string, string> = {}): SourceDeps {
     exec: async (cmd) => (cmd === 'git' ? { code: 128, stdout: '', stderr: '' } : { code: 0, stdout: RENDERED, stderr: '' }),
     readText: async () => '',
     readYamlFiles: async (dir) => {
-      if (!(dir in folders)) throw new Error('ENOENT');
+      if (dir === '/w/broken/fitness') throw Object.assign(new Error('EACCES: permission denied'), { code: 'EACCES' });
+      if (!(dir in folders)) throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
       return [{ file: `${dir}/f.yaml`, text: folders[dir] }];
     },
     listFiles: async () => ({ charts: [], yamls: [] }),
@@ -115,6 +116,11 @@ describe('SourceService fitness', () => {
     const service = new SourceService(deps({ '/w/demo-crew/fitness': suite, '/w/fitness': beside }));
     const definitions = await service.fitnessDefinitions(entry, 'ns');
     expect(definitions.map((d) => d.metadata.name)).toEqual(['rendered-suite', 'inside']);
+  });
+
+  it('reports a fitness folder it cannot read instead of calling it empty', async () => {
+    const broken = { ...entry, source: { ...chart, root: '/w/broken' } };
+    await expect(new SourceService(deps()).fitnessDefinitions(broken, 'ns')).rejects.toThrow('permission denied');
   });
 
   it('compares the fitness the source renders, leaves started runs out of drift, and lists both as runs', async () => {

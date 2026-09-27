@@ -90,12 +90,13 @@ export class SourceTreeProvider implements vscode.TreeDataProvider<SourceNode> {
       this.connection = this.connectTo();
       const connection = this.connection;
       const deployments = this.service.deployments(entry, await listCrews(connection.client, namespaceFilter()));
-      if (deployments.length === 0) return [{ kind: 'message', text: `Not deployed in ${connection.context}`, icon: 'circle-slash' }];
       const nodes = await Promise.all(deployments.map((deployment) => this.withDrift(entry, deployment, connection)));
       this.loaded.set(entry.source.root, nodes as DeploymentNode[]);
       this.loadedChanged.fire();
-      return nodes;
+      return nodes.length ? nodes : [{ kind: 'message', text: `Not deployed in ${connection.context}`, icon: 'circle-slash' }];
     } catch (err) {
+      this.loaded.delete(entry.source.root);
+      this.loadedChanged.fire();
       return [errorMessage(err)];
     }
   }
@@ -196,7 +197,8 @@ function deploymentTooltip(d: Deployment, drift: string, error?: string): string
 function fluxLines(node: Extract<SourceNode, { kind: 'deployment' }>): string[] {
   if (node.fluxError) return [`Flux: cannot read the HelmRelease (${node.fluxError})`];
   if (!node.flux) return [];
-  const lines = [`HelmRelease ${node.flux.ref.namespace}/${node.flux.ref.name}: ${fluxSummary(node.flux)}`, node.flux.message];
+  const lines = [`HelmRelease ${node.flux.ref.namespace}/${node.flux.ref.name}: ${fluxSummary(node.flux)}`];
+  if (node.flux.message) lines.push(node.flux.message);
   if (node.flux.hasValuesFrom) lines.push('Its valuesFrom are not read, so drift may show values Flux sets.');
   return lines;
 }

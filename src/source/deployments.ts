@@ -12,6 +12,11 @@ export const ANNOTATIONS = {
   deployedAt: 'crewforge.kubemoot.ai/deployed-at',
 } as const;
 
+/** A revision without the marker CrewForge adds when the source had uncommitted edits. */
+export function stripDirty(revision?: string): string | undefined {
+  return revision?.replace(/-dirty$/, '');
+}
+
 /** One live deployment of a crew source: a Crew of the source's name in some namespace. */
 export interface Deployment {
   namespace: string;
@@ -72,7 +77,7 @@ export function historyLines(d: Deployment, limit = 5): string[] {
 export function deployedAtByRevision(d: Deployment): Map<string, string> {
   const seen = new Map<string, string>();
   for (const r of d.crew.revisions ?? []) {
-    const hash = r.revision?.replace(/-dirty$/, '');
+    const hash = stripDirty(r.revision);
     if (hash && !seen.has(hash)) seen.set(hash, r.deployedAt ?? r.observedAt ?? '');
   }
   return seen;

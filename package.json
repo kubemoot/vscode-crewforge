@@ -237,11 +237,6 @@
           "group": "deploy@2"
         },
         {
-          "command": "crewforge.updateDeployment",
-          "when": "view == crewforge.sources && viewItem =~ /^deployment-/",
-          "group": "deploy@1"
-        },
-        {
           "command": "crewforge.runFitness",
           "when": "view == crewforge.sources && viewItem == fitness",
           "group": "inline"

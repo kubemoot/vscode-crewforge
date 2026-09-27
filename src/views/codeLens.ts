@@ -12,6 +12,8 @@ export interface ObjectPosition {
 
 /**
  * Finds the Kubemoot objects in a multi-document YAML text by their apiVersion lines.
+ * It scans lines rather than parsing, because a Helm template with `{{ }}` is not YAML
+ * that parseManifests could load, and the lens needs positions in the file as written.
  * A name that is a Helm template expression is left out, since only the render knows it.
  */
 export function kubemootObjects(text: string): ObjectPosition[] {
