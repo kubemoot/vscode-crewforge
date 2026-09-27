@@ -24,3 +24,7 @@ export function streamTimeoutMs(): number {
   const seconds = vscode.workspace.getConfiguration('crewforge').get<number>('streamTimeoutSeconds', 600);
   return Math.max(60, seconds) * 1000;
 }
+
+export function dashboardUrl(): string {
+  return vscode.workspace.getConfiguration('crewforge').get<string>('dashboardUrl', '').trim();
+}

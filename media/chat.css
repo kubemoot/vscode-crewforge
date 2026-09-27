@@ -39,8 +39,9 @@ button { cursor: pointer; font: inherit; }
 .conv-date { font-size: 0.7rem; color: var(--color-text-muted); margin-top: 0.15rem; }
 .no-discussions { padding: 2rem 1rem; text-align: center; color: var(--color-text-muted); font-size: 0.85rem; }
 .sidebar-footer { padding: 0.75rem 1rem; border-top: 1px solid var(--color-border); text-align: center; }
-.powered-by { font-size: 0.7rem; color: var(--color-text-muted); }
-.disclaimer { font-size: 0.65rem; color: var(--color-text-muted); opacity: 0.7; margin-top: 0.2rem; }
+.powered-by { font-size: 0.7rem; color: var(--color-text-muted); cursor: default; }
+.powered-by a { color: var(--vscode-textLink-foreground); text-decoration: none; }
+.powered-by a:hover { text-decoration: underline; }
 
 /* Main */
 .chat-container { flex: 1; display: flex; flex-direction: column; min-width: 0; }

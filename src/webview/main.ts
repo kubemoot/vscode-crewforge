@@ -66,6 +66,10 @@ $('toggle').addEventListener('click', () => els.sidebar.classList.toggle('hidden
 $('new').addEventListener('click', () => vscode.postMessage({ type: 'new' }));
 els.copy.addEventListener('click', () => vscode.postMessage({ type: 'copy' }));
 els.exportBtn.addEventListener('click', () => vscode.postMessage({ type: 'export' }));
+$('dashboard').addEventListener('click', (e) => {
+  e.preventDefault();
+  vscode.postMessage({ type: 'openDashboard' });
+});
 els.history.addEventListener('click', (e) => {
   const item = (e.target as HTMLElement).closest<HTMLElement>('[data-id]');
   if (item?.dataset.id) vscode.postMessage({ type: 'open', id: item.dataset.id });

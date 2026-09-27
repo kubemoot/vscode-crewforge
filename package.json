@@ -157,6 +157,11 @@
           "default": 600,
           "minimum": 60,
           "description": "Longest a single turn may stream before CrewForge gives up on it."
+        },
+        "crewforge.dashboardUrl": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "URL of the Kubemoot dashboard for this cluster, opened from **Powered by Kubemoot** in a chat. With `dashboards.sh`, use the local address it prints for the Kubemoot dashboard."
         }
       }
     }

@@ -1,7 +1,7 @@
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import * as vscode from 'vscode';
-import { streamTimeoutMs, type Connection } from '../connection';
+import { dashboardUrl, streamTimeoutMs, type Connection } from '../connection';
 import { DEFAULT_TIMING } from '../discussion/client';
 import { ChatSession, type SessionView } from '../discussion/session';
 import type { CrewSummary } from '../k8s/crews';
@@ -106,6 +106,8 @@ export class ChatPanel {
         return this.copyMessage(m.index);
       case 'export':
         return this.export();
+      case 'openDashboard':
+        return openDashboard();
     }
   }
 
@@ -158,7 +160,7 @@ export class ChatPanel {
   <aside class="discussion-sidebar" id="sidebar">
     <div class="sidebar-header"><h2>Conversations</h2><button class="new-chat-btn" id="new" title="New conversation">+</button></div>
     <div class="discussion-list" id="history"></div>
-    <footer class="sidebar-footer"><p class="powered-by">Powered by Kubemoot</p><p class="disclaimer">AI can make mistakes. Verify important info.</p></footer>
+    <footer class="sidebar-footer"><p class="powered-by" title="AI can make mistakes. Verify important info.">Powered by <a href="#" id="dashboard">Kubemoot</a></p></footer>
   </aside>
   <div class="sidebar-resizer" id="resizer" title="Drag to resize"></div>
   <div class="chat-container">
@@ -183,4 +185,14 @@ export class ChatPanel {
 </body>
 </html>`;
   }
+}
+
+/** Opens the Kubemoot dashboard in the default browser, or the setting that names it when unset. */
+async function openDashboard(): Promise<void> {
+  const url = dashboardUrl();
+  if (url) {
+    await vscode.env.openExternal(vscode.Uri.parse(url));
+    return;
+  }
+  await vscode.commands.executeCommand('workbench.action.openSettings', 'crewforge.dashboardUrl');
 }

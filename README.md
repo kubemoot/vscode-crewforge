@@ -40,6 +40,7 @@ Conversations Folder** shows where they are kept.
 | `crewforge.context` | empty | Context to use. Empty uses the kubeconfig's current context. |
 | `crewforge.namespaces` | `[]` | Show crews only in these namespaces. Set it when your account may read only some namespaces. |
 | `crewforge.streamTimeoutSeconds` | `600` | Longest a single turn may stream. |
+| `crewforge.dashboardUrl` | empty | The Kubemoot dashboard, opened from **Powered by Kubemoot** in a chat. Empty opens this setting. |
 
 ## What your account needs
 

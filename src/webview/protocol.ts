@@ -19,4 +19,5 @@ export type WebviewMessage =
   | { type: 'open'; id: string }
   | { type: 'copy' }
   | { type: 'copyMessage'; index: number }
-  | { type: 'export' };
+  | { type: 'export' }
+  | { type: 'openDashboard' };
