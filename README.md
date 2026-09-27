@@ -1,9 +1,11 @@
 # CrewForge for VS Code
 
-See the Kubemoot crews in a cluster and talk to them from the editor. CrewForge lists
-every Crew your kubeconfig can read, shows whether each is Ready, and opens a chat with
-any of them: you watch each agent triage, analyze, and report, then read the crew's
-answer. Conversations are saved, so you can continue one later or export it as Markdown.
+Develop Kubemoot crews in the editor: create a crew, deploy it to any namespace, see
+how each deployment differs from its source, roll it back or forward, run its fitness,
+and talk to it. CrewForge lists every Crew your kubeconfig can read and opens a chat
+with any of them: you watch each agent triage, analyze, and report, then read the
+crew's answer. Conversations are saved, so you can continue one later or export it as
+Markdown.
 
 Everything goes through your kubeconfig. The chat reaches a crew's discussion gateway
 through the Kubernetes API server's service proxy, the same route `kmctl` uses, so no
@@ -32,6 +34,33 @@ stops a turn.
 download buttons in a chat's header copy or save it as Markdown. **CrewForge: Open
 Conversations Folder** shows where they are kept.
 
+## Develop crews
+
+The **Crew Sources** view finds crew Helm charts and plain-manifest bundles in the
+workspace and, under each, every namespace its crew is deployed to.
+
+- **Create Crew** (the + on the view) scaffolds a working crew as a Helm chart with
+  `kmctl create --chart`; kmctl must be on your PATH.
+- **Deploy Crew to a Namespace** (the upload icon on a source) deploys into any namespace
+  you name, through Helm (`helm upgrade --install`), as a bundle (`kubectl apply
+  --server-side`), or, for a crew Flux manages, by commit and push. A crew keeps the
+  channel it came through, and CrewForge asks before replacing a crew from another source
+  or another developer. It records the source, owner, revision, and channel on the Crew.
+- Each deployment shows its **drift**: the Kubemoot objects whose spec differs from the
+  source, missing ones, and extra ones. Click one for a live-versus-source diff. Flux
+  deployments render with their HelmRelease values and show the release state.
+- A deployment's menu has **Update Deployment from Source** (a bundle applies only what
+  differs), **Deploy a Revision** (any commit that touched the source, to roll back or
+  forward), **Run Fitness**, **Follow GitOps Rollout** (Flux), and **Remove Deployment**.
+- Its **Fitness** node lists its fitness runs with their results; a run opens as a report.
+  CrewForge warns before starting a run while another is in progress, since crews share
+  the GPUs.
+- With the Red Hat YAML extension installed, Kubemoot manifests are checked against the
+  cluster's own schema, including fields the CRD does not define.
+
+`helm`, `kubectl`, and `git` come from your PATH; CrewForge runs them with its kubeconfig
+and context.
+
 ## Settings
 
 | Setting | Default | Meaning |
@@ -46,11 +75,16 @@ Conversations Folder** shows where they are kept.
 
 - `list` on `crews.kubemoot.ai`, cluster-wide or in each namespace of `crewforge.namespaces`.
 - `get` and `create` on `services/proxy` in the crew's namespace, to ask and to stream.
+- To develop crews: `get` and `list` on the Kubemoot kinds a source renders, `patch` on
+  `crews` (its annotations), `create` on `crewfitnesses` and `crewfitnesssuites`, and what
+  `helm` or `kubectl` need to deploy. Reading `helmreleases.helm.toolkit.fluxcd.io` adds
+  the Flux state; without it the tree says it cannot read it.
 
 ## Architecture boundaries
 
-CrewForge reads Crews and talks to their discussion gateways; it creates and deletes
-nothing. When authoring arrives it stays within Kubemoot's custom resources:
+CrewForge's own writes to the API server are Kubemoot custom resources only: the
+annotations on a Crew and the fitness runs it starts. Deploying and removing run your
+own `helm` and `kubectl`.
 
 - **CrewForge never** deletes namespaces, manages Jobs, touches non-CRD cluster resources,
   or implements cleanup or lifecycle logic.
