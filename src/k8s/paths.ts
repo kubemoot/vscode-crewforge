@@ -10,6 +10,16 @@ export function checkName(kind: string, value: string): string {
   return value;
 }
 
+/** Why value is not a valid Kubernetes name, or undefined when it is; for input validation. */
+export function nameProblem(kind: string, value: string): string | undefined {
+  try {
+    checkName(kind, value.trim());
+    return undefined;
+  } catch (err) {
+    return (err as Error).message;
+  }
+}
+
 /** Every Crew the credentials can list, across namespaces. */
 export const CREWS_PATH = '/apis/kubemoot.ai/v1alpha1/crews';
 

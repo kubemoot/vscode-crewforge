@@ -37,9 +37,13 @@ export function crewOf(manifests: Manifest[]): Manifest | undefined {
   return manifests.find((m) => m.kind === 'Crew' && isKubemoot(m));
 }
 
-/** A stable identity for an object within one namespace. */
+/** A stable identity for an object within one namespace: `Kind/name`. */
+export function keyOf(kind: string, name: string): string {
+  return `${kind}/${name}`;
+}
+
 export function objectKey(m: Pick<Manifest, 'kind' | 'metadata'>): string {
-  return `${m.kind}/${m.metadata.name}`;
+  return keyOf(m.kind, m.metadata.name);
 }
 
 /** YAML for showing an object in an editor: server bookkeeping removed, keys in a readable order. */

@@ -1,0 +1,72 @@
+import * as path from 'node:path';
+import * as vscode from 'vscode';
+import type { Connection } from '../connection';
+import type { Exec } from '../source/render';
+import { nameProblem } from '../k8s/paths';
+
+/** The families kmctl's scaffold has model sizes for. */
+const MODEL_FAMILIES = ['qwen', 'gemma', 'llama', 'mistral'];
+
+export interface CreateCrewRequest {
+  name: string;
+  parent: string;
+  members: number;
+  modelFamily?: string;
+}
+
+/**
+ * The kmctl command that scaffolds a crew as a Helm chart. kmctl owns the crew
+ * templates; CrewForge only asks for them. With no providers given, kmctl uses every
+ * ModelProvider it finds through the kubeconfig.
+ */
+export function createArgs(request: CreateCrewRequest, context?: string): string[] {
+  const args = ['create', request.name, '--chart', '--no-input', '--members', String(request.members), '-o', request.parent];
+  if (request.modelFamily) args.push('--model-family', request.modelFamily);
+  if (context) args.push('--context', context);
+  return args;
+}
+
+/** Runs kmctl create; returns the new chart's folder and kmctl's warnings. */
+export async function scaffoldCrew(exec: Exec, request: CreateCrewRequest, connection?: Pick<Connection, 'source' | 'context'>): Promise<{ root: string; warnings: string }> {
+  const env = connection ? { KUBECONFIG: connection.source } : undefined;
+  const result = await exec('kmctl', createArgs(request, connection?.context), { env, cwd: request.parent });
+  if (result.code === 127) throw new Error('Creating a crew needs kmctl on your PATH; install it from https://github.com/kubemoot/kmctl/releases');
+  if (result.code !== 0) throw new Error(`kmctl create failed: ${result.stderr.trim() || result.stdout.trim()}`);
+  return { root: path.join(request.parent, request.name), warnings: result.stderr.trim() };
+}
+
+/** Asks for a name, a size, and a model family, then scaffolds the crew in the workspace. */
+export async function createCrewCommand(exec: Exec, connection: Pick<Connection, 'source' | 'context'> | undefined, afterCreate: () => void): Promise<void> {
+  const parent = await pickParent();
+  if (!parent) return;
+  const name = await vscode.window.showInputBox({ title: 'Create a crew', prompt: 'Crew name (lowercase letters, digits, hyphens)', validateInput: (value) => nameProblem('crew', value) });
+  if (!name) return;
+  const size = await vscode.window.showQuickPick(
+    ['1', '2', '3', '4'].map((n) => ({ label: n, description: n === '1' ? 'specialist, beside the coordinator' : 'specialists, beside the coordinator' })),
+    { placeHolder: 'How many specialists to start with?' },
+  );
+  if (!size) return;
+  const family = await vscode.window.showQuickPick([...MODEL_FAMILIES.map((f) => ({ label: f })), { label: 'none', description: 'add Models yourself' }], {
+    placeHolder: 'Which model family should its Models use?',
+  });
+  if (!family) return;
+  const request = { name, parent, members: Number(size.label), modelFamily: family.label === 'none' ? undefined : family.label };
+  const { root, warnings } = await scaffoldCrew(exec, request, connection);
+  afterCreate();
+  if (warnings) void vscode.window.showWarningMessage(warnings);
+  await vscode.window.showTextDocument(vscode.Uri.file(path.join(root, 'README.md')));
+}
+
+async function pickParent(): Promise<string | undefined> {
+  const folders = vscode.workspace.workspaceFolders ?? [];
+  if (folders.length === 0) {
+    void vscode.window.showInformationMessage('Open a folder first; the new crew is created inside it.');
+    return undefined;
+  }
+  if (folders.length === 1) return folders[0].uri.fsPath;
+  const choice = await vscode.window.showQuickPick(
+    folders.map((f) => ({ label: f.name, description: f.uri.fsPath, folder: f })),
+    { placeHolder: 'Create the crew in which folder?' },
+  );
+  return choice?.folder.uri.fsPath;
+}

@@ -1,4 +1,4 @@
-import type { KubeTransport } from '../src/k8s/request';
+import { KubeError, type KubeTransport } from '../src/k8s/request';
 import type { Manifest } from '../src/source/manifests';
 
 const GROUP = '/apis/kubemoot.ai/v1alpha1';
@@ -18,6 +18,8 @@ export const KINDS: Record<string, string> = {
 export class FakeCluster implements KubeTransport {
   calls: { method: string; path: string; body?: unknown }[] = [];
   objects: Manifest[] = [];
+  /** Namespaces that exist; reading any other answers 404. */
+  namespaces = new Set<string>();
   /** Paths that answer with this error instead. */
   failures = new Map<string, Error>();
 
@@ -31,6 +33,7 @@ export class FakeCluster implements KubeTransport {
     const failure = this.failures.get(path);
     if (failure) throw failure;
     if (method === 'GET') return JSON.stringify(this.get(path));
+    if (method === 'PATCH') return '{}';
     throw new Error(`FakeCluster: unexpected ${method} ${path}`);
   }
 
@@ -40,6 +43,11 @@ export class FakeCluster implements KubeTransport {
 
   private get(path: string): unknown {
     if (path === GROUP) return { resources: discovery() };
+    const namespace = /^\/api\/v1\/namespaces\/([^/]+)$/.exec(path)?.[1];
+    if (namespace) {
+      if (!this.namespaces.has(namespace)) throw new KubeError(`namespaces "${namespace}" not found`, 404);
+      return { metadata: { name: namespace } };
+    }
     if (path === `${GROUP}/crews`) return { items: this.objects.filter((o) => o.kind === 'Crew') };
     const m = /^\/apis\/kubemoot\.ai\/v1alpha1\/namespaces\/([^/]+)\/([^/]+)(?:\/([^/]+))?$/.exec(path);
     if (!m) throw new Error(`FakeCluster: no route for GET ${path}`);

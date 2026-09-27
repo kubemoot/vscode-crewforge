@@ -55,7 +55,7 @@
       },
       {
         "view": "crewforge.sources",
-        "contents": "No crew charts or bundles found in this workspace. Open a folder that holds a crew's Helm chart or manifests."
+        "contents": "No crew charts or bundles found in this workspace.\n[Create Crew](command:crewforge.createCrew)\nOr open a folder that holds a crew's Helm chart or manifests."
       }
     ],
     "commands": [
@@ -109,6 +109,36 @@
         "title": "Compare with Live",
         "category": "CrewForge",
         "icon": "$(diff)"
+      },
+      {
+        "command": "crewforge.deploySource",
+        "title": "Deploy Crew to a Namespace",
+        "category": "CrewForge",
+        "icon": "$(cloud-upload)"
+      },
+      {
+        "command": "crewforge.updateDeployment",
+        "title": "Update Deployment from Source",
+        "category": "CrewForge",
+        "icon": "$(sync)"
+      },
+      {
+        "command": "crewforge.applyResource",
+        "title": "Apply This Object",
+        "category": "CrewForge",
+        "icon": "$(arrow-up)"
+      },
+      {
+        "command": "crewforge.removeDeployment",
+        "title": "Remove Deployment",
+        "category": "CrewForge",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "crewforge.createCrew",
+        "title": "Create Crew",
+        "category": "CrewForge",
+        "icon": "$(add)"
       }
     ],
     "menus": {
@@ -140,6 +170,11 @@
           "command": "crewforge.refreshSources",
           "when": "view == crewforge.sources",
           "group": "navigation@1"
+        },
+        {
+          "command": "crewforge.createCrew",
+          "when": "view == crewforge.sources",
+          "group": "navigation@0"
         }
       ],
       "view/item/context": [
@@ -152,6 +187,26 @@
           "command": "crewforge.showDrift",
           "when": "view == crewforge.sources && viewItem =~ /^resource-/",
           "group": "inline"
+        },
+        {
+          "command": "crewforge.deploySource",
+          "when": "view == crewforge.sources && viewItem =~ /^source-/",
+          "group": "inline"
+        },
+        {
+          "command": "crewforge.updateDeployment",
+          "when": "view == crewforge.sources && viewItem =~ /^deployment-/",
+          "group": "inline@1"
+        },
+        {
+          "command": "crewforge.removeDeployment",
+          "when": "view == crewforge.sources && viewItem =~ /^deployment-(helm|bundle)$/",
+          "group": "deploy@9"
+        },
+        {
+          "command": "crewforge.applyResource",
+          "when": "view == crewforge.sources && viewItem =~ /^resource-(changed|missing)$/",
+          "group": "inline@2"
         }
       ],
       "commandPalette": [
@@ -161,6 +216,18 @@
         },
         {
           "command": "crewforge.showDrift",
+          "when": "false"
+        },
+        {
+          "command": "crewforge.updateDeployment",
+          "when": "false"
+        },
+        {
+          "command": "crewforge.applyResource",
+          "when": "false"
+        },
+        {
+          "command": "crewforge.removeDeployment",
           "when": "false"
         }
       ]

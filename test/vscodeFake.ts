@@ -19,6 +19,8 @@ export class EventEmitter<T> {
   }
 }
 
+export const ProgressLocation = { Notification: 15 } as const;
+
 export const TreeItemCollapsibleState = { None: 0, Collapsed: 1, Expanded: 2 } as const;
 export const ViewColumn = { Active: -1 } as const;
 export const ConfigurationTarget = { Global: 1 } as const;
@@ -83,6 +85,12 @@ export const recorded = {
   configListeners: [] as Listener<{ affectsConfiguration: (s: string) => boolean }>[],
   /** Workspace files findFiles answers with, by glob. */
   files: new Map<string, string[]>(),
+  inputs: [] as (string | undefined)[],
+  warnings: [] as string[],
+  warningAnswers: [] as (string | undefined)[],
+  output: [] as string[],
+  workspaceFolders: undefined as { name: string; uri: Uri }[] | undefined,
+  shownDocuments: [] as string[],
   documentProviders: new Map<string, { provideTextDocumentContent(uri: Uri): string }>(),
 };
 
@@ -102,6 +110,12 @@ export function resetFake(): void {
   recorded.configListeners = [];
   recorded.files.clear();
   recorded.documentProviders.clear();
+  recorded.inputs = [];
+  recorded.warnings = [];
+  recorded.warningAnswers = [];
+  recorded.output = [];
+  recorded.workspaceFolders = undefined;
+  recorded.shownDocuments = [];
 }
 
 export class FakeWebview {
@@ -182,6 +196,29 @@ export const window = {
     const choice = recorded.quickPicks.shift();
     return Promise.resolve(typeof choice === 'function' ? (choice as (i: unknown[]) => unknown)(items) : choice);
   },
+  showInputBox(options: { validateInput?: (v: string) => string | undefined }) {
+    const value = recorded.inputs.shift();
+    if (value !== undefined && options.validateInput?.(value)) return Promise.resolve(undefined);
+    return Promise.resolve(value);
+  },
+  showWarningMessage(message: string) {
+    recorded.warnings.push(message);
+    return Promise.resolve(recorded.warningAnswers.shift());
+  },
+  withProgress<T>(_options: unknown, task: () => Promise<T>): Promise<T> {
+    return task();
+  },
+  createOutputChannel(_name: string) {
+    return {
+      appendLine: (line: string) => recorded.output.push(line),
+      show: () => undefined,
+      dispose: () => undefined,
+    };
+  },
+  showTextDocument(uri: Uri) {
+    recorded.shownDocuments.push(uri.fsPath);
+    return Promise.resolve(undefined);
+  },
   showSaveDialog() {
     return Promise.resolve(recorded.saveDialog);
   },
@@ -191,6 +228,9 @@ export const window = {
 };
 
 export const workspace = {
+  get workspaceFolders() {
+    return recorded.workspaceFolders;
+  },
   getConfiguration(section: string) {
     return {
       get<T>(key: string, fallback: T): T {
