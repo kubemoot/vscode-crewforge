@@ -3,7 +3,7 @@ import * as os from 'node:os';
 import * as vscode from 'vscode';
 import { connect, type Connection } from '../connection';
 import { nameProblem } from '../k8s/paths';
-import type { Channel, Deployment } from '../source/deployments';
+import { deployedAtByRevision, type Channel, type Deployment } from '../source/deployments';
 import { identify } from '../source/identity';
 import type { RenderDeps } from '../source/render';
 import type { SourceEntry } from '../source/service';
@@ -80,9 +80,10 @@ export class DeployCommands {
     const { entry, deployment } = node;
     if (deployment.channel === 'flux') return gitOpsGuidance(deployment, 'revert the commit instead');
     const current = deployment.revision?.replace(/-dirty$/, '');
+    const history = deployedAtByRevision(deployment);
     const revisions = await listRevisions(this.deps.exec, entry.source);
     const choice = await vscode.window.showQuickPick(
-      revisions.map((r) => ({ label: r.hash, description: `${r.date}${r.hash === current ? ' · deployed now' : ''}`, detail: r.subject, revision: r })),
+      revisions.map((r) => ({ label: r.hash, description: revisionNote(r.date, r.hash === current, history.get(r.hash)), detail: r.subject, revision: r })),
       { placeHolder: `Deploy which revision of ${entry.source.label} to ${deployment.namespace}?`, matchOnDetail: true },
     );
     if (!choice) return;
@@ -173,6 +174,11 @@ async function confirm(warnings: string[], action: string): Promise<boolean> {
   if (warnings.length === 0) return true;
   const answer = await vscode.window.showWarningMessage(warnings.join('\n\n'), { modal: true }, action);
   return answer === action;
+}
+
+function revisionNote(date: string, current: boolean, deployedAt?: string): string {
+  if (current) return `${date} · deployed now`;
+  return deployedAt !== undefined ? `${date} · deployed here before${deployedAt ? ` (${deployedAt})` : ''}` : date;
 }
 
 /** What removing does; a crew marked kubemoot.ai/manage-namespace takes its namespace with it. */

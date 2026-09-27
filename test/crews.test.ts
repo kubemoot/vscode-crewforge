@@ -22,6 +22,8 @@ describe('parseCrewList', () => {
   it('handles an empty list and a list without items', () => {
     expect(parseCrewList('{"items":[]}')).toEqual([]);
     expect(parseCrewList('{}')).toEqual([]);
+    const withHistory = parseCrewList(JSON.stringify({ items: [{ metadata: { name: 'a', namespace: 'n' }, status: { revisions: [{ revision: 'abc' }] } }] }));
+    expect(withHistory[0].revisions).toEqual([{ revision: 'abc' }]);
   });
 
   it('throws on a body that is not JSON', () => {

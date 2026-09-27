@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { connect, namespaceFilter, type Connection } from '../connection';
 import { listCrews } from '../k8s/crews';
-import { deploymentDescription, type Deployment } from '../source/deployments';
+import { deploymentDescription, historyLines, type Deployment } from '../source/deployments';
 import { summarize, type ResourceDrift } from '../source/drift';
 import { isRunning, runSummary, type FitnessRun } from '../fitness/fitness';
 import { fluxSummary, type FluxState } from '../gitops/flux';
@@ -163,7 +163,7 @@ function deploymentItem(node: Extract<SourceNode, { kind: 'deployment' }>): vsco
   const item = new vscode.TreeItem(deployment.namespace, vscode.TreeItemCollapsibleState.Collapsed);
   const drift = node.error ? 'cannot compare' : summarize(node.drift ?? []);
   item.description = deploymentDescription(deployment, drift, node.flux && fluxSummary(node.flux));
-  item.tooltip = [deploymentTooltip(deployment, drift, node.error), ...fluxLines(node)].join('\n');
+  item.tooltip = [deploymentTooltip(deployment, drift, node.error), ...fluxLines(node), ...historyLines(deployment)].join('\n');
   const inSync = drift === 'in sync';
   item.iconPath = new vscode.ThemeIcon(inSync ? 'pass' : 'diff', new vscode.ThemeColor(inSync ? 'testing.iconPassed' : 'list.warningForeground'));
   item.contextValue = `deployment-${deployment.channel}`;

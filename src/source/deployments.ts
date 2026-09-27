@@ -56,6 +56,28 @@ export function deploymentsOf(sourceId: string, crewName: string, crews: CrewSum
     .sort((a, b) => a.namespace.localeCompare(b.namespace));
 }
 
+/** The operator's revision record as tooltip lines, newest first. */
+export function historyLines(d: Deployment, limit = 5): string[] {
+  const revisions = d.crew.revisions ?? [];
+  if (revisions.length === 0) return [];
+  const lines = revisions.slice(0, limit).map((r) => {
+    const what = r.revision ?? r.crewVersion ?? 'unknown';
+    const who = [r.channel, r.owner].filter(Boolean).join(' by ');
+    return `  ${what}${who ? ` via ${who}` : ''} (${r.deployedAt ?? r.observedAt ?? 'time unknown'})`;
+  });
+  return ['Deployed revisions:', ...lines];
+}
+
+/** When the operator saw a revision deployed, keyed by revision, for marking commits. */
+export function deployedAtByRevision(d: Deployment): Map<string, string> {
+  const seen = new Map<string, string>();
+  for (const r of d.crew.revisions ?? []) {
+    const hash = r.revision?.replace(/-dirty$/, '');
+    if (hash && !seen.has(hash)) seen.set(hash, r.deployedAt ?? r.observedAt ?? '');
+  }
+  return seen;
+}
+
 /** The line under a deployment in the tree. */
 export function deploymentDescription(d: Deployment, drift?: string, flux?: string): string {
   const parts = [flux ?? d.channel, d.crew.phase];

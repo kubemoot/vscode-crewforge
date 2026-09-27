@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { channelOf, deploymentDescription, deploymentsOf, ANNOTATIONS } from '../src/source/deployments';
+import { channelOf, deployedAtByRevision, deploymentDescription, deploymentsOf, historyLines, ANNOTATIONS } from '../src/source/deployments';
 import { discoverSources, type CrewSource } from '../src/source/discover';
 import { identify, normalizeRemote } from '../src/source/identity';
 import { crewOf, isKubemoot, objectKey, parseManifests, toYaml } from '../src/source/manifests';
@@ -185,5 +185,27 @@ describe('deployments', () => {
     expect(deploymentDescription(deployments[1], 'in sync')).toBe('bundle · Ready · in sync');
     expect(deploymentDescription(deployments[0])).toBe('helm · Ready · same name, other source?');
     expect(deploymentsOf('x', 'demo', [{ name: 'demo', namespace: 'n', ready: true, phase: 'Ready' }])[0].linked).toBe(false);
+  });
+
+  it('shows the operator revision record, newest first, and knows when each revision was deployed', () => {
+    const revisions = [
+      { revision: 'abc1234-dirty', channel: 'bundle', owner: 'me', deployedAt: '2026-09-27T10:00:00Z' },
+      { crewVersion: '0.40.3', channel: 'flux', observedAt: '2026-09-26T09:00:00Z' },
+      { revision: 'abc1234', deployedAt: '2026-09-25T08:00:00Z' },
+      {},
+    ];
+    const d = deploymentsOf('x', 'demo', [{ ...crew('a'), revisions }])[0];
+    expect(historyLines(d)).toEqual([
+      'Deployed revisions:',
+      '  abc1234-dirty via bundle by me (2026-09-27T10:00:00Z)',
+      '  0.40.3 via flux (2026-09-26T09:00:00Z)',
+      '  abc1234 (2026-09-25T08:00:00Z)',
+      '  unknown (time unknown)',
+    ]);
+    expect(historyLines(d, 1)).toHaveLength(2);
+    expect([...deployedAtByRevision(d)]).toEqual([['abc1234', '2026-09-27T10:00:00Z']]);
+    const bare = deploymentsOf('x', 'demo', [crew('b')])[0];
+    expect(historyLines(bare)).toEqual([]);
+    expect(deployedAtByRevision({ ...bare, crew: { ...bare.crew, revisions: [{ revision: 'f00' }] } }).get('f00')).toBe('');
   });
 });

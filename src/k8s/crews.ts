@@ -1,6 +1,17 @@
 import { CREWS_PATH, namespacedCrewsPath } from './paths';
 import type { KubeTransport } from './request';
 
+/** One entry of the operator's revision record in Crew status, newest first. */
+export interface CrewRevision {
+  revision?: string;
+  source?: string;
+  owner?: string;
+  channel?: string;
+  crewVersion?: string;
+  deployedAt?: string;
+  observedAt?: string;
+}
+
 /** What the Crews view shows for one Crew. */
 export interface CrewSummary {
   name: string;
@@ -12,6 +23,8 @@ export interface CrewSummary {
   coordinator?: string;
   labels?: Record<string, string>;
   annotations?: Record<string, string>;
+  /** The operator's record of what was deployed, newest first; absent on operators without it. */
+  revisions?: CrewRevision[];
 }
 
 interface CrewObject {
@@ -22,6 +35,7 @@ interface CrewObject {
     message?: string;
     agentCount?: number;
     coordinatorRef?: string;
+    revisions?: CrewRevision[];
   };
 }
 
@@ -45,6 +59,7 @@ function toSummary(c: CrewObject): CrewSummary {
     agents: status.agentCount,
     coordinator: status.coordinatorRef || undefined,
     ...marks(c),
+    revisions: status.revisions,
   };
 }
 

@@ -127,8 +127,12 @@ describe('deployRevision', () => {
       return items.find((i) => i.revision.hash === first);
     });
     recorded.warningAnswers.push('Deploy revision');
-    await commands().deployRevision(node('helm', `${first}-dirty`));
+    const deployed = node('helm', `${first}-dirty`);
+    const older = (await listRevisions(execProgram, source))[0].hash;
+    deployed.deployment.crew.revisions = [{ revision: older, deployedAt: '2026-09-26T10:00:00Z' }, { revision: first }];
+    await commands().deployRevision(deployed);
     expect(offered.find((i) => i.label === first)?.description).toContain('deployed now');
+    expect(offered.find((i) => i.label === older)?.description).toContain('deployed here before (2026-09-26T10:00:00Z)');
     const helm = ran.find((r) => r.command === 'helm')!;
     expect(helm.args.slice(2, 5)).toEqual(['upgrade', '--install', 'rel']);
     expect(helm.args[5]).toContain(path.join(scratch, `demo-${first}-`));
