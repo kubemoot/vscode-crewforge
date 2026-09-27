@@ -57,12 +57,9 @@ jobs:
           npm run package
 
       - name: Publish the GitHub release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          TAG="${{ steps.version.outputs.version_tag }}"
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" crewforge-*.vsix --clobber
-          else
-            gh release create "$TAG" crewforge-*.vsix --title "CrewForge $TAG" --generate-notes
-          fi
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.version_tag }}
+          name: CrewForge ${{ steps.version.outputs.version_tag }}
+          generate_release_notes: true
+          files: crewforge-*.vsix
