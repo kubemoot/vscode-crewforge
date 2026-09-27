@@ -24,6 +24,11 @@ export function existingCrew(target: TargetState, crewName: string): CrewSummary
   return target.crews.find((c) => c.name === crewName);
 }
 
+/** The Helm release that installed the crew already in the namespace, if Helm did. */
+export function releaseOf(target: TargetState, crewName: string): string | undefined {
+  return existingCrew(target, crewName)?.annotations?.['meta.helm.sh/release-name'];
+}
+
 const NOT_FLUX = 'Flux does not manage this crew here; a HelmRelease in your GitOps repository would';
 
 /**

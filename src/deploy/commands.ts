@@ -8,8 +8,8 @@ import type { SourceEntry } from '../source/service';
 import type { SourceNode, SourceTreeProvider } from '../views/sourceTree';
 import { errorText } from '../views/errors';
 import { keyOf } from '../source/manifests';
-import { Deployer, isDeployable, KubeTools, type DeployRequest } from './deployer';
-import { channelOptions, existingCrew, ownershipWarnings, type ChannelOption } from './plan';
+import { Deployer, isDeployable, KubeTools, type DeployChannel, type DeployRequest } from './deployer';
+import { channelOptions, ownershipWarnings, releaseOf, type ChannelOption } from './plan';
 import { readTarget } from './target';
 
 const CHANNEL_LABELS: Record<Channel, string> = {
@@ -36,12 +36,11 @@ export class DeployCommands {
     const namespace = await askNamespace(entry.source.label, entry.crewName, connection.context);
     if (!namespace) return;
     const target = await readTarget(connection.client, namespace);
-    const option = await pickChannel(channelOptions(entry.source, entry.crewName, target));
-    if (!option || !isDeployable(option.channel)) return;
+    const channel = await pickChannel(channelOptions(entry.source, entry.crewName, target));
+    if (!channel) return;
     const identity = await identify(entry.source, this.deps.exec);
     if (!(await confirm(ownershipWarnings(identity, entry.crewName, target), 'Deploy anyway'))) return;
-    const release = existingCrew(target, entry.crewName)?.annotations?.['meta.helm.sh/release-name'];
-    await this.run(connection, { entry, identity, namespace, channel: option.channel, release });
+    await this.run(connection, { entry, identity, namespace, channel, release: releaseOf(target, entry.crewName) });
   }
 
   /** Brings a deployment up to its source through the channel it came through; a bundle applies only what differs. */
@@ -125,7 +124,8 @@ function askNamespace(source: string, crew: string, context: string): Thenable<s
   });
 }
 
-async function pickChannel(options: ChannelOption[]): Promise<ChannelOption | undefined> {
+/** The deployable channel the developer picks; undefined when cancelled, unavailable, or Flux. */
+async function pickChannel(options: ChannelOption[]): Promise<DeployChannel | undefined> {
   const choice = await vscode.window.showQuickPick(
     options.map((option) => ({ label: `${option.enabled ? '' : '$(circle-slash) '}${CHANNEL_LABELS[option.channel]}`, description: option.reason, option })),
     { placeHolder: 'Deploy through which channel?' },
@@ -135,11 +135,11 @@ async function pickChannel(options: ChannelOption[]): Promise<ChannelOption | un
     void vscode.window.showInformationMessage(choice.option.reason ?? 'That channel is not available here.');
     return undefined;
   }
-  if (choice.option.channel === 'flux') {
+  if (!isDeployable(choice.option.channel)) {
     void vscode.window.showInformationMessage('Commit and push the change; merging it to the branch Flux watches deploys it.');
     return undefined;
   }
-  return choice.option;
+  return choice.option.channel;
 }
 
 async function confirm(warnings: string[], action: string): Promise<boolean> {
