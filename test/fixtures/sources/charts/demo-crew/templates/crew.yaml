@@ -1,0 +1,20 @@
+apiVersion: kubemoot.ai/v1alpha1
+kind: Crew
+metadata:
+  name: {{ .Values.crew.name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    kubemoot.ai/crew: {{ .Values.crew.name }}
+spec:
+  description: "A demo crew"
+---
+apiVersion: kubemoot.ai/v1alpha1
+kind: PromptModule
+metadata:
+  name: demo-rules
+  namespace: {{ .Release.Namespace }}
+  labels:
+    kubemoot.ai/crew: {{ .Values.crew.name }}
+spec:
+  content: |
+    DEFINE DOMAIN demo

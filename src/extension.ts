@@ -5,8 +5,12 @@ import { connect } from './connection';
 import { loadKubeconfig } from './k8s/kubeconfig';
 import type { CrewSummary } from './k8s/crews';
 import { ChatPanel } from './panels/chatPanel';
+import { execProgram, readText, readYamlFiles } from './source/nodeDeps';
+import { SourceService } from './source/service';
 import { ConversationStore } from './store/conversations';
 import { CrewTreeProvider, type CrewNode } from './views/crewTree';
+import { MANIFEST_SCHEME, ManifestDocuments } from './views/manifestDocuments';
+import { SourceTreeProvider, type SourceNode } from './views/sourceTree';
 
 const REFRESH_MS = 30_000;
 
@@ -15,6 +19,9 @@ export function activate(context: vscode.ExtensionContext): void {
   const tree = new CrewTreeProvider();
   const view = vscode.window.createTreeView('crewforge.crews', { treeDataProvider: tree, showCollapseAll: true });
   const commands = new Commands(context.extensionUri, tree, view, store);
+  const sources = new SourceTreeProvider(new SourceService({ exec: execProgram, readText, readYamlFiles, listFiles: listWorkspaceFiles }));
+  const sourcesView = vscode.window.createTreeView('crewforge.sources', { treeDataProvider: sources, showCollapseAll: true });
+  const documents = new ManifestDocuments();
 
   let timer: ReturnType<typeof setInterval> | undefined;
   const followVisibility = () => {
@@ -28,8 +35,15 @@ export function activate(context: vscode.ExtensionContext): void {
     view.onDidChangeVisibility(followVisibility),
     { dispose: () => timer && clearInterval(timer) },
     vscode.workspace.onDidChangeConfiguration((e) => {
-      if (e.affectsConfiguration('crewforge')) tree.refresh();
+      if (e.affectsConfiguration('crewforge')) {
+        tree.refresh();
+        sources.refresh();
+      }
     }),
+    sourcesView,
+    vscode.workspace.registerTextDocumentContentProvider(MANIFEST_SCHEME, documents),
+    vscode.commands.registerCommand('crewforge.refreshSources', () => sources.refresh()),
+    vscode.commands.registerCommand('crewforge.showDrift', (node?: SourceNode) => showDrift(documents, node)),
     vscode.commands.registerCommand('crewforge.refreshCrews', () => tree.refresh()),
     vscode.commands.registerCommand('crewforge.askCrew', (node?: CrewNode) => commands.askCrew(node)),
     vscode.commands.registerCommand('crewforge.continueConversation', () => commands.continueConversation()),
@@ -123,6 +137,22 @@ class Commands {
     );
     return choice?.crew;
   }
+}
+
+const IGNORED_FOLDERS = '{**/node_modules/**,**/.git/**,**/dist/**}';
+
+/** Chart.yaml files and every other YAML file in the workspace, as paths. */
+async function listWorkspaceFiles(): Promise<{ charts: string[]; yamls: string[] }> {
+  const [charts, yamls] = await Promise.all([
+    vscode.workspace.findFiles('**/Chart.yaml', IGNORED_FOLDERS),
+    vscode.workspace.findFiles('**/*.{yaml,yml}', IGNORED_FOLDERS),
+  ]);
+  return { charts: charts.map((u) => u.fsPath), yamls: yamls.map((u) => u.fsPath).filter((p) => !p.endsWith('Chart.yaml')) };
+}
+
+async function showDrift(documents: ManifestDocuments, node?: SourceNode): Promise<void> {
+  if (node?.kind !== 'resource') return;
+  await guard(() => documents.showDrift(node.deployment.namespace, node.drift));
 }
 
 /** A crew known only from a saved conversation, before the Crews view has loaded it. */

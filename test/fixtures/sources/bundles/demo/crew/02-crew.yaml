@@ -1,0 +1,9 @@
+apiVersion: kubemoot.ai/v1alpha1
+kind: Crew
+metadata:
+  name: demo
+  namespace: somewhere
+  labels:
+    kubemoot.ai/crew: demo
+spec:
+  description: "A demo crew"

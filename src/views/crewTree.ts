@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { connect, namespaceFilter, type Connection } from '../connection';
 import { listCrews, type CrewSummary } from '../k8s/crews';
+import { errorLabel, errorText } from './errors';
 import { crewDescription, crewTooltip, groupByNamespace, type NamespaceGroup } from './treeModel';
 
 export type CrewNode =
@@ -52,8 +53,8 @@ export class CrewTreeProvider implements vscode.TreeDataProvider<CrewNode> {
       this.crews = await listCrews(this.connection.client, namespaceFilter());
     } catch (err) {
       this.crews = [];
-      const message = err instanceof Error ? err.message : String(err);
-      return [{ kind: 'message', text: firstSentence(message), detail: message }];
+      const message = errorText(err);
+      return [{ kind: 'message', text: errorLabel(message), detail: message }];
     }
     return groupByNamespace(this.crews).map((group) => ({ kind: 'namespace', group }));
   }
@@ -71,7 +72,3 @@ function crewItem(crew: CrewSummary): vscode.TreeItem {
   return item;
 }
 
-function firstSentence(text: string): string {
-  const end = text.search(/[.!?](\s|$)/);
-  return end > 0 ? text.slice(0, end + 1) : text;
-}

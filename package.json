@@ -1,7 +1,7 @@
 {
   "name": "crewforge",
   "displayName": "CrewForge",
-  "description": "See and ask Kubemoot crews from VS Code, through your kubeconfig",
+  "description": "See, ask, and deploy Kubemoot crews from VS Code, through your kubeconfig",
   "version": "0.0.0",
   "publisher": "kubemoot",
   "license": "Apache-2.0",
@@ -41,6 +41,10 @@
         {
           "id": "crewforge.crews",
           "name": "Crews"
+        },
+        {
+          "id": "crewforge.sources",
+          "name": "Crew Sources"
         }
       ]
     },
@@ -48,6 +52,10 @@
       {
         "view": "crewforge.crews",
         "contents": "No crews found in this context.\n[Select kubeconfig](command:crewforge.selectKubeconfig)\n[Select context](command:crewforge.selectContext)"
+      },
+      {
+        "view": "crewforge.sources",
+        "contents": "No crew charts or bundles found in this workspace. Open a folder that holds a crew's Helm chart or manifests."
       }
     ],
     "commands": [
@@ -89,6 +97,18 @@
         "command": "crewforge.openConversationsFolder",
         "title": "Open Conversations Folder",
         "category": "CrewForge"
+      },
+      {
+        "command": "crewforge.refreshSources",
+        "title": "Refresh Crew Sources",
+        "category": "CrewForge",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "crewforge.showDrift",
+        "title": "Compare with Live",
+        "category": "CrewForge",
+        "icon": "$(diff)"
       }
     ],
     "menus": {
@@ -115,6 +135,11 @@
         {
           "command": "crewforge.openConversationsFolder",
           "when": "view == crewforge.crews"
+        },
+        {
+          "command": "crewforge.refreshSources",
+          "when": "view == crewforge.sources",
+          "group": "navigation@1"
         }
       ],
       "view/item/context": [
@@ -122,12 +147,21 @@
           "command": "crewforge.askCrew",
           "when": "view == crewforge.crews && viewItem == crew",
           "group": "inline"
+        },
+        {
+          "command": "crewforge.showDrift",
+          "when": "view == crewforge.sources && viewItem =~ /^resource-/",
+          "group": "inline"
         }
       ],
       "commandPalette": [
         {
           "command": "crewforge.exportConversation",
           "when": "activeWebviewPanelId == crewforge.chat"
+        },
+        {
+          "command": "crewforge.showDrift",
+          "when": "false"
         }
       ]
     },
@@ -178,10 +212,12 @@
   },
   "dependencies": {
     "@kubernetes/client-node": "^2.0.0",
+    "js-yaml": "^4.3.2",
     "marked": "^18.0.14"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@types/js-yaml": "^4.0.9",
     "@types/node": "^22.20.4",
     "@types/vscode": "^1.95.0",
     "@vitest/coverage-v8": "^5.0.2",

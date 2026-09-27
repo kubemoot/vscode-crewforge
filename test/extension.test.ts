@@ -39,7 +39,7 @@ describe('activate', () => {
   it('registers every command the manifest contributes, and the Crews view', () => {
     const declared = manifest.contributes.commands.map((c) => c.command).sort();
     expect([...recorded.commands.keys()].sort()).toEqual(declared);
-    expect(recorded.treeViews.map((v) => v.id)).toEqual(['crewforge.crews']);
+    expect(recorded.treeViews.map((v) => v.id)).toEqual(['crewforge.crews', 'crewforge.sources']);
   });
 
   it('refreshes the Crews view on the command and on a CrewForge setting change', () => {
@@ -118,5 +118,27 @@ describe('commands', () => {
     recorded.settings.set('crewforge.kubeconfig', '/no/such/kubeconfig');
     await run('crewforge.selectContext');
     expect(recorded.errors[0]).toMatch(/^CrewForge: /);
+  });
+
+  it('showDrift opens the diff for a resource and ignores anything else', async () => {
+    const drift = { kind: 'Crew', name: 'demo', state: 'missing', paths: [] };
+    await run('crewforge.showDrift', { kind: 'resource', deployment: { namespace: 'ns' }, drift });
+    await run('crewforge.showDrift', { kind: 'message', text: 'x' });
+    await run('crewforge.showDrift');
+    expect(recorded.executed.map((e) => e.id)).toEqual(['vscode.diff']);
+    expect(recorded.documentProviders.has('crewforge-manifest')).toBe(true);
+  });
+
+  it('refreshes Crew Sources on its command, and finds sources through the workspace', async () => {
+    const view = recorded.treeViews[1];
+    const provider = view.options.treeDataProvider as { onDidChangeTreeData: (l: () => void) => void; getChildren: () => Promise<{ kind: string }[]> };
+    let refreshed = 0;
+    provider.onDidChangeTreeData(() => refreshed++);
+    run('crewforge.refreshSources');
+    recorded.configListeners.forEach((l) => l({ affectsConfiguration: (s) => s === 'crewforge' }));
+    expect(refreshed).toBe(2);
+    recorded.files.set('**/*.{yaml,yml}', [path.join(__dirname, 'fixtures', 'sources', 'bundles', 'demo', 'crew', '02-crew.yaml'), '/w/Chart.yaml']);
+    const roots = await provider.getChildren();
+    expect(roots.map((r) => r.kind)).toEqual(['source']);
   });
 });

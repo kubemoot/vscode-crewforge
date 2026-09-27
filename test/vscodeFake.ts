@@ -81,6 +81,9 @@ export const recorded = {
   saveDialog: undefined as Uri | undefined,
   openDialog: undefined as Uri[] | undefined,
   configListeners: [] as Listener<{ affectsConfiguration: (s: string) => boolean }>[],
+  /** Workspace files findFiles answers with, by glob. */
+  files: new Map<string, string[]>(),
+  documentProviders: new Map<string, { provideTextDocumentContent(uri: Uri): string }>(),
 };
 
 export function resetFake(): void {
@@ -97,6 +100,8 @@ export function resetFake(): void {
   recorded.saveDialog = undefined;
   recorded.openDialog = undefined;
   recorded.configListeners = [];
+  recorded.files.clear();
+  recorded.documentProviders.clear();
 }
 
 export class FakeWebview {
@@ -197,6 +202,13 @@ export const workspace = {
         return Promise.resolve();
       },
     };
+  },
+  findFiles(include: string) {
+    return Promise.resolve((recorded.files.get(include) ?? []).map((p) => Uri.file(p)));
+  },
+  registerTextDocumentContentProvider(scheme: string, provider: { provideTextDocumentContent(uri: Uri): string }) {
+    recorded.documentProviders.set(scheme, provider);
+    return { dispose: () => recorded.documentProviders.delete(scheme) };
   },
   onDidChangeConfiguration(listener: Listener<{ affectsConfiguration: (s: string) => boolean }>) {
     recorded.configListeners.push(listener);

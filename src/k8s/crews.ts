@@ -10,10 +10,12 @@ export interface CrewSummary {
   message?: string;
   agents?: number;
   coordinator?: string;
+  labels?: Record<string, string>;
+  annotations?: Record<string, string>;
 }
 
 interface CrewObject {
-  metadata?: { name?: string; namespace?: string };
+  metadata?: { name?: string; namespace?: string; labels?: Record<string, string>; annotations?: Record<string, string> };
   status?: {
     ready?: boolean;
     phase?: string;
@@ -42,7 +44,12 @@ function toSummary(c: CrewObject): CrewSummary {
     message: status.message || undefined,
     agents: status.agentCount,
     coordinator: status.coordinatorRef || undefined,
+    ...marks(c),
   };
+}
+
+function marks(c: CrewObject): Pick<CrewSummary, 'labels' | 'annotations'> {
+  return { labels: c.metadata?.labels, annotations: c.metadata?.annotations };
 }
 
 /**

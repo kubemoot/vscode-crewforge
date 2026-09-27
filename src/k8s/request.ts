@@ -15,7 +15,10 @@ export class KubeError extends Error {
 
 /** The two things CrewForge asks of the API server. */
 export interface KubeTransport {
-  /** A request whose whole response body is wanted. Resolves to the body on 2xx; rejects with an AbortError when `signal` aborts. */
+  /**
+   * A request whose whole response body is wanted. Resolves to the body on 2xx; rejects
+   * with an AbortError when `signal` aborts. A PATCH body is a JSON merge patch.
+   */
   request(method: string, path: string, body?: unknown, signal?: AbortSignal): Promise<string>;
   /** A long GET whose body arrives in chunks; resolves when the server ends it or `signal` aborts. */
   stream(path: string, onChunk: (text: string) => void, signal: AbortSignal): Promise<void>;
@@ -41,7 +44,7 @@ export class KubeClient implements KubeTransport {
 
   private async once(method: string, path: string, body?: unknown, signal?: AbortSignal): Promise<{ status: number; retryAfter?: string; text: string }> {
     const payload = body === undefined ? undefined : JSON.stringify(body);
-    const headers: Record<string, string> = payload ? { 'Content-Type': 'application/json' } : {};
+    const headers: Record<string, string> = payload ? { 'Content-Type': method === 'PATCH' ? 'application/merge-patch+json' : 'application/json' } : {};
     const { send, options } = await this.prepare(method, path, headers);
     if (signal?.aborted) throw abortError();
     return new Promise((resolve, reject) => {
