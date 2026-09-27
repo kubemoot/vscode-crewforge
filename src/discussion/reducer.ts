@@ -8,6 +8,8 @@ export interface AgentCard {
   signal?: string;
   summary?: string;
   stoodAside: boolean;
+  model?: string;
+  reason?: string;
 }
 
 /** Everything the stream has said about one turn. */
@@ -39,6 +41,8 @@ const handlers: Record<string, Handler> = {
       gpu: e.gpu ?? c.gpu,
       signal: e.signal ?? c.signal,
       stoodAside: e.stood_aside ?? c.stoodAside,
+      model: e.model ?? c.model,
+      reason: e.reason ?? c.reason,
     })),
   finding: (s, e) =>
     upsertCard(s, e.agent, (c) => ({

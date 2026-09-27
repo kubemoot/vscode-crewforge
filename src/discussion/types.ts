@@ -13,6 +13,10 @@ export interface DiscussionEvent {
   threadId?: string;
   error?: string;
   stood_aside?: boolean;
+  /** The model an agent is waiting for GPU room to run. */
+  model?: string;
+  /** Why an agent is waiting or stood aside, such as gpu-busy or model-too-large. */
+  reason?: string;
 }
 
 export type EventType =

@@ -1,6 +1,6 @@
 import type { TurnState } from './reducer';
 
-const WORKING = new Set(['triaging', 'evaluating']);
+const WORKING = new Set(['triaging', 'evaluating', 'waiting']);
 
 /**
  * One line saying where the turn stands, from what the stream has reported: the
@@ -16,6 +16,8 @@ function stage(turn: TurnState): string {
   if (!turn.threadId) return 'Waiting for the coordinator to pick up the question';
   if (turn.cards.length === 0) return 'The coordinator is choosing which agents to ask';
   const working = turn.cards.filter((c) => WORKING.has(c.status)).length;
+  const waiting = turn.cards.filter((c) => c.status === 'waiting').length;
+  if (waiting > 0 && waiting === working) return `${waiting} agent${waiting === 1 ? ' is' : 's are'} waiting for a GPU with room; the cluster is busy`;
   if (working > 0) return `${working} of ${turn.cards.length} agent${turn.cards.length === 1 ? '' : 's'} still working`;
   return 'The coordinator is writing the answer';
 }
