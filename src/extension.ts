@@ -8,6 +8,7 @@ import { ChatPanel } from './panels/chatPanel';
 import { createCrewCommand } from './create/createCrew';
 import { DeployCommands } from './deploy/commands';
 import { FitnessCommands } from './fitness/commands';
+import { followRolloutCommand } from './gitops/commands';
 import { execProgram, readText, readYamlFiles } from './source/nodeDeps';
 import { SourceService } from './source/service';
 import { ConversationStore } from './store/conversations';
@@ -62,6 +63,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('crewforge.deployRevision', (node?: SourceNode) => guard(() => deploy.deployRevision(node))),
     vscode.commands.registerCommand('crewforge.runFitness', (node?: SourceNode) => guard(() => fitness.runFitness(node))),
     vscode.commands.registerCommand('crewforge.showRun', (node?: SourceNode) => guard(() => fitness.showRun(node))),
+    vscode.commands.registerCommand('crewforge.followRollout', (node?: SourceNode) => guard(() => followRolloutCommand(node, () => sources.refresh()))),
     vscode.commands.registerCommand('crewforge.removeDeployment', (node?: SourceNode) => guard(() => deploy.removeDeployment(node))),
     vscode.commands.registerCommand('crewforge.refreshCrews', () => tree.refresh()),
     vscode.commands.registerCommand('crewforge.askCrew', (node?: CrewNode) => commands.askCrew(node)),

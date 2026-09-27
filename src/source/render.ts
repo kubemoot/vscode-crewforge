@@ -29,6 +29,8 @@ export interface RenderOptions {
   namespace: string;
   /** The Helm release name; defaults to the chart's folder name. */
   release?: string;
+  /** Values that override the chart's, as a HelmRelease gives them; one `--set-json` per top-level key. */
+  values?: Record<string, unknown>;
 }
 
 /** The manifests a source produces for one namespace. */
@@ -38,7 +40,8 @@ export async function render(source: CrewSource, options: RenderOptions, deps: R
 
 async function renderChart(source: CrewSource, options: RenderOptions, exec: Exec): Promise<Manifest[]> {
   const release = options.release ?? source.label;
-  const result = await exec('helm', ['template', release, source.root, '--namespace', options.namespace], { cwd: path.dirname(source.root) });
+  const overrides = Object.entries(options.values ?? {}).flatMap(([key, value]) => ['--set-json', `${key}=${JSON.stringify(value)}`]);
+  const result = await exec('helm', ['template', release, source.root, '--namespace', options.namespace, ...overrides], { cwd: path.dirname(source.root) });
   if (result.code !== 0) throw new Error(`helm template failed for ${source.label}: ${result.stderr.trim() || `exit ${result.code}`}`);
   return parseManifests(result.stdout).map((m) => inNamespace(m, options.namespace));
 }

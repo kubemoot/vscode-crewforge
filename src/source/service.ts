@@ -7,6 +7,7 @@ import { compare, type ResourceDrift } from './drift';
 import { identify, type SourceIdentity } from './identity';
 import { discoverKinds, liveObjects, type KubemootKind } from './live';
 import { isFitness, listRuns, type FitnessRun } from '../fitness/fitness';
+import { helmReleaseRef, readHelmRelease, type FluxState } from '../gitops/flux';
 import { crewOf, objectKey, parseManifests, type Manifest } from './manifests';
 import { render, type RenderDeps } from './render';
 
@@ -46,15 +47,22 @@ export class SourceService {
 
   /**
    * The source rendered for the deployment's namespace and release, compared with the
-   * live objects. Fitness runs started from a definition are results, not source, so
-   * only fitness objects the source itself renders take part.
+   * live objects, with a Flux deployment's HelmRelease values applied so the render
+   * matches what Flux installs. Fitness runs started from a definition are results,
+   * not source, so only fitness objects the source itself renders take part.
    */
-  async drift(entry: SourceEntry, deployment: Deployment, client: KubeTransport): Promise<ResourceDrift[]> {
-    const rendered = await render(entry.source, { namespace: deployment.namespace, release: deployment.release }, this.deps);
+  async drift(entry: SourceEntry, deployment: Deployment, client: KubeTransport, flux?: FluxState): Promise<ResourceDrift[]> {
+    const rendered = await render(entry.source, { namespace: deployment.namespace, release: deployment.release, values: flux?.values }, this.deps);
     const kinds = await this.kinds(client);
     const live = await liveObjects(client, kinds, deployment.namespace, rendered, deployment.crew.name);
     const renderedKeys = new Set(rendered.map(objectKey));
     return compare(rendered, live.filter((m) => !isFitness(m) || renderedKeys.has(objectKey(m))));
+  }
+
+  /** The Flux HelmRelease behind a Flux-managed deployment; undefined for other channels. */
+  async flux(deployment: Deployment, client: KubeTransport): Promise<FluxState | undefined> {
+    const ref = helmReleaseRef(deployment.crew);
+    return ref ? readHelmRelease(client, ref) : undefined;
   }
 
   /** The deployment's fitness runs, newest first. */

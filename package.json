@@ -156,6 +156,12 @@
         "command": "crewforge.showRun",
         "title": "Show Fitness Run",
         "category": "CrewForge"
+      },
+      {
+        "command": "crewforge.followRollout",
+        "title": "Follow GitOps Rollout",
+        "category": "CrewForge",
+        "icon": "$(eye)"
       }
     ],
     "menus": {
@@ -244,6 +250,11 @@
           "command": "crewforge.runFitness",
           "when": "view == crewforge.sources && viewItem =~ /^deployment-/",
           "group": "deploy@3"
+        },
+        {
+          "command": "crewforge.followRollout",
+          "when": "view == crewforge.sources && viewItem == deployment-flux",
+          "group": "inline@2"
         }
       ],
       "commandPalette": [
@@ -277,6 +288,10 @@
         },
         {
           "command": "crewforge.showRun",
+          "when": "false"
+        },
+        {
+          "command": "crewforge.followRollout",
           "when": "false"
         }
       ]

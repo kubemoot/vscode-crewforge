@@ -91,6 +91,8 @@ export const recorded = {
   output: [] as string[],
   workspaceFolders: undefined as { name: string; uri: Uri }[] | undefined,
   shownDocuments: [] as string[],
+  progress: [] as string[],
+  cancel: undefined as (() => void) | undefined,
   documentProviders: new Map<string, { provideTextDocumentContent(uri: Uri): string }>(),
 };
 
@@ -116,6 +118,8 @@ export function resetFake(): void {
   recorded.output = [];
   recorded.workspaceFolders = undefined;
   recorded.shownDocuments = [];
+  recorded.progress = [];
+  recorded.cancel = undefined;
 }
 
 export class FakeWebview {
@@ -205,8 +209,10 @@ export const window = {
     recorded.warnings.push(message);
     return Promise.resolve(recorded.warningAnswers.shift());
   },
-  withProgress<T>(_options: unknown, task: () => Promise<T>): Promise<T> {
-    return task();
+  withProgress<T>(_options: unknown, task: (progress: { report(v: { message?: string }): void }, token: { onCancellationRequested(l: () => void): void }) => Promise<T>): Promise<T> {
+    const progress = { report: (v: { message?: string }) => recorded.progress.push(v.message ?? '') };
+    const token = { onCancellationRequested: (l: () => void) => (recorded.cancel = l) };
+    return task(progress, token);
   },
   createOutputChannel(_name: string) {
     return {

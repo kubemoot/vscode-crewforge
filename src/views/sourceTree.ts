@@ -4,12 +4,13 @@ import { listCrews } from '../k8s/crews';
 import { deploymentDescription, type Deployment } from '../source/deployments';
 import { summarize, type ResourceDrift } from '../source/drift';
 import { isRunning, runSummary, type FitnessRun } from '../fitness/fitness';
+import { fluxSummary, type FluxState } from '../gitops/flux';
 import type { SourceEntry, SourceService } from '../source/service';
 import { errorLabel, errorText } from './errors';
 
 export type SourceNode =
   | { kind: 'source'; entry: SourceEntry }
-  | { kind: 'deployment'; entry: SourceEntry; deployment: Deployment; drift?: ResourceDrift[]; error?: string }
+  | { kind: 'deployment'; entry: SourceEntry; deployment: Deployment; drift?: ResourceDrift[]; error?: string; flux?: FluxState; fluxError?: string }
   | { kind: 'resource'; entry: SourceEntry; deployment: Deployment; drift: ResourceDrift }
   | { kind: 'fitness'; entry: SourceEntry; deployment: Deployment }
   | { kind: 'run'; entry: SourceEntry; deployment: Deployment; run: FitnessRun }
@@ -97,10 +98,21 @@ export class SourceTreeProvider implements vscode.TreeDataProvider<SourceNode> {
   }
 
   private async withDrift(entry: SourceEntry, deployment: Deployment, connection: Connection): Promise<SourceNode> {
+    const { flux, fluxError } = await this.fluxOf(deployment, connection);
     try {
-      return { kind: 'deployment', entry, deployment, drift: await this.service.drift(entry, deployment, connection.client) };
+      return { kind: 'deployment', entry, deployment, flux, fluxError, drift: await this.service.drift(entry, deployment, connection.client, flux) };
     } catch (err) {
-      return { kind: 'deployment', entry, deployment, error: errorText(err) };
+      return { kind: 'deployment', entry, deployment, flux, fluxError, error: errorText(err) };
+    }
+  }
+
+  /** The HelmRelease state; a workshop account may not read HelmReleases, which is not an error for the tree. */
+  private async fluxOf(deployment: Deployment, connection: Connection): Promise<{ flux?: FluxState; fluxError?: string }> {
+    if (deployment.channel !== 'flux') return {};
+    try {
+      return { flux: await this.service.flux(deployment, connection.client) };
+    } catch (err) {
+      return { fluxError: errorText(err) };
     }
   }
 }
@@ -150,8 +162,8 @@ function deploymentItem(node: Extract<SourceNode, { kind: 'deployment' }>): vsco
   const { deployment } = node;
   const item = new vscode.TreeItem(deployment.namespace, vscode.TreeItemCollapsibleState.Collapsed);
   const drift = node.error ? 'cannot compare' : summarize(node.drift ?? []);
-  item.description = deploymentDescription(deployment, drift);
-  item.tooltip = deploymentTooltip(deployment, drift, node.error);
+  item.description = deploymentDescription(deployment, drift, node.flux && fluxSummary(node.flux));
+  item.tooltip = [deploymentTooltip(deployment, drift, node.error), ...fluxLines(node)].join('\n');
   const inSync = drift === 'in sync';
   item.iconPath = new vscode.ThemeIcon(inSync ? 'pass' : 'diff', new vscode.ThemeColor(inSync ? 'testing.iconPassed' : 'list.warningForeground'));
   item.contextValue = `deployment-${deployment.channel}`;
@@ -165,6 +177,14 @@ function deploymentTooltip(d: Deployment, drift: string, error?: string): string
   if (!d.linked) lines.push('This Crew does not name this source; it may come from another copy of the crew.');
   if (error) lines.push(error);
   return lines.join('\n');
+}
+
+function fluxLines(node: Extract<SourceNode, { kind: 'deployment' }>): string[] {
+  if (node.fluxError) return [`Flux: cannot read the HelmRelease (${node.fluxError})`];
+  if (!node.flux) return [];
+  const lines = [`HelmRelease ${node.flux.ref.namespace}/${node.flux.ref.name}: ${fluxSummary(node.flux)}`, node.flux.message];
+  if (node.flux.hasValuesFrom) lines.push('Its valuesFrom are not read, so drift may show values Flux sets.');
+  return lines;
 }
 
 const RESOURCE_ICONS: Record<ResourceDrift['state'], [string, string]> = {

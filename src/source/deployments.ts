@@ -57,8 +57,8 @@ export function deploymentsOf(sourceId: string, crewName: string, crews: CrewSum
 }
 
 /** The line under a deployment in the tree. */
-export function deploymentDescription(d: Deployment, drift?: string): string {
-  const parts = [d.channel, d.crew.phase];
+export function deploymentDescription(d: Deployment, drift?: string, flux?: string): string {
+  const parts = [flux ?? d.channel, d.crew.phase];
   if (drift) parts.push(drift);
   if (!d.linked) parts.push('same name, other source?');
   return parts.join(' · ');
