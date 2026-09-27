@@ -1,0 +1,20 @@
+data: {"type":"connected"}
+
+data: {"type":"thread_found","threadId":"0f643dce-5d20-429d-9316-1e0d79e2e91f"}
+
+data: {"type":"heartbeat"}
+
+data: {"type":"heartbeat"}
+
+data: {"type":"phase","agent":"node-watcher","status":"triaging","gpu":"ollama-rig0"}
+
+data: {"type":"phase","agent":"node-watcher","status":"evaluating","gpu":"ollama-rig0"}
+
+data: {"type":"phase","agent":"node-watcher","status":"done","signal":"stand_aside","stood_aside":true}
+
+data: {"type":"heartbeat"}
+
+data: {"type":"synthesis","content":"No specialist contributed information about nodes with GPUs. The available specialists were unable to provide the required details."}
+
+data: {"type":"done"}
+

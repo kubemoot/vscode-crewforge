@@ -1,0 +1,188 @@
+{
+  "name": "crewforge",
+  "displayName": "CrewForge",
+  "description": "See and ask Kubemoot crews from VS Code, through your kubeconfig",
+  "version": "0.0.0",
+  "publisher": "kubemoot",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kubemoot/vscode-crewforge"
+  },
+  "homepage": "https://kubemoot.org",
+  "icon": "media/icon.png",
+  "engines": {
+    "vscode": "^1.95.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "kubemoot",
+    "kubernetes",
+    "agents",
+    "llm",
+    "crew"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "kubemoot",
+          "title": "Kubemoot",
+          "icon": "media/kubemoot.svg"
+        }
+      ]
+    },
+    "views": {
+      "kubemoot": [
+        {
+          "id": "crewforge.crews",
+          "name": "Crews"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "crewforge.crews",
+        "contents": "No crews found in this context.\n[Select kubeconfig](command:crewforge.selectKubeconfig)\n[Select context](command:crewforge.selectContext)"
+      }
+    ],
+    "commands": [
+      {
+        "command": "crewforge.refreshCrews",
+        "title": "Refresh Crews",
+        "category": "CrewForge",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "crewforge.askCrew",
+        "title": "Ask Crew",
+        "category": "CrewForge",
+        "icon": "$(comment-discussion)"
+      },
+      {
+        "command": "crewforge.continueConversation",
+        "title": "Continue a Conversation",
+        "category": "CrewForge",
+        "icon": "$(history)"
+      },
+      {
+        "command": "crewforge.exportConversation",
+        "title": "Export Conversation as Markdown",
+        "category": "CrewForge"
+      },
+      {
+        "command": "crewforge.selectContext",
+        "title": "Select Kubernetes Context",
+        "category": "CrewForge",
+        "icon": "$(server-environment)"
+      },
+      {
+        "command": "crewforge.selectKubeconfig",
+        "title": "Select Kubeconfig File",
+        "category": "CrewForge"
+      },
+      {
+        "command": "crewforge.openConversationsFolder",
+        "title": "Open Conversations Folder",
+        "category": "CrewForge"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "crewforge.refreshCrews",
+          "when": "view == crewforge.crews",
+          "group": "navigation@1"
+        },
+        {
+          "command": "crewforge.continueConversation",
+          "when": "view == crewforge.crews",
+          "group": "navigation@2"
+        },
+        {
+          "command": "crewforge.selectContext",
+          "when": "view == crewforge.crews",
+          "group": "navigation@3"
+        },
+        {
+          "command": "crewforge.selectKubeconfig",
+          "when": "view == crewforge.crews"
+        },
+        {
+          "command": "crewforge.openConversationsFolder",
+          "when": "view == crewforge.crews"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "crewforge.askCrew",
+          "when": "view == crewforge.crews && viewItem == crew",
+          "group": "inline"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "crewforge.exportConversation",
+          "when": "activeWebviewPanelId == crewforge.chat"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "CrewForge",
+      "properties": {
+        "crewforge.kubeconfig": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Path to a kubeconfig file. Empty uses `KUBECONFIG`, then `~/.kube/config`."
+        },
+        "crewforge.context": {
+          "type": "string",
+          "default": "",
+          "description": "Kubernetes context to use. Empty uses the kubeconfig's current context."
+        },
+        "crewforge.namespaces": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Show crews only in these namespaces. Empty shows every namespace you can read."
+        },
+        "crewforge.streamTimeoutSeconds": {
+          "type": "number",
+          "default": 600,
+          "minimum": 60,
+          "description": "Longest a single turn may stream before CrewForge gives up on it."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src test",
+    "test": "vitest run",
+    "package": "node esbuild.mjs --production && vsce package --no-dependencies",
+    "vscode:prepublish": "node esbuild.mjs --production"
+  },
+  "dependencies": {
+    "@kubernetes/client-node": "^2.0.0",
+    "marked": "^18.0.14"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^22.20.4",
+    "@types/vscode": "^1.95.0",
+    "@vscode/vsce": "^4.0.0",
+    "esbuild": "^0.28.2",
+    "eslint": "^10.11.0",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.70.1",
+    "vitest": "^5.0.2"
+  }
+}
