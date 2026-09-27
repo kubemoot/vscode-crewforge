@@ -22,19 +22,8 @@ export function resolveKubeconfigSource(setting: string, env: NodeJS.ProcessEnv,
 /** Loads the kubeconfig and selects `context` when one is given. */
 export function loadKubeconfig(setting: string, context: string, env = process.env): KubeconfigChoice {
   const source = resolveKubeconfigSource(setting, env);
-  const config = new KubeConfig();
   const files = source.split(path.delimiter).filter((f) => f.length > 0);
-  if (files.length === 1) {
-    config.loadFromFile(files[0]);
-  } else {
-    for (const file of files) {
-      const part = new KubeConfig();
-      part.loadFromFile(file);
-      config.mergeConfig(part, true);
-    }
-    const first = firstCurrentContext(files);
-    if (first) config.setCurrentContext(first);
-  }
+  const config = files.length === 1 ? loadFile(files[0]) : mergeFiles(files);
   if (context) useContext(config, context);
   if (!config.getCurrentCluster()) {
     throw new Error(`The kubeconfig at ${source} has no current context with a cluster; select one with "CrewForge: Select Kubernetes Context".`);
@@ -55,12 +44,30 @@ function expandHome(p: string, home: string): string {
   return p === '~' || p.startsWith('~/') || p.startsWith('~\\') ? path.join(home, p.slice(1)) : p;
 }
 
-/** kubectl takes current-context from the first file in KUBECONFIG that sets one. */
-function firstCurrentContext(files: string[]): string | undefined {
-  for (const file of files) {
-    const kc = new KubeConfig();
-    kc.loadFromFile(file);
-    if (kc.getCurrentContext()) return kc.getCurrentContext();
-  }
-  return undefined;
+function loadFile(file: string): KubeConfig {
+  const kc = new KubeConfig();
+  kc.loadFromFile(file);
+  return kc;
+}
+
+/**
+ * Merges kubeconfig files the way kubectl does: the first file to define a cluster,
+ * user, or context name wins, and current-context comes from the first file that sets
+ * one. (The client library's own merge throws on a repeated name instead.)
+ */
+export function mergeFiles(files: string[]): KubeConfig {
+  const parts = files.map(loadFile);
+  const merged = new KubeConfig();
+  merged.loadFromOptions({
+    clusters: firstByName(parts.flatMap((p) => p.getClusters())),
+    users: firstByName(parts.flatMap((p) => p.getUsers())),
+    contexts: firstByName(parts.flatMap((p) => p.getContexts())),
+    currentContext: parts.map((p) => p.getCurrentContext()).find((c) => c) ?? '',
+  });
+  return merged;
+}
+
+function firstByName<T extends { name: string }>(items: T[]): T[] {
+  const seen = new Set<string>();
+  return items.filter((item) => !seen.has(item.name) && seen.add(item.name));
 }

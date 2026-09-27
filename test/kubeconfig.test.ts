@@ -63,6 +63,18 @@ describe('loadKubeconfig', () => {
     expect(config.getCurrentContext()).toBe('beta');
   });
 
+  it('keeps the first definition of a name repeated across files, as kubectl does', () => {
+    const dir = tmp();
+    const a = kubeconfig(dir, 'a', ['homelab'], 'homelab');
+    const b = path.join(dir, 'b');
+    fs.writeFileSync(b, fs.readFileSync(a, 'utf8').replace('https://homelab.example:6443', 'https://other.example:6443'));
+    const c = kubeconfig(dir, 'c', ['gke']);
+    const { config } = loadKubeconfig('', '', { KUBECONFIG: [a, b, c].join(path.delimiter) });
+    expect(config.getClusters().map((x) => x.name).sort()).toEqual(['gke', 'homelab']);
+    expect(config.getCurrentCluster()?.server).toBe('https://homelab.example:6443');
+    expect(config.getContexts().map((x) => x.name).sort()).toEqual(['gke', 'homelab']);
+  });
+
   it('fails helpfully when there is no current context', () => {
     const file = kubeconfig(tmp(), 'config', ['one']);
     expect(() => loadKubeconfig(file, '', {})).toThrow(/Select Kubernetes Context/);

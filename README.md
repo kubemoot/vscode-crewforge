@@ -13,11 +13,15 @@ crew needs a public address and no extra credential is involved.
 
 1. Install the `.vsix`: in VS Code, **Extensions: Install from VSIX...**, or
    `code --install-extension crewforge-<version>.vsix`.
-2. Open the **Kubemoot** view in the activity bar. CrewForge reads the kubeconfig from
-   the `crewforge.kubeconfig` setting, else `KUBECONFIG`, else `~/.kube/config`. To use a
-   different file, run **CrewForge: Select Kubeconfig File**; to change cluster, **CrewForge:
-   Select Kubernetes Context**.
-3. Click a crew, type a question, press Enter.
+2. Click the Kubemoot mark (the round table) in the activity bar on the left. The
+   **Crews** view lists every crew your kubeconfig can read, grouped by namespace, with a
+   green mark on the ready ones.
+3. Click a crew. A chat opens beside the view. Type a question and press Enter.
+
+CrewForge reads the kubeconfig from the `crewforge.kubeconfig` setting, else every file
+in `KUBECONFIG` (merged as kubectl merges them), else `~/.kube/config`. To use a
+different file, run **CrewForge: Select Kubeconfig File** from the Command Palette; to
+change cluster, **CrewForge: Select Kubernetes Context** (the server icon on the view).
 
 While a turn runs, each agent has a card: queued, analyzing (with the GPU it landed on),
 then its finding or "stood aside". The crew's answer follows, rendered as Markdown. Ask
@@ -54,6 +58,8 @@ nothing. When authoring arrives it stays within Kubemoot's custom resources:
 
 ## Develop
 
+This section is for working on CrewForge itself; using it needs only the install above.
+
 ```bash
 npm install
 npm test            # vitest
@@ -62,7 +68,8 @@ npm run typecheck
 npm run package     # builds dist/ and crewforge-<version>.vsix
 ```
 
-Press F5 in VS Code to run the extension in an Extension Development Host.
+With this repository open in VS Code, F5 starts a second VS Code window (the Extension
+Development Host) running your local build.
 
 The tests replay discussion streams recorded from a live crew (`test/fixtures/*.sse`).
 To record a new one:
