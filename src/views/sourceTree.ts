@@ -3,6 +3,7 @@ import { connect, namespaceFilter, type Connection } from '../connection';
 import { listCrews } from '../k8s/crews';
 import { deploymentDescription, type Deployment } from '../source/deployments';
 import { summarize, type ResourceDrift } from '../source/drift';
+import { isRunning, runSummary, type FitnessRun } from '../fitness/fitness';
 import type { SourceEntry, SourceService } from '../source/service';
 import { errorLabel, errorText } from './errors';
 
@@ -10,6 +11,8 @@ export type SourceNode =
   | { kind: 'source'; entry: SourceEntry }
   | { kind: 'deployment'; entry: SourceEntry; deployment: Deployment; drift?: ResourceDrift[]; error?: string }
   | { kind: 'resource'; entry: SourceEntry; deployment: Deployment; drift: ResourceDrift }
+  | { kind: 'fitness'; entry: SourceEntry; deployment: Deployment }
+  | { kind: 'run'; entry: SourceEntry; deployment: Deployment; run: FitnessRun }
   | { kind: 'message'; text: string; detail?: string; icon?: string };
 
 /** The Crew Sources view: crew charts and bundles in the workspace, where each is deployed, and how each deployment differs from its source. */
@@ -37,6 +40,7 @@ export class SourceTreeProvider implements vscode.TreeDataProvider<SourceNode> {
     if (!node) return this.loadRoot();
     if (node.kind === 'source') return this.loadDeployments(node.entry);
     if (node.kind === 'deployment') return deploymentChildren(node);
+    if (node.kind === 'fitness') return this.loadRuns(node);
     return [];
   }
 
@@ -48,6 +52,10 @@ export class SourceTreeProvider implements vscode.TreeDataProvider<SourceNode> {
         return deploymentItem(node);
       case 'resource':
         return resourceItem(node);
+      case 'fitness':
+        return fitnessItem();
+      case 'run':
+        return runItem(node);
       default:
         return messageItem(node);
     }
@@ -77,6 +85,17 @@ export class SourceTreeProvider implements vscode.TreeDataProvider<SourceNode> {
     }
   }
 
+  private async loadRuns(node: Extract<SourceNode, { kind: 'fitness' }>): Promise<SourceNode[]> {
+    try {
+      const connection = this.connection ?? this.connectTo();
+      const runs = await this.service.runs(node.deployment, connection.client);
+      if (runs.length === 0) return [{ kind: 'message', text: 'No fitness runs yet', icon: 'info' }];
+      return runs.map((run) => ({ kind: 'run', entry: node.entry, deployment: node.deployment, run }));
+    } catch (err) {
+      return [errorMessage(err)];
+    }
+  }
+
   private async withDrift(entry: SourceEntry, deployment: Deployment, connection: Connection): Promise<SourceNode> {
     try {
       return { kind: 'deployment', entry, deployment, drift: await this.service.drift(entry, deployment, connection.client) };
@@ -87,8 +106,35 @@ export class SourceTreeProvider implements vscode.TreeDataProvider<SourceNode> {
 }
 
 function deploymentChildren(node: Extract<SourceNode, { kind: 'deployment' }>): SourceNode[] {
-  if (node.error) return [{ kind: 'message', text: node.error }];
-  return (node.drift ?? []).map((drift) => ({ kind: 'resource', entry: node.entry, deployment: node.deployment, drift }));
+  const fitness: SourceNode = { kind: 'fitness', entry: node.entry, deployment: node.deployment };
+  if (node.error) return [{ kind: 'message', text: node.error }, fitness];
+  return [...(node.drift ?? []).map((drift): SourceNode => ({ kind: 'resource', entry: node.entry, deployment: node.deployment, drift })), fitness];
+}
+
+function fitnessItem(): vscode.TreeItem {
+  const item = new vscode.TreeItem('Fitness', vscode.TreeItemCollapsibleState.Collapsed);
+  item.iconPath = new vscode.ThemeIcon('beaker');
+  item.contextValue = 'fitness';
+  return item;
+}
+
+const RUN_ICONS: Record<string, [string, string?]> = {
+  Passed: ['pass', 'testing.iconPassed'],
+  Completed: ['pass', 'testing.iconPassed'],
+  Failed: ['error', 'testing.iconFailed'],
+  Error: ['error', 'testing.iconErrored'],
+};
+
+function runItem(node: Extract<SourceNode, { kind: 'run' }>): vscode.TreeItem {
+  const { run } = node;
+  const item = new vscode.TreeItem(run.name, vscode.TreeItemCollapsibleState.None);
+  item.description = runSummary(run);
+  item.tooltip = `${run.kind} ${run.namespace}/${run.name}\n${runSummary(run)}${run.error ? `\n${run.error}` : ''}`;
+  const [icon, color] = isRunning(run) ? ['sync~spin'] : (RUN_ICONS[run.phase] ?? ['circle-outline']);
+  item.iconPath = new vscode.ThemeIcon(icon, color ? new vscode.ThemeColor(color) : undefined);
+  item.contextValue = 'run';
+  item.command = { command: 'crewforge.showRun', title: 'Show Fitness Run', arguments: [node] };
+  return item;
 }
 
 function sourceItem(entry: SourceEntry): vscode.TreeItem {

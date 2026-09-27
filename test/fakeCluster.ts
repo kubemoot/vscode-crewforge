@@ -9,6 +9,7 @@ export const KINDS: Record<string, string> = {
   PromptModule: 'promptmodules',
   Model: 'models',
   CrewFitness: 'crewfitnesses',
+  CrewFitnessSuite: 'crewfitnesssuites',
 };
 
 /**
@@ -34,6 +35,11 @@ export class FakeCluster implements KubeTransport {
     if (failure) throw failure;
     if (method === 'GET') return JSON.stringify(this.get(path));
     if (method === 'PATCH') return '{}';
+    if (method === 'POST') {
+      const created = body as Manifest;
+      this.objects.push({ ...created, kind: created.kind });
+      return JSON.stringify(created);
+    }
     throw new Error(`FakeCluster: unexpected ${method} ${path}`);
   }
 
@@ -48,7 +54,8 @@ export class FakeCluster implements KubeTransport {
       if (!this.namespaces.has(namespace)) throw new KubeError(`namespaces "${namespace}" not found`, 404);
       return { metadata: { name: namespace } };
     }
-    if (path === `${GROUP}/crews`) return { items: this.objects.filter((o) => o.kind === 'Crew') };
+    const everywhere = /^\/apis\/kubemoot\.ai\/v1alpha1\/([a-z]+)$/.exec(path)?.[1];
+    if (everywhere) return { items: this.objects.filter((o) => KINDS[o.kind] === everywhere) };
     const m = /^\/apis\/kubemoot\.ai\/v1alpha1\/namespaces\/([^/]+)\/([^/]+)(?:\/([^/]+))?$/.exec(path);
     if (!m) throw new Error(`FakeCluster: no route for GET ${path}`);
     const [, ns, plural, name] = m;

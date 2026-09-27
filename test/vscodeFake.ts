@@ -215,8 +215,8 @@ export const window = {
       dispose: () => undefined,
     };
   },
-  showTextDocument(uri: Uri) {
-    recorded.shownDocuments.push(uri.fsPath);
+  showTextDocument(target: Uri | { content: string }) {
+    recorded.shownDocuments.push(target instanceof Uri ? target.fsPath : target.content);
     return Promise.resolve(undefined);
   },
   showSaveDialog() {
@@ -228,6 +228,9 @@ export const window = {
 };
 
 export const workspace = {
+  openTextDocument(options: { content: string; language: string }) {
+    return Promise.resolve({ content: options.content, language: options.language });
+  },
   get workspaceFolders() {
     return recorded.workspaceFolders;
   },

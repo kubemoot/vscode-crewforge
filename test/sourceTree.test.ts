@@ -130,7 +130,9 @@ describe('SourceTreeProvider', () => {
     ]);
     expect(items[0].tooltip).toContain('Owner: me');
     expect(items[1].tooltip).toContain('does not name this source');
-    const resources = await tree.getChildren(deployments[1]);
+    const children = await tree.getChildren(deployments[1]);
+    expect(children.at(-1)?.kind).toBe('fitness');
+    const resources = children.slice(0, -1);
     const resourceItems = resources.map((r) => tree.getTreeItem(r));
     expect(resourceItems.map((i) => [i.label, i.description])).toEqual([
       ['Crew/demo', 'changed in source'],
@@ -161,8 +163,9 @@ describe('SourceTreeProvider', () => {
     const [source] = await tree.getChildren();
     const [deployment] = await tree.getChildren(source);
     expect(tree.getTreeItem(deployment).description).toContain('cannot compare');
-    const [reason] = await tree.getChildren(deployment);
+    const [reason, fitness] = await tree.getChildren(deployment);
     expect(tree.getTreeItem(reason).label).toBe('no discovery');
+    expect(fitness.kind).toBe('fitness');
     const empty = provider(deps(noGit, { charts: [], yamls: [] }));
     expect((await empty.getChildren()).map((n) => empty.getTreeItem(n).label)).toEqual(['No crew charts or bundles in this workspace']);
     const failing = provider({ ...deps(), listFiles: () => Promise.reject(new Error('no workspace')) });

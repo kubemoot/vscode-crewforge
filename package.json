@@ -145,6 +145,17 @@
         "title": "Deploy a Revision (Roll Back or Forward)",
         "category": "CrewForge",
         "icon": "$(history)"
+      },
+      {
+        "command": "crewforge.runFitness",
+        "title": "Run Fitness",
+        "category": "CrewForge",
+        "icon": "$(beaker)"
+      },
+      {
+        "command": "crewforge.showRun",
+        "title": "Show Fitness Run",
+        "category": "CrewForge"
       }
     ],
     "menus": {
@@ -223,6 +234,16 @@
           "command": "crewforge.updateDeployment",
           "when": "view == crewforge.sources && viewItem =~ /^deployment-/",
           "group": "deploy@1"
+        },
+        {
+          "command": "crewforge.runFitness",
+          "when": "view == crewforge.sources && viewItem == fitness",
+          "group": "inline"
+        },
+        {
+          "command": "crewforge.runFitness",
+          "when": "view == crewforge.sources && viewItem =~ /^deployment-/",
+          "group": "deploy@3"
         }
       ],
       "commandPalette": [
@@ -248,6 +269,14 @@
         },
         {
           "command": "crewforge.deployRevision",
+          "when": "false"
+        },
+        {
+          "command": "crewforge.runFitness",
+          "when": "false"
+        },
+        {
+          "command": "crewforge.showRun",
           "when": "false"
         }
       ]

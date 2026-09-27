@@ -7,6 +7,7 @@ import type { CrewSummary } from './k8s/crews';
 import { ChatPanel } from './panels/chatPanel';
 import { createCrewCommand } from './create/createCrew';
 import { DeployCommands } from './deploy/commands';
+import { FitnessCommands } from './fitness/commands';
 import { execProgram, readText, readYamlFiles } from './source/nodeDeps';
 import { SourceService } from './source/service';
 import { ConversationStore } from './store/conversations';
@@ -21,7 +22,9 @@ export function activate(context: vscode.ExtensionContext): void {
   const tree = new CrewTreeProvider();
   const view = vscode.window.createTreeView('crewforge.crews', { treeDataProvider: tree, showCollapseAll: true });
   const commands = new Commands(context.extensionUri, tree, view, store);
-  const sources = new SourceTreeProvider(new SourceService({ exec: execProgram, readText, readYamlFiles, listFiles: listWorkspaceFiles }));
+  const service = new SourceService({ exec: execProgram, readText, readYamlFiles, listFiles: listWorkspaceFiles });
+  const sources = new SourceTreeProvider(service);
+  const fitness = new FitnessCommands(service, () => sources.refresh());
   const sourcesView = vscode.window.createTreeView('crewforge.sources', { treeDataProvider: sources, showCollapseAll: true });
   const documents = new ManifestDocuments();
   const output = vscode.window.createOutputChannel('CrewForge');
@@ -57,6 +60,8 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('crewforge.updateDeployment', (node?: SourceNode) => guard(() => deploy.updateDeployment(node))),
     vscode.commands.registerCommand('crewforge.applyResource', (node?: SourceNode) => guard(() => deploy.applyResource(node))),
     vscode.commands.registerCommand('crewforge.deployRevision', (node?: SourceNode) => guard(() => deploy.deployRevision(node))),
+    vscode.commands.registerCommand('crewforge.runFitness', (node?: SourceNode) => guard(() => fitness.runFitness(node))),
+    vscode.commands.registerCommand('crewforge.showRun', (node?: SourceNode) => guard(() => fitness.showRun(node))),
     vscode.commands.registerCommand('crewforge.removeDeployment', (node?: SourceNode) => guard(() => deploy.removeDeployment(node))),
     vscode.commands.registerCommand('crewforge.refreshCrews', () => tree.refresh()),
     vscode.commands.registerCommand('crewforge.askCrew', (node?: CrewNode) => commands.askCrew(node)),
