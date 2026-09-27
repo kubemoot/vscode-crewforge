@@ -83,14 +83,15 @@ export class ChatSession {
     if (synthesis) c.messages.push({ role: 'assistant', content: synthesis, timestamp: now(), agentName: 'Crew' });
     const notice = noticeFor(end, synthesis !== undefined);
     if (notice) c.messages.push({ role: 'system', content: notice, timestamp: now() });
-    this.turn = undefined;
-    this.controller = undefined;
-    this.emit();
+    // Saved before the turn ends on screen, so the refreshed conversation list includes it.
     try {
       await this.save(c);
     } catch {
       // A failed save must not lose the answer on screen; the next turn saves again.
     }
+    this.turn = undefined;
+    this.controller = undefined;
+    this.emit();
   }
 
   private emit(): void {

@@ -39,6 +39,23 @@ describe('ChatSession', () => {
     expect(session.view).toMatchObject({ busy: false, turn: undefined });
   });
 
+  it('has saved the conversation by the time the turn ends on screen', async () => {
+    const t = new FakeTransport();
+    t.responses.push('{"conversationId":"c"}');
+    t.streams.push(fixture('turn1.sse'));
+    let savedCount = 0;
+    const savedWhenIdle: number[] = [];
+    const session = new ChatSession(
+      t,
+      newConversation('ctx', 'ns', 'crew'),
+      async () => void savedCount++,
+      (v) => { if (!v.busy) savedWhenIdle.push(savedCount); },
+      FAST,
+    );
+    await session.send('q');
+    expect(savedWhenIdle.at(-1)).toBe(1);
+  });
+
   it('records a failed start as a notice and saves the question', async () => {
     const { t, saved, session } = setup();
     t.responses.push(new Error('The service has no ready pod behind it yet.'));

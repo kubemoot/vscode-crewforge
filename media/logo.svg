@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200" role="img" aria-label="Kubemoot: a round table with seven water drops gathered around it">
+  <title>Kubemoot</title>
+  <!-- No background: the mark sits on whatever is behind it. -->
+  <!-- The table: a round table, seen from above. -->
+  <circle cx="100" cy="100" r="40" fill="#1f2a37"/>
+  <circle cx="100" cy="100" r="32" fill="none" stroke="#5b8def" stroke-width="2.5" opacity="0.9"/>
+  <!-- The moot: seven drops around the table, each pointed at its center. Seven, like the sides of the Kubernetes wheel. -->
+  <g fill="#3b82f6">
+    <path d="M0 0 C 11 -14, 11 -34, 0 -34 C -11 -34, -11 -14, 0 0 Z" transform="rotate(0.000 100 100) translate(100 54)"/>
+    <path d="M0 0 C 11 -14, 11 -34, 0 -34 C -11 -34, -11 -14, 0 0 Z" transform="rotate(51.429 100 100) translate(100 54)"/>
+    <path d="M0 0 C 11 -14, 11 -34, 0 -34 C -11 -34, -11 -14, 0 0 Z" transform="rotate(102.857 100 100) translate(100 54)"/>
+    <path d="M0 0 C 11 -14, 11 -34, 0 -34 C -11 -34, -11 -14, 0 0 Z" transform="rotate(154.286 100 100) translate(100 54)"/>
+    <path d="M0 0 C 11 -14, 11 -34, 0 -34 C -11 -34, -11 -14, 0 0 Z" transform="rotate(205.714 100 100) translate(100 54)"/>
+    <path d="M0 0 C 11 -14, 11 -34, 0 -34 C -11 -34, -11 -14, 0 0 Z" transform="rotate(257.143 100 100) translate(100 54)"/>
+    <path d="M0 0 C 11 -14, 11 -34, 0 -34 C -11 -34, -11 -14, 0 0 Z" transform="rotate(308.571 100 100) translate(100 54)"/>
+  </g>
+</svg>

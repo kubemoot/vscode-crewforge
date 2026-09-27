@@ -12,6 +12,8 @@ export interface AgentCard {
 
 /** Everything the stream has said about one turn. */
 export interface TurnState {
+  /** When the question was sent, as epoch milliseconds. */
+  startedAt: number;
   connected: boolean;
   threadId?: string;
   /** One card per agent, in the order agents first appeared. */
@@ -21,8 +23,8 @@ export interface TurnState {
   error?: string;
 }
 
-export function initialTurn(): TurnState {
-  return { connected: false, cards: [], done: false };
+export function initialTurn(now = Date.now()): TurnState {
+  return { startedAt: now, connected: false, cards: [], done: false };
 }
 
 type Handler = (state: TurnState, e: DiscussionEvent) => TurnState;

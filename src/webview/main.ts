@@ -1,5 +1,6 @@
 import { marked } from 'marked';
 import { cardText } from '../discussion/cardText';
+import { turnStatus } from '../discussion/turnStatus';
 import type { TurnState } from '../discussion/reducer';
 import type { ChatMessage, ConversationMeta } from '../store/conversation';
 import type { HostMessage, WebviewMessage } from './protocol';
@@ -7,6 +8,8 @@ import { escapeHtml, formatAgo, formatTime, icons, isWebLink } from './render';
 
 interface VsCodeApi {
   postMessage(message: WebviewMessage): void;
+  getState(): { sidebarWidth?: number } | undefined;
+  setState(state: { sidebarWidth?: number }): void;
 }
 declare function acquireVsCodeApi(): VsCodeApi;
 
@@ -26,8 +29,6 @@ marked.use({
   },
 });
 
-const LOADING_MESSAGES = ['Consulting crew...', 'Agents are discussing...', 'Gathering findings...', 'Analyzing responses...', 'Coordinating agents...'];
-
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const els = {
   sidebar: $<HTMLElement>('sidebar'),
@@ -43,7 +44,6 @@ const els = {
 };
 
 let state: HostMessage | undefined;
-let loadingIndex = 0;
 
 window.addEventListener('message', (event: MessageEvent<HostMessage>) => {
   if (event.data?.type !== 'state') return;
@@ -74,11 +74,14 @@ els.messages.addEventListener('click', (e) => {
   const button = (e.target as HTMLElement).closest<HTMLElement>('[data-copy]');
   if (button?.dataset.copy) vscode.postMessage({ type: 'copyMessage', index: Number(button.dataset.copy) });
 });
+// The status line's clock advances between stream events.
 setInterval(() => {
-  loadingIndex = (loadingIndex + 1) % LOADING_MESSAGES.length;
   const label = document.querySelector('.loading-text');
-  if (label) label.textContent = LOADING_MESSAGES[loadingIndex];
-}, 2000);
+  const turn = state?.view.turn;
+  if (label && turn) label.textContent = turnStatus(turn);
+}, 1000);
+
+setupResizer();
 
 vscode.postMessage({ type: 'ready' });
 
@@ -174,6 +177,28 @@ function renderTurn(turn: TurnState): string {
   const feed = cards ? `<div class="findings-feed">${cards}</div>` : '';
   const answer = turn.synthesis
     ? `<div class="message-text markdown-content">${marked.parse(turn.synthesis, { async: false }) as string}</div>`
-    : `<div class="loading-indicator"><div class="loading-spinner"></div><span class="loading-text">${LOADING_MESSAGES[loadingIndex]}</span></div>`;
+    : `<div class="loading-indicator"><div class="loading-spinner"></div><span class="loading-text">${escapeHtml(turnStatus(turn))}</span></div>`;
   return `<div class="message"><div class="message-avatar">${icons.crew}</div><div class="message-content turn">${feed}${answer}</div></div>`;
+}
+
+/** Lets the conversations pane be resized by dragging its edge; the width is remembered. */
+function setupResizer(): void {
+  const handle = $('resizer');
+  const saved = Number(vscode.getState()?.sidebarWidth);
+  if (saved) els.sidebar.style.width = `${saved}px`;
+  handle.addEventListener('pointerdown', (down) => {
+    handle.setPointerCapture(down.pointerId);
+    const startX = down.clientX;
+    const startWidth = els.sidebar.getBoundingClientRect().width;
+    const move = (e: PointerEvent) => {
+      const width = Math.min(480, Math.max(160, startWidth + e.clientX - startX));
+      els.sidebar.style.width = `${width}px`;
+    };
+    const up = () => {
+      handle.removeEventListener('pointermove', move);
+      vscode.setState({ sidebarWidth: els.sidebar.getBoundingClientRect().width });
+    };
+    handle.addEventListener('pointermove', move);
+    handle.addEventListener('pointerup', up, { once: true });
+  });
 }

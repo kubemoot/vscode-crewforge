@@ -50,7 +50,7 @@ export class ChatPanel {
       retainContextWhenHidden: true,
       localResourceRoots: [vscode.Uri.joinPath(extensionUri, 'dist'), vscode.Uri.joinPath(extensionUri, 'media')],
     });
-    this.panel.iconPath = vscode.Uri.joinPath(extensionUri, 'media', 'kubemoot.svg');
+    this.panel.iconPath = vscode.Uri.joinPath(extensionUri, 'media', 'logo.svg');
     const timing = { ...DEFAULT_TIMING, maxMs: streamTimeoutMs() };
     this.session = new ChatSession(
       connection.client,
@@ -160,6 +160,7 @@ export class ChatPanel {
     <div class="discussion-list" id="history"></div>
     <footer class="sidebar-footer"><p class="powered-by">Powered by Kubemoot</p><p class="disclaimer">AI can make mistakes. Verify important info.</p></footer>
   </aside>
+  <div class="sidebar-resizer" id="resizer" title="Drag to resize"></div>
   <div class="chat-container">
     <header class="chat-header">
       <div class="header-left">
