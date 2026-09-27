@@ -64,6 +64,7 @@ This section is for working on CrewForge itself; using it needs only the install
 ```bash
 npm install
 npm test            # vitest
+npm run test:coverage  # the same, failing below the coverage thresholds CI enforces
 npm run lint
 npm run typecheck
 npm run package     # builds dist/ and crewforge-<version>.vsix
@@ -73,6 +74,9 @@ With this repository open in VS Code, F5 starts a second VS Code window (the Ext
 Development Host) running your local build.
 
 The tests replay discussion streams recorded from a live crew (`test/fixtures/*.sse`).
+The VS Code glue runs against a small fake of the `vscode` module (`test/vscodeFake.ts`)
+and a local stand-in for the Kubernetes API (`test/fakeApiServer.ts`); the chat page's
+script runs in jsdom against the page the panel generates.
 To record a new one:
 
 ```bash
