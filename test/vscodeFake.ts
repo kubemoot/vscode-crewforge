@@ -92,6 +92,8 @@ export const recorded = {
   workspaceFolders: undefined as { name: string; uri: Uri }[] | undefined,
   shownDocuments: [] as string[],
   progress: [] as string[],
+  extensions: new Map<string, unknown>(),
+  textDocuments: [] as { uri: Uri; getText(): string }[],
   cancel: undefined as (() => void) | undefined,
   documentProviders: new Map<string, { provideTextDocumentContent(uri: Uri): string }>(),
 };
@@ -119,6 +121,8 @@ export function resetFake(): void {
   recorded.workspaceFolders = undefined;
   recorded.shownDocuments = [];
   recorded.progress = [];
+  recorded.extensions.clear();
+  recorded.textDocuments = [];
   recorded.cancel = undefined;
 }
 
@@ -233,7 +237,17 @@ export const window = {
   },
 };
 
+export const extensions = {
+  getExtension(id: string) {
+    const api = recorded.extensions.get(id);
+    return api === undefined ? undefined : { activate: () => Promise.resolve(api) };
+  },
+};
+
 export const workspace = {
+  get textDocuments() {
+    return recorded.textDocuments;
+  },
   openTextDocument(options: { content: string; language: string }) {
     return Promise.resolve({ content: options.content, language: options.language });
   },

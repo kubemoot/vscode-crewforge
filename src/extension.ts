@@ -14,6 +14,7 @@ import { SourceService } from './source/service';
 import { ConversationStore } from './store/conversations';
 import { CrewTreeProvider, type CrewNode } from './views/crewTree';
 import { MANIFEST_SCHEME, ManifestDocuments } from './views/manifestDocuments';
+import { SchemaProvider } from './schema/schemaProvider';
 import { SourceTreeProvider, type SourceNode } from './views/sourceTree';
 
 const REFRESH_MS = 30_000;
@@ -29,6 +30,7 @@ export function activate(context: vscode.ExtensionContext): void {
   const sourcesView = vscode.window.createTreeView('crewforge.sources', { treeDataProvider: sources, showCollapseAll: true });
   const documents = new ManifestDocuments();
   const output = vscode.window.createOutputChannel('CrewForge');
+  void new SchemaProvider(() => currentConnection(tree)?.client).register();
   const deploy = new DeployCommands(sources, { exec: execProgram, readYamlFiles }, output, () => {
     sources.refresh();
     tree.refresh();
