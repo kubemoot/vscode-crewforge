@@ -16,11 +16,17 @@ export type SourceNode =
   | { kind: 'run'; entry: SourceEntry; deployment: Deployment; run: FitnessRun }
   | { kind: 'message'; text: string; detail?: string; icon?: string };
 
+export type DeploymentNode = Extract<SourceNode, { kind: 'deployment' }>;
+
 /** The Crew Sources view: crew charts and bundles in the workspace, where each is deployed, and how each deployment differs from its source. */
 export class SourceTreeProvider implements vscode.TreeDataProvider<SourceNode> {
   private readonly changed = new vscode.EventEmitter<SourceNode | undefined>();
   readonly onDidChangeTreeData = this.changed.event;
   private entries: SourceEntry[] = [];
+  private readonly loaded = new Map<string, DeploymentNode[]>();
+  private readonly loadedChanged = new vscode.EventEmitter<void>();
+  /** Fires when a source's deployments and drift have been (re)loaded. */
+  readonly onDidLoadDeployments = this.loadedChanged.event;
   connection?: Connection;
 
   constructor(
@@ -30,6 +36,11 @@ export class SourceTreeProvider implements vscode.TreeDataProvider<SourceNode> {
 
   refresh(): void {
     this.changed.fire(undefined);
+  }
+
+  /** The deployments of a source, with their drift, from the last time it was expanded. */
+  deploymentsOf(root: string): DeploymentNode[] {
+    return this.loaded.get(root) ?? [];
   }
 
   /** The sources from the last load, for pickers. */
@@ -80,7 +91,10 @@ export class SourceTreeProvider implements vscode.TreeDataProvider<SourceNode> {
       const connection = this.connection;
       const deployments = this.service.deployments(entry, await listCrews(connection.client, namespaceFilter()));
       if (deployments.length === 0) return [{ kind: 'message', text: `Not deployed in ${connection.context}`, icon: 'circle-slash' }];
-      return Promise.all(deployments.map((deployment) => this.withDrift(entry, deployment, connection)));
+      const nodes = await Promise.all(deployments.map((deployment) => this.withDrift(entry, deployment, connection)));
+      this.loaded.set(entry.source.root, nodes as DeploymentNode[]);
+      this.loadedChanged.fire();
+      return nodes;
     } catch (err) {
       return [errorMessage(err)];
     }

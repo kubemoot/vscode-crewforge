@@ -37,6 +37,29 @@ export class TreeItem {
   ) {}
 }
 
+export class Range {
+  constructor(
+    public startLine: number,
+    public startCharacter: number,
+    public endLine: number,
+    public endCharacter: number,
+  ) {}
+}
+
+export class CodeLens {
+  constructor(
+    public range: Range,
+    public command?: { title: string; command: string; arguments?: unknown[] },
+  ) {}
+}
+
+export const languages = {
+  registerCodeLensProvider(_selector: unknown, provider: unknown) {
+    recorded.codeLensProviders.push(provider);
+    return { dispose: () => undefined };
+  },
+};
+
 export class ThemeIcon {
   constructor(
     public id: string,
@@ -93,6 +116,7 @@ export const recorded = {
   shownDocuments: [] as string[],
   progress: [] as string[],
   extensions: new Map<string, unknown>(),
+  codeLensProviders: [] as unknown[],
   textDocuments: [] as { uri: Uri; getText(): string }[],
   cancel: undefined as (() => void) | undefined,
   documentProviders: new Map<string, { provideTextDocumentContent(uri: Uri): string }>(),
@@ -122,6 +146,7 @@ export function resetFake(): void {
   recorded.shownDocuments = [];
   recorded.progress = [];
   recorded.extensions.clear();
+  recorded.codeLensProviders = [];
   recorded.textDocuments = [];
   recorded.cancel = undefined;
 }

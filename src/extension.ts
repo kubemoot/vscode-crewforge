@@ -15,6 +15,7 @@ import { ConversationStore } from './store/conversations';
 import { CrewTreeProvider, type CrewNode } from './views/crewTree';
 import { MANIFEST_SCHEME, ManifestDocuments } from './views/manifestDocuments';
 import { SchemaProvider } from './schema/schemaProvider';
+import { CrewCodeLens } from './views/codeLens';
 import { SourceTreeProvider, type SourceNode } from './views/sourceTree';
 
 const REFRESH_MS = 30_000;
@@ -54,6 +55,7 @@ export function activate(context: vscode.ExtensionContext): void {
       }
     }),
     sourcesView,
+    vscode.languages.registerCodeLensProvider({ language: 'yaml' }, new CrewCodeLens(sources)),
     vscode.workspace.registerTextDocumentContentProvider(MANIFEST_SCHEME, documents),
     vscode.commands.registerCommand('crewforge.refreshSources', () => sources.refresh()),
     vscode.commands.registerCommand('crewforge.showDrift', (node?: SourceNode) => showDrift(documents, node)),
