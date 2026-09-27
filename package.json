@@ -139,6 +139,12 @@
         "title": "Create Crew",
         "category": "CrewForge",
         "icon": "$(add)"
+      },
+      {
+        "command": "crewforge.deployRevision",
+        "title": "Deploy a Revision (Roll Back or Forward)",
+        "category": "CrewForge",
+        "icon": "$(history)"
       }
     ],
     "menus": {
@@ -207,6 +213,16 @@
           "command": "crewforge.applyResource",
           "when": "view == crewforge.sources && viewItem =~ /^resource-(changed|missing)$/",
           "group": "inline@2"
+        },
+        {
+          "command": "crewforge.deployRevision",
+          "when": "view == crewforge.sources && viewItem =~ /^deployment-/",
+          "group": "deploy@2"
+        },
+        {
+          "command": "crewforge.updateDeployment",
+          "when": "view == crewforge.sources && viewItem =~ /^deployment-/",
+          "group": "deploy@1"
         }
       ],
       "commandPalette": [
@@ -228,6 +244,10 @@
         },
         {
           "command": "crewforge.removeDeployment",
+          "when": "false"
+        },
+        {
+          "command": "crewforge.deployRevision",
           "when": "false"
         }
       ]

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { createArgs, createCrewCommand, scaffoldCrew } from '../src/create/createCrew';
+import { createCrewCommand } from '../src/create/createCrew';
+import { createArgs, scaffoldCrew } from '../src/create/scaffold';
 import type { Exec, ExecOptions } from '../src/source/render';
 import { recorded, resetFake, Uri } from './vscodeFake';
 

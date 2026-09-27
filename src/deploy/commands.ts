@@ -1,3 +1,5 @@
+import * as fs from 'node:fs/promises';
+import * as os from 'node:os';
 import * as vscode from 'vscode';
 import { connect, type Connection } from '../connection';
 import { nameProblem } from '../k8s/paths';
@@ -8,6 +10,7 @@ import type { SourceEntry } from '../source/service';
 import type { SourceNode, SourceTreeProvider } from '../views/sourceTree';
 import { errorText } from '../views/errors';
 import { keyOf } from '../source/manifests';
+import { listRevisions, materialize } from '../revisions/revisions';
 import { Deployer, isDeployable, KubeTools, type DeployChannel, type DeployRequest } from './deployer';
 import { channelOptions, ownershipWarnings, releaseOf, type ChannelOption } from './plan';
 import { readTarget } from './target';
@@ -26,6 +29,7 @@ export class DeployCommands {
     private readonly output: vscode.OutputChannel,
     private readonly afterChange: () => void,
     private readonly connectTo: () => Connection = () => connect(),
+    private readonly scratch: string = os.tmpdir(),
   ) {}
 
   /** Deploys a source into a namespace the developer names, through a channel that suits it. */
@@ -68,6 +72,29 @@ export class DeployCommands {
     }
     const identity = await identify(entry.source, this.deps.exec);
     await this.run(this.connectTo(), { entry, identity, namespace: deployment.namespace, channel: 'bundle', only: new Set([keyOf(drift.kind, drift.name)]) });
+  }
+
+  /** Deploys an earlier (or later) commit of the source through the deployment's channel: a rollback or a roll forward. */
+  async deployRevision(node?: SourceNode): Promise<void> {
+    if (node?.kind !== 'deployment') return;
+    const { entry, deployment } = node;
+    if (deployment.channel === 'flux') return gitOpsGuidance(deployment, 'revert the commit instead');
+    const current = deployment.revision?.replace(/-dirty$/, '');
+    const revisions = await listRevisions(this.deps.exec, entry.source);
+    const choice = await vscode.window.showQuickPick(
+      revisions.map((r) => ({ label: r.hash, description: `${r.date}${r.hash === current ? ' · deployed now' : ''}`, detail: r.subject, revision: r })),
+      { placeHolder: `Deploy which revision of ${entry.source.label} to ${deployment.namespace}?`, matchOnDetail: true },
+    );
+    if (!choice) return;
+    const { hash, subject } = choice.revision;
+    if (!(await confirm([`Deploy ${entry.source.label} as of ${hash} (${subject}) to ${deployment.namespace} via ${deployment.channel}? It replaces what runs there now.`], 'Deploy revision'))) return;
+    const source = await materialize(this.deps.exec, entry.source, hash, this.scratch);
+    try {
+      const identity = { ...(await identify(entry.source, this.deps.exec)), revision: hash };
+      await this.run(this.connectTo(), { entry: { ...entry, source }, identity, namespace: deployment.namespace, channel: deployment.channel, release: deployment.release });
+    } finally {
+      await fs.rm(source.root, { recursive: true, force: true });
+    }
   }
 
   async removeDeployment(node?: SourceNode): Promise<void> {
@@ -160,8 +187,9 @@ function notLinked(d: Deployment): string {
   return `${d.crew.name} in ${d.namespace} does not name this source; it may come from another copy of the crew.`;
 }
 
-function gitOpsGuidance(d: Deployment): void {
+function gitOpsGuidance(d: Deployment, rollback?: string): void {
   const release = d.crew.labels?.['helm.toolkit.fluxcd.io/name'];
   const via = release ? `the HelmRelease ${release}` : 'Flux';
-  void vscode.window.showInformationMessage(`${via} manages ${d.crew.name} in ${d.namespace}. Commit and push your change; merging it deploys it, and removing it from git removes the crew.`);
+  const how = rollback ? `To go back, ${rollback}; merging it deploys it.` : 'Commit and push your change; merging it deploys it, and removing it from git removes the crew.';
+  void vscode.window.showInformationMessage(`${via} manages ${d.crew.name} in ${d.namespace}. ${how}`);
 }

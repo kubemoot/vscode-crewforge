@@ -56,6 +56,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('crewforge.deploySource', (node?: SourceNode) => guard(() => deploy.deploySource(node))),
     vscode.commands.registerCommand('crewforge.updateDeployment', (node?: SourceNode) => guard(() => deploy.updateDeployment(node))),
     vscode.commands.registerCommand('crewforge.applyResource', (node?: SourceNode) => guard(() => deploy.applyResource(node))),
+    vscode.commands.registerCommand('crewforge.deployRevision', (node?: SourceNode) => guard(() => deploy.deployRevision(node))),
     vscode.commands.registerCommand('crewforge.removeDeployment', (node?: SourceNode) => guard(() => deploy.removeDeployment(node))),
     vscode.commands.registerCommand('crewforge.refreshCrews', () => tree.refresh()),
     vscode.commands.registerCommand('crewforge.askCrew', (node?: CrewNode) => commands.askCrew(node)),
