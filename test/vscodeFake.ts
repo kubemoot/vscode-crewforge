@@ -190,6 +190,9 @@ export const recorded = {
   revealed: [] as { view: string; node: unknown; options?: unknown }[],
   /** Values stored in the fake workspace state. */
   workspaceState: new Map<string, unknown>(),
+  /** File system watchers created, in order. */
+  watchers: [] as FakeWatcher[],
+  folderListeners: [] as Listener<unknown>[],
   /** The editor window.activeTextEditor answers with. */
   activeEditor: undefined as { document: { uri: Uri; languageId: string; getText(range?: unknown): string }; selection: unknown } | undefined,
 };
@@ -231,6 +234,28 @@ export function resetFake(): void {
   recorded.saveListeners = [];
   recorded.revealed = [];
   recorded.workspaceState.clear();
+  recorded.watchers = [];
+  recorded.folderListeners = [];
+}
+
+/** A file system watcher a test fires events on. */
+export class FakeWatcher {
+  readonly created = new EventEmitter<Uri>();
+  readonly changed = new EventEmitter<Uri>();
+  readonly deleted = new EventEmitter<Uri>();
+  onDidCreate = this.created.event;
+  onDidChange = this.changed.event;
+  onDidDelete = this.deleted.event;
+  disposed = false;
+  constructor(
+    public glob: string,
+    public ignoreCreate = false,
+    public ignoreChange = false,
+    public ignoreDelete = false,
+  ) {}
+  dispose(): void {
+    this.disposed = true;
+  }
 }
 
 /** A Memento over recorded.workspaceState, for an ExtensionContext's workspaceState. */
@@ -419,6 +444,15 @@ export const workspace = {
   registerTextDocumentContentProvider(scheme: string, provider: { provideTextDocumentContent(uri: Uri): string }) {
     recorded.documentProviders.set(scheme, provider);
     return { dispose: () => recorded.documentProviders.delete(scheme) };
+  },
+  createFileSystemWatcher(glob: string, ignoreCreate?: boolean, ignoreChange?: boolean, ignoreDelete?: boolean) {
+    const watcher = new FakeWatcher(glob, ignoreCreate, ignoreChange, ignoreDelete);
+    recorded.watchers.push(watcher);
+    return watcher;
+  },
+  onDidChangeWorkspaceFolders(listener: Listener<unknown>) {
+    recorded.folderListeners.push(listener);
+    return { dispose() {} };
   },
   onDidSaveTextDocument(listener: Listener<{ uri: Uri }>) {
     recorded.saveListeners.push(listener);

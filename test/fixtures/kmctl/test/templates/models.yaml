@@ -1,0 +1,55 @@
+# Model CRs for the crew. The scheduler binds agents to these just-in-time, so a
+# crew needs at least one Model in its namespace to run a discussion. Each Model
+# binds a model name to a ModelProvider and is labeled by capability + latencyClass.
+# These are starting defaults for the chosen family; edit model names/VRAM to match.
+---
+apiVersion: kubemoot.ai/v1alpha1
+kind: Model
+metadata:
+  name: qwen-8b-ollama
+  labels:
+    kubemoot.ai/crew: test
+    family: "qwen"
+    params: "8b"
+    latencyClass: "low"
+    contextWindow: "40960"
+    capability/tool-calling: "true"
+    capability/reasoning: "true"
+spec:
+  model: "qwen3:8b"
+  providerRef: "ollama"
+  vramMib: 5120
+---
+apiVersion: kubemoot.ai/v1alpha1
+kind: Model
+metadata:
+  name: qwen-14b-ollama
+  labels:
+    kubemoot.ai/crew: test
+    family: "qwen"
+    params: "14b"
+    latencyClass: "medium"
+    contextWindow: "40960"
+    capability/tool-calling: "true"
+    capability/reasoning: "true"
+spec:
+  model: "qwen3:14b"
+  providerRef: "ollama"
+  vramMib: 10240
+---
+apiVersion: kubemoot.ai/v1alpha1
+kind: Model
+metadata:
+  name: qwen-32b-ollama
+  labels:
+    kubemoot.ai/crew: test
+    family: "qwen"
+    params: "32b"
+    latencyClass: "high"
+    contextWindow: "40960"
+    capability/tool-calling: "true"
+    capability/reasoning: "true"
+spec:
+  model: "qwen3:32b"
+  providerRef: "ollama"
+  vramMib: 20480

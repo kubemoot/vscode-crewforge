@@ -6,6 +6,7 @@ import { summarize, type ResourceDrift } from '../source/drift';
 import { isRunning, runSummary, type FitnessRun } from '../fitness/fitness';
 import { fluxSummary, type FluxState } from '../gitops/flux';
 import type { DeclaredItem, DeclaredSection } from '../source/declared';
+import { locationOf, type SourceLocation } from '../source/render';
 import type { SourceEntry, SourceService } from '../source/service';
 import { errorLabel, errorText } from './errors';
 
@@ -17,7 +18,7 @@ export type SourceNode =
   | { kind: 'run'; entry: SourceEntry; deployment: Deployment; run: FitnessRun }
   | { kind: 'declSection'; entry: SourceEntry; section: DeclaredSection; items: DeclaredItem[] }
   | { kind: 'declared'; entry: SourceEntry; item: DeclaredItem }
-  | { kind: 'message'; text: string; detail?: string; icon?: string };
+  | { kind: 'message'; text: string; detail?: string; icon?: string; at?: SourceLocation };
 
 export type DeploymentNode = Extract<SourceNode, { kind: 'deployment' }>;
 
@@ -42,6 +43,8 @@ export class SourceTreeProvider implements vscode.TreeDataProvider<SourceNode> {
   connection?: Connection;
   /** The source nodes of the last load, so one source's line can be redrawn alone. */
   private roots: SourceNode[] = [];
+  /** The root nodes a reload just made, which the view's next read of the root takes instead of loading again. */
+  private fresh?: SourceNode[];
   /** Where each source stands, by folder, shown on its line; set by the inner loop. */
   stateOf: (root: string) => SourceState | undefined = () => undefined;
 
@@ -50,7 +53,9 @@ export class SourceTreeProvider implements vscode.TreeDataProvider<SourceNode> {
     private readonly connectTo: () => Connection = () => connect(),
   ) {}
 
+  /** Redraws the view, loading the workspace's sources again. */
   refresh(): void {
+    this.fresh = undefined;
     this.changed.fire(undefined);
   }
 
@@ -69,7 +74,8 @@ export class SourceTreeProvider implements vscode.TreeDataProvider<SourceNode> {
   /** Loads the sources again and redraws the view; resolves to the new source nodes, for revealing one. */
   async reload(): Promise<SourceNode[]> {
     const nodes = await this.loadRoot();
-    this.refresh();
+    this.fresh = nodes;
+    this.changed.fire(undefined);
     return nodes;
   }
 
@@ -84,7 +90,7 @@ export class SourceTreeProvider implements vscode.TreeDataProvider<SourceNode> {
   }
 
   async getChildren(node?: SourceNode): Promise<SourceNode[]> {
-    if (!node) return this.loadRoot();
+    if (!node) return this.takeFresh() ?? this.loadRoot();
     if (node.kind === 'source') return this.loadSource(node.entry);
     if (node.kind === 'deployment') return deploymentChildren(node);
     if (node.kind === 'fitness') return this.loadRuns(node);
@@ -118,6 +124,12 @@ export class SourceTreeProvider implements vscode.TreeDataProvider<SourceNode> {
     }
   }
 
+  private takeFresh(): SourceNode[] | undefined {
+    const nodes = this.fresh;
+    this.fresh = undefined;
+    return nodes;
+  }
+
   private async loadRoot(): Promise<SourceNode[]> {
     try {
       this.loadedEntries = await this.service.load();
@@ -132,7 +144,7 @@ export class SourceTreeProvider implements vscode.TreeDataProvider<SourceNode> {
 
   /** What a source declares, then where it is deployed. */
   private async loadSource(entry: SourceEntry): Promise<SourceNode[]> {
-    if (entry.error) return [{ kind: 'message', text: entry.error }];
+    if (entry.error) return [{ ...errorMessage(entry.error), at: entry.errorAt }];
     const [declared, deployments] = await Promise.all([this.loadDeclarations(entry), this.loadDeployments(entry)]);
     return [...declared, ...deployments];
   }
@@ -333,12 +345,14 @@ function resourceItem(node: Extract<SourceNode, { kind: 'resource' }>): vscode.T
 
 function messageItem(node: Extract<SourceNode, { kind: 'message' }>): vscode.TreeItem {
   const item = new vscode.TreeItem(node.text, vscode.TreeItemCollapsibleState.None);
-  item.tooltip = node.detail ?? node.text;
+  item.tooltip = node.at ? `${node.detail ?? node.text}\n${node.at.file}:${node.at.line + 1}` : (node.detail ?? node.text);
   item.iconPath = new vscode.ThemeIcon(node.icon ?? 'warning');
+  if (node.at) item.command = openAt(node.at.file, node.at.line);
   return item;
 }
 
-function errorMessage(err: unknown): SourceNode {
+/** A failure as a tree item: its first sentence, the whole text on hover, and the file and line it points at, which a click opens. */
+function errorMessage(err: unknown): Extract<SourceNode, { kind: 'message' }> {
   const message = errorText(err);
-  return { kind: 'message', text: errorLabel(message), detail: message };
+  return { kind: 'message', text: errorLabel(message), detail: message, at: locationOf(err) };
 }

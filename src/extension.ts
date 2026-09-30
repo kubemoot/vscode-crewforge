@@ -16,6 +16,7 @@ import { agentSourceMap } from './source/declared';
 import { LIVE_SCHEME, LiveDocuments } from './views/liveDocuments';
 import { execProgram, readText, readYamlFiles } from './source/nodeDeps';
 import { SourceService } from './source/service';
+import { SourceWatcher } from './source/watcher';
 import { ConversationStore } from './store/conversations';
 import { CrewTreeProvider, type CrewNode } from './views/crewTree';
 import { MANIFEST_SCHEME, ManifestDocuments } from './views/manifestDocuments';
@@ -92,6 +93,7 @@ export function activate(context: vscode.ExtensionContext): void {
       }
     }),
     sourcesView,
+    new SourceWatcher(() => sources.known.map((e) => e.source.root), () => sources.reload()),
     vscode.languages.registerCodeLensProvider({ language: 'yaml' }, new CrewCodeLens(sources)),
     vscode.workspace.registerTextDocumentContentProvider(MANIFEST_SCHEME, documents),
     vscode.commands.registerCommand('crewforge.refreshSources', () => sources.refresh()),

@@ -11,7 +11,7 @@ import { helmReleaseRef, readHelmRelease, type FluxState } from '../gitops/flux'
 import { crewOf, objectKey, parseManifests, type Manifest } from './manifests';
 import { declarationsOf, type Declarations } from './declared';
 import { locate, type Located } from './locate';
-import { render, renderWithOrigins, type Rendered, type RenderDeps } from './render';
+import { locationOf, render, renderWithOrigins, type Rendered, type RenderDeps, type SourceLocation } from './render';
 
 export interface SourceDeps extends RenderDeps {
   readText: ReadText;
@@ -26,6 +26,8 @@ export interface SourceEntry {
   /** The name of the Crew it renders; absent when rendering failed. */
   crewName?: string;
   error?: string;
+  /** Where a failed render points, when it says. */
+  errorAt?: SourceLocation;
   /** What the source rendered when it was loaded, with the file of each object. */
   rendered?: Rendered[];
 }
@@ -125,7 +127,7 @@ export class SourceService {
       const crew = crewOf(rendered.map((r) => r.manifest));
       return crew ? { source, identity, crewName: crew.metadata.name, rendered } : { source, identity, error: 'renders no Crew' };
     } catch (err) {
-      return { source, identity, error: err instanceof Error ? err.message : String(err) };
+      return { source, identity, error: err instanceof Error ? err.message : String(err), errorAt: locationOf(err) };
     }
   }
 

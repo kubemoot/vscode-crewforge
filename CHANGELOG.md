@@ -5,6 +5,11 @@ generated from the conventional commits since the previous release.
 
 ## Unreleased
 
+### Crew Sources
+
+- Crew Sources follows the file system: adding, deleting, or renaming a crew folder or one of its files, or a workspace folder, updates the view by itself, with one reload per burst of changes. Refresh stays as a manual fallback.
+- A source whose render fails shows the error as an item; when the error names a file and line, clicking the item opens it there. An undeployed crew (such as a fresh `kmctl create` scaffold) lists what it declares before "Not deployed".
+
 ### Inner loop
 
 - Develop a crew from the editor without GitOps: create, understand, edit, lint, deploy to a dev namespace, test, debug, redeploy, and retest. The README's "Develop a crew" walks through it.

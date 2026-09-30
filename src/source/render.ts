@@ -39,6 +39,17 @@ export interface Rendered {
   file?: string;
 }
 
+/** A place in a source file: the file and a 0-based line. */
+export interface SourceLocation {
+  file: string;
+  line: number;
+}
+
+/** Where a failure points, when it is a render error that names a file. */
+export function locationOf(err: unknown): SourceLocation | undefined {
+  return err instanceof RenderError && err.file ? { file: err.file, line: err.line ?? 0 } : undefined;
+}
+
 /** A render that failed, with the source file and line (0-based) it points at when known. */
 export class RenderError extends Error {
   constructor(

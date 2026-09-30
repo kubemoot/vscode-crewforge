@@ -1,0 +1,59 @@
+apiVersion: kubemoot.ai/v1alpha1
+kind: Agent
+metadata:
+  name: test-coordinator
+  labels:
+    kubemoot.ai/crew: test
+    kubemoot.ai/role: coordinator
+spec:
+  type: chat
+  description: "Coordinator for the test crew - facilitates the discussion."
+  discussRole: coordinator
+  capabilities: [tool-calling, reasoning]
+  discussChannels: [general, topic-1, topic-2]
+  promptRefs: [advisory-prompt, coordinator-decision-logic, synthesis-prompt]
+  temperature: "0.1"
+  maxTokens: 4096
+  deployment:
+    replicas: 1
+    port: 8080
+---
+apiVersion: kubemoot.ai/v1alpha1
+kind: Agent
+metadata:
+  name: test-tooler-1
+  labels:
+    kubemoot.ai/crew: test
+    kubemoot.ai/role: tooler
+spec:
+  type: chat
+  description: "Tooler test-tooler-1 - replace with a real responsibility."
+  discussRole: tooler
+  capabilities: [tool-calling]
+  discussChannels: [topic-1]
+  promptRefs: [discussion-protocol, response-style, test-tooler-1-system]
+  temperature: "0.3"
+  maxTokens: 4096
+  deployment:
+    replicas: 1
+    port: 8080
+---
+apiVersion: kubemoot.ai/v1alpha1
+kind: Agent
+metadata:
+  name: test-tooler-2
+  labels:
+    kubemoot.ai/crew: test
+    kubemoot.ai/role: tooler
+spec:
+  type: chat
+  description: "Tooler test-tooler-2 - replace with a real responsibility."
+  discussRole: tooler
+  capabilities: [tool-calling]
+  discussChannels: [topic-2]
+  promptRefs: [discussion-protocol, response-style, test-tooler-2-system]
+  temperature: "0.3"
+  maxTokens: 4096
+  deployment:
+    replicas: 1
+    port: 8080

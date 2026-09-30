@@ -1,0 +1,42 @@
+apiVersion: kubemoot.ai/v1alpha1
+kind: Crew
+metadata:
+  name: test
+  labels:
+    kubemoot.ai/crew: test
+  annotations:
+    kubemoot.ai/manage-namespace: "true"
+spec:
+  description: "Scaffolded by kmctl create - customize before relying on it."
+  discussion:
+    enabled: true
+---
+apiVersion: kubemoot.ai/v1alpha1
+kind: CrewSchedulingPolicy
+metadata:
+  name: test-scheduling
+  labels:
+    kubemoot.ai/crew: test
+spec:
+  crewRef: "test"
+  archetypeRef: consent-3
+  # Per-capability quality bias in [0,1]: lower -> speed-lean, higher -> quality-lean.
+  # Agents never name a model; the scheduler matches Models by capability label.
+  qualityBias:
+    reasoning: "0.7"
+    tool-calling: "0.3"
+    default: "0.4"
+  rules:
+    - phase: mulling
+      require:
+        matchLabels:
+          capability/tool-calling: "true"
+    - phase: triage
+      require:
+        matchLabels:
+          capability/tool-calling: "true"
+  # Preferred model family chosen at scaffold time: qwen.
+  # To pin it, label your Models (e.g. model/family: qwen) and add
+  # that label under require.matchLabels above.
+  # Providers selected at scaffold time: ollama.
+  # Provider allow-listing is a tune-up; by default agents use any ready provider.

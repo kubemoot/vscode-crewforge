@@ -1,0 +1,307 @@
+---
+# Source: test/templates/models.yaml
+# Model CRs for the crew. The scheduler binds agents to these just-in-time, so a
+# crew needs at least one Model in its namespace to run a discussion. Each Model
+# binds a model name to a ModelProvider and is labeled by capability + latencyClass.
+# These are starting defaults for the chosen family; edit model names/VRAM to match.
+
+---
+# Source: test/templates/agents.yaml
+apiVersion: kubemoot.ai/v1alpha1
+kind: Agent
+metadata:
+  name: test-coordinator
+  labels:
+    kubemoot.ai/crew: test
+    kubemoot.ai/role: coordinator
+spec:
+  type: chat
+  description: "Coordinator for the test crew - facilitates the discussion."
+  discussRole: coordinator
+  capabilities: [tool-calling, reasoning]
+  discussChannels: [general, topic-1, topic-2]
+  promptRefs: [advisory-prompt, coordinator-decision-logic, synthesis-prompt]
+  temperature: "0.1"
+  maxTokens: 4096
+  deployment:
+    replicas: 1
+    port: 8080
+
+---
+# Source: test/templates/agents.yaml
+apiVersion: kubemoot.ai/v1alpha1
+kind: Agent
+metadata:
+  name: test-tooler-1
+  labels:
+    kubemoot.ai/crew: test
+    kubemoot.ai/role: tooler
+spec:
+  type: chat
+  description: "Tooler test-tooler-1 - replace with a real responsibility."
+  discussRole: tooler
+  capabilities: [tool-calling]
+  discussChannels: [topic-1]
+  promptRefs: [discussion-protocol, response-style, test-tooler-1-system]
+  temperature: "0.3"
+  maxTokens: 4096
+  deployment:
+    replicas: 1
+    port: 8080
+
+---
+# Source: test/templates/agents.yaml
+apiVersion: kubemoot.ai/v1alpha1
+kind: Agent
+metadata:
+  name: test-tooler-2
+  labels:
+    kubemoot.ai/crew: test
+    kubemoot.ai/role: tooler
+spec:
+  type: chat
+  description: "Tooler test-tooler-2 - replace with a real responsibility."
+  discussRole: tooler
+  capabilities: [tool-calling]
+  discussChannels: [topic-2]
+  promptRefs: [discussion-protocol, response-style, test-tooler-2-system]
+  temperature: "0.3"
+  maxTokens: 4096
+  deployment:
+    replicas: 1
+    port: 8080
+
+---
+# Source: test/templates/crew.yaml
+apiVersion: kubemoot.ai/v1alpha1
+kind: Crew
+metadata:
+  name: test
+  labels:
+    kubemoot.ai/crew: test
+  annotations:
+    kubemoot.ai/manage-namespace: "true"
+spec:
+  description: "Scaffolded by kmctl create - customize before relying on it."
+  discussion:
+    enabled: true
+
+---
+# Source: test/templates/crew.yaml
+apiVersion: kubemoot.ai/v1alpha1
+kind: CrewSchedulingPolicy
+metadata:
+  name: test-scheduling
+  labels:
+    kubemoot.ai/crew: test
+spec:
+  crewRef: "test"
+  archetypeRef: consent-3
+  # Per-capability quality bias in [0,1]: lower -> speed-lean, higher -> quality-lean.
+  # Agents never name a model; the scheduler matches Models by capability label.
+  qualityBias:
+    reasoning: "0.7"
+    tool-calling: "0.3"
+    default: "0.4"
+  rules:
+    - phase: mulling
+      require:
+        matchLabels:
+          capability/tool-calling: "true"
+    - phase: triage
+      require:
+        matchLabels:
+          capability/tool-calling: "true"
+  # Preferred model family chosen at scaffold time: qwen.
+  # To pin it, label your Models (e.g. model/family: qwen) and add
+  # that label under require.matchLabels above.
+  # Providers selected at scaffold time: ollama.
+  # Provider allow-listing is a tune-up; by default agents use any ready provider.
+
+---
+# Source: test/templates/models.yaml
+apiVersion: kubemoot.ai/v1alpha1
+kind: Model
+metadata:
+  name: qwen-8b-ollama
+  labels:
+    kubemoot.ai/crew: test
+    family: "qwen"
+    params: "8b"
+    latencyClass: "low"
+    contextWindow: "40960"
+    capability/tool-calling: "true"
+    capability/reasoning: "true"
+spec:
+  model: "qwen3:8b"
+  providerRef: "ollama"
+  vramMib: 5120
+
+---
+# Source: test/templates/models.yaml
+apiVersion: kubemoot.ai/v1alpha1
+kind: Model
+metadata:
+  name: qwen-14b-ollama
+  labels:
+    kubemoot.ai/crew: test
+    family: "qwen"
+    params: "14b"
+    latencyClass: "medium"
+    contextWindow: "40960"
+    capability/tool-calling: "true"
+    capability/reasoning: "true"
+spec:
+  model: "qwen3:14b"
+  providerRef: "ollama"
+  vramMib: 10240
+
+---
+# Source: test/templates/models.yaml
+apiVersion: kubemoot.ai/v1alpha1
+kind: Model
+metadata:
+  name: qwen-32b-ollama
+  labels:
+    kubemoot.ai/crew: test
+    family: "qwen"
+    params: "32b"
+    latencyClass: "high"
+    contextWindow: "40960"
+    capability/tool-calling: "true"
+    capability/reasoning: "true"
+spec:
+  model: "qwen3:32b"
+  providerRef: "ollama"
+  vramMib: 20480
+
+---
+# Source: test/templates/promptmodules.yaml
+apiVersion: kubemoot.ai/v1alpha1
+kind: PromptModule
+metadata:
+  name: discussion-protocol
+  labels:
+    kubemoot.ai/crew: test
+spec:
+  order: 10
+  content: |
+    DEFINE DOMAIN discussion-protocol
+    DESCRIPTION How agents take part in a consensus discussion over NATS
+
+    ALWAYS publish a signal: agree, concern, block, or stand_aside
+    WHEN you have nothing to add THEN publish stand_aside
+    NEVER answer outside your declared responsibility
+
+---
+# Source: test/templates/promptmodules.yaml
+apiVersion: kubemoot.ai/v1alpha1
+kind: PromptModule
+metadata:
+  name: response-style
+  labels:
+    kubemoot.ai/crew: test
+spec:
+  order: 20
+  content: |
+    DEFINE DOMAIN response-style
+    DESCRIPTION How to phrase contributions
+
+    ALWAYS be concise and concrete
+    ALWAYS report tool errors and empty results honestly
+    NEVER fabricate names, values, or status
+
+---
+# Source: test/templates/promptmodules.yaml
+apiVersion: kubemoot.ai/v1alpha1
+kind: PromptModule
+metadata:
+  name: advisory-prompt
+  labels:
+    kubemoot.ai/crew: test
+spec:
+  order: 5
+  content: |
+    DEFINE DOMAIN coordinator-advisory
+    DESCRIPTION Inline triage advice the coordinator forms before delegating
+
+    WHEN a question arrives THEN identify which toolers are relevant
+    NEVER wake a tooler whose responsibility does not match the question
+    WHEN no tooler is relevant AND you can answer from your own stable knowledge THEN select NO toolers and put your COMPLETE, user-facing answer in the brief - it is returned to the user as-is
+    WHEN the question is a meta-question about this crew itself (what it can do, its capabilities, how it can help) THEN select NO toolers and put a concise enumeration of the crew's domains, from the capability catalog, in the brief - the toolers cannot describe the crew
+    NEVER select a tooler just to have someone respond - an unrelated question is answered directly or declined outright, not routed to an irrelevant tooler
+
+---
+# Source: test/templates/promptmodules.yaml
+apiVersion: kubemoot.ai/v1alpha1
+kind: PromptModule
+metadata:
+  name: coordinator-decision-logic
+  labels:
+    kubemoot.ai/crew: test
+spec:
+  order: 45
+  content: |
+    DEFINE DOMAIN coordinator-decision-logic
+    DESCRIPTION How the coordinator settles a discussion and decides how to answer
+
+    WHEN all woken toolers have responded or expired THEN move to synthesis
+    NEVER conclude on a fixed timer - settle on signals
+    WHEN no tooler is relevant AND the question is answerable from stable general knowledge (facts, concepts, definitions) THEN answer it directly from your own knowledge
+    WHEN no tooler is relevant AND the question needs live cluster data or real-time external data this crew has no source for THEN say so honestly and NEVER fabricate a value
+
+---
+# Source: test/templates/promptmodules.yaml
+apiVersion: kubemoot.ai/v1alpha1
+kind: PromptModule
+metadata:
+  name: synthesis-prompt
+  labels:
+    kubemoot.ai/crew: test
+spec:
+  order: 50
+  content: |
+    DEFINE DOMAIN synthesis
+    DESCRIPTION How the coordinator composes the final answer
+
+    ALWAYS synthesize the toolers' contributions into one clear answer for the user
+    WHEN no tooler contributed AND the question is stable general knowledge THEN answer it directly from your own knowledge
+    WHEN no tooler contributed AND the question needs data this crew cannot obtain THEN say so plainly and NEVER fabricate a value
+    ALWAYS write the answer as prose addressed directly to the user
+    NEVER mention agent names, internal signals (agree, concern, stand_aside, block), or discussion mechanics in the answer
+
+---
+# Source: test/templates/promptmodules.yaml
+apiVersion: kubemoot.ai/v1alpha1
+kind: PromptModule
+metadata:
+  name: test-tooler-1-system
+  labels:
+    kubemoot.ai/crew: test
+spec:
+  order: 30
+  content: |
+    DEFINE DOMAIN test-tooler-1
+    DESCRIPTION Responsibility for tooler test-tooler-1 - replace this
+
+    ALWAYS call a tool to get real data before answering
+    ALWAYS answer only the specific question asked
+    NEVER fabricate resource names, namespaces, or status values
+
+---
+# Source: test/templates/promptmodules.yaml
+apiVersion: kubemoot.ai/v1alpha1
+kind: PromptModule
+metadata:
+  name: test-tooler-2-system
+  labels:
+    kubemoot.ai/crew: test
+spec:
+  order: 30
+  content: |
+    DEFINE DOMAIN test-tooler-2
+    DESCRIPTION Responsibility for tooler test-tooler-2 - replace this
+
+    ALWAYS call a tool to get real data before answering
+    ALWAYS answer only the specific question asked
+    NEVER fabricate resource names, namespaces, or status values

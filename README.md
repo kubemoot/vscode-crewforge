@@ -69,7 +69,10 @@ stay the outer loop.
    read from its render: the Crew, its **Agents** (role and capabilities), the
    **PromptModules** they compose (ADL or prose, in composition order), **Skills**, **MCP
    Servers**, and **Fitness Scenarios** (from `fitness/`). Click any of them to open its
-   file at that object. Its deployments follow.
+   file at that object. Its deployments follow. The view follows the file system: adding,
+   deleting, or renaming a crew folder or file updates it by itself (**Refresh** stays on the
+   view's title bar as a fallback). When the chart does not render, the error is an item;
+   when it names a file and line, clicking it opens them.
 3. **Edit.** While a file of the crew is open, the status bar names the crew and where it
    stands: *not deployed*, *deployed, in sync*, or *changed since deploy* (the same drift
    check as Compare with Live). Click it for the next steps in that state.

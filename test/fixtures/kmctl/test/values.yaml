@@ -1,0 +1,2 @@
+# The crew's manifests are plain YAML under templates/; Helm installs them into the
+# release namespace. Move a setting here when you want it to vary per deployment.
