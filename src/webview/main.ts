@@ -3,7 +3,7 @@ import { cardText } from '../discussion/cardText';
 import { turnStatus } from '../discussion/turnStatus';
 import type { AgentCard, TurnState } from '../discussion/reducer';
 import { problemsOf, type ChatMessage, type ConversationMeta } from '../store/conversation';
-import type { HostMessage, WebviewMessage } from './protocol';
+import type { HostMessage, StateMessage, WebviewMessage } from './protocol';
 import { escapeHtml, formatAgo, htmlAttribute, icons, isWebLink, metaLine } from './render';
 
 interface VsCodeApi {
@@ -46,15 +46,20 @@ const els = {
   exportBtn: $<HTMLButtonElement>('export'),
 };
 
-let state: HostMessage | undefined;
+let state: StateMessage | undefined;
 
 // VS Code's webview host frame forwards each extension host message into this page with
 // its own origin as the target, and this page is served from that same origin; a message
 // with any other origin came from some other window and is ignored.
 globalThis.addEventListener('message', (event: MessageEvent<HostMessage>) => {
-  if (event.origin !== globalThis.origin || event.data?.type !== 'state') return;
-  state = event.data;
-  render();
+  if (event.origin !== globalThis.origin) return;
+  const message = event.data;
+  if (message?.type === 'state') {
+    state = message;
+    render();
+  } else if (message?.type === 'prefill' && typeof message.text === 'string') {
+    prefill(message.text);
+  }
 });
 
 els.form.addEventListener('submit', (e) => {
@@ -231,6 +236,15 @@ const ROLES = {
     ] as MessageAction[],
   },
 };
+
+/** Adds text from the editor to the input, after any draft, with the cursor at the end for the question. */
+function prefill(text: string): void {
+  const draft = els.input.value.trimEnd();
+  els.input.value = draft ? `${draft}\n\n${text}` : text;
+  els.input.focus();
+  els.input.setSelectionRange(els.input.value.length, els.input.value.length);
+  autoGrow();
+}
 
 /** Puts a question back in the input, to change it and send it again. */
 function editMessage(index: number): void {

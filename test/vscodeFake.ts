@@ -120,6 +120,8 @@ export const recorded = {
   textDocuments: [] as { uri: Uri; getText(): string }[],
   cancel: undefined as (() => void) | undefined,
   documentProviders: new Map<string, { provideTextDocumentContent(uri: Uri): string }>(),
+  /** The editor window.activeTextEditor answers with. */
+  activeEditor: undefined as { document: { uri: Uri; languageId: string; getText(range?: unknown): string }; selection: unknown } | undefined,
 };
 
 export function resetFake(): void {
@@ -149,6 +151,7 @@ export function resetFake(): void {
   recorded.codeLensProviders = [];
   recorded.textDocuments = [];
   recorded.cancel = undefined;
+  recorded.activeEditor = undefined;
 }
 
 export class FakeWebview {
@@ -207,6 +210,9 @@ export class FakeTreeView {
 }
 
 export const window = {
+  get activeTextEditor() {
+    return recorded.activeEditor;
+  },
   createWebviewPanel(viewType: string, title: string): FakePanel {
     const panel = new FakePanel(viewType, title);
     recorded.panels.push(panel);
@@ -270,6 +276,11 @@ export const extensions = {
 };
 
 export const workspace = {
+  asRelativePath(target: Uri | string) {
+    const p = typeof target === 'string' ? target : target.fsPath;
+    const folder = recorded.workspaceFolders?.find((f) => p.startsWith(`${f.uri.fsPath}/`));
+    return folder ? p.slice(folder.uri.fsPath.length + 1) : p;
+  },
   get textDocuments() {
     return recorded.textDocuments;
   },

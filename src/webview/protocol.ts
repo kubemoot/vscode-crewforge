@@ -1,14 +1,17 @@
 import type { SessionView } from '../discussion/session';
 import type { ConversationMeta } from '../store/conversation';
 
-/** Extension host to webview. */
-export type HostMessage = {
+/** Extension host to webview: what to show. */
+export type StateMessage = {
   type: 'state';
   view: SessionView;
   history: ConversationMeta[];
   /** One line about the crew for the empty state, e.g. "2 agents, coordinator x". */
   about: string;
 };
+
+/** Extension host to webview. `prefill` puts text in the input for the person to finish and send. */
+export type HostMessage = StateMessage | { type: 'prefill'; text: string };
 
 /** Webview to extension host. */
 export type WebviewMessage =

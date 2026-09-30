@@ -83,6 +83,11 @@
         "category": "CrewForge"
       },
       {
+        "command": "crewforge.askAboutSelection",
+        "title": "Ask Crew about Selection",
+        "category": "CrewForge"
+      },
+      {
         "command": "crewforge.selectContext",
         "title": "Select Kubernetes Context",
         "category": "CrewForge",
@@ -252,10 +257,21 @@
           "group": "inline@2"
         }
       ],
+      "editor/context": [
+        {
+          "command": "crewforge.askAboutSelection",
+          "when": "editorHasSelection",
+          "group": "crewforge@1"
+        }
+      ],
       "commandPalette": [
         {
           "command": "crewforge.exportConversation",
           "when": "activeWebviewPanelId == crewforge.chat"
+        },
+        {
+          "command": "crewforge.askAboutSelection",
+          "when": "editorHasSelection"
         },
         {
           "command": "crewforge.showDrift",

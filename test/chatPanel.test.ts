@@ -7,7 +7,7 @@ import type { KubeClient } from '../src/k8s/request';
 import { ChatPanel } from '../src/panels/chatPanel';
 import { newConversation } from '../src/store/conversation';
 import { ConversationStore } from '../src/store/conversations';
-import type { HostMessage } from '../src/webview/protocol';
+import type { StateMessage } from '../src/webview/protocol';
 import { FakeTransport, fixture } from './fakes';
 import { recorded, resetFake, Uri, type FakePanel } from './vscodeFake';
 
@@ -19,8 +19,8 @@ let connection: Connection;
 /** Lets the panel's asynchronous post (it re-reads the saved list) land. */
 const settle = () => new Promise((r) => setTimeout(r, 30));
 
-function lastState(panel: FakePanel): HostMessage {
-  return panel.webview.posted.at(-1) as HostMessage;
+function lastState(panel: FakePanel): StateMessage {
+  return panel.webview.posted.at(-1) as StateMessage;
 }
 
 function open(conversation?: Parameters<typeof ChatPanel.show>[4]): FakePanel {
@@ -61,7 +61,7 @@ describe('ChatPanel', () => {
     transport.streams.push(fixture('turn1.sse'));
     await panel.webview.receive({ type: 'send', text: 'Which nodes have a GPU?' });
     await settle();
-    const states = panel.webview.posted as HostMessage[];
+    const states = panel.webview.posted as StateMessage[];
     expect(states.some((s) => s.view.busy)).toBe(true);
     const final = lastState(panel);
     expect(final.view.busy).toBe(false);
@@ -213,6 +213,32 @@ describe('ChatPanel', () => {
     await panel.webview.receive({ type: 'stop' });
     await turn;
     expect(fs.existsSync(store.file(c))).toBe(true);
+  });
+
+  it('holds text for the input until the page is ready, then sends it once', async () => {
+    const panel = open();
+    const chat = ChatPanel.active!;
+    chat.prefill('first');
+    chat.prefill('second');
+    expect(panel.webview.posted).toEqual([]);
+    await panel.webview.receive({ type: 'ready' });
+    const prefills = () => panel.webview.posted.filter((m) => (m as { type: string }).type === 'prefill');
+    expect(prefills()).toEqual([{ type: 'prefill', text: 'second' }]);
+    chat.prefill('later');
+    await settle();
+    expect(prefills().at(-1)).toEqual({ type: 'prefill', text: 'later' });
+    await panel.webview.receive({ type: 'ready' });
+    expect(prefills()).toHaveLength(2);
+  });
+
+  it('sends no text to a panel that has closed', async () => {
+    const panel = open();
+    const chat = ChatPanel.active!;
+    await panel.webview.receive({ type: 'ready' });
+    panel.dispose();
+    chat.prefill('too late');
+    await settle();
+    expect(panel.webview.posted.some((m) => (m as { type: string }).type === 'prefill')).toBe(false);
   });
 
   it('does nothing when the export dialog is cancelled', async () => {

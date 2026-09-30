@@ -97,7 +97,7 @@ export class ChatPanel {
 
   /** What each message from the page does, by type. */
   private readonly handlers: { [K in WebviewMessage['type']]: (m: Extract<WebviewMessage, { type: K }>) => unknown } = {
-    ready: () => this.post(this.session.view),
+    ready: () => this.onReady(),
     send: (m) => this.session.send(m.text),
     stop: () => this.session.stop(),
     new: () => this.session.load(newConversation(this.connection.context, this.crew.namespace, this.crew.name)),
@@ -110,6 +110,29 @@ export class ChatPanel {
     delete: () => this.deleteConversation(),
     openDashboard: () => openDashboard(),
   };
+
+  /**
+   * Puts text in the chat input for the person to finish and send. A page still loading
+   * gets it once it says it is ready.
+   */
+  prefill(text: string): void {
+    this.pendingPrefill = text;
+    if (this.pageReady) void this.sendPrefill();
+  }
+
+  private async onReady(): Promise<void> {
+    await this.post(this.session.view);
+    this.pageReady = true;
+    await this.sendPrefill();
+  }
+
+  private async sendPrefill(): Promise<void> {
+    const text = this.pendingPrefill;
+    if (text === undefined || this.disposed) return;
+    this.pendingPrefill = undefined;
+    const message: HostMessage = { type: 'prefill', text };
+    await this.panel.webview.postMessage(message);
+  }
 
   private async open(id: string): Promise<void> {
     const c = await this.store.load({ context: this.connection.context, namespace: this.crew.namespace, crewName: this.crew.name, id });
@@ -153,6 +176,10 @@ export class ChatPanel {
   }
 
   private history: ConversationMeta[] = [];
+  /** The page has said it is ready for messages. */
+  private pageReady = false;
+  /** Text for the input, waiting for the page to be ready. */
+  private pendingPrefill?: string;
   private disposed = false;
 
   /** Posts the session's current view; the history list is re-read only between turns. */

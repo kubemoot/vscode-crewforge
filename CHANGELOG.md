@@ -22,3 +22,5 @@ generated from the conventional commits since the previous release.
   saved with the conversation, and included in the Markdown export. The export also gives
   each answer's duration, and its last section is now "Agent activity".
 - An agent's card says when the agent is starting up or ready.
+- Ask Crew about Selection, in the editor's context menu: pick a crew, and its chat opens
+  with the selected text in the input, fenced with its file name and language.

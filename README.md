@@ -42,6 +42,10 @@ of buttons appears on hover or keyboard focus: for your question **Copy**, **Ask
 (sends it as a new turn), and **Edit and resend** (puts it back in the input); for the
 crew's answer **Copy** (its Markdown) and **Ask the question again**.
 
+To ask about code, select it in an editor and choose **Ask Crew about Selection** from the
+editor's context menu. Pick a crew; its chat opens with the selection in the input, fenced
+and labelled with its file and language, ready for your question.
+
 **CrewForge: Continue a Conversation** reopens any saved conversation. A conversation is
 named after its first question; the buttons in a chat's header **Rename** it, **Delete**
 it from this computer (after asking; the crew is not changed), and copy or save the whole

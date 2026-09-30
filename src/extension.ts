@@ -5,6 +5,7 @@ import { connect, type Connection } from './connection';
 import { loadKubeconfig } from './k8s/kubeconfig';
 import type { CrewSummary } from './k8s/crews';
 import { ChatPanel } from './panels/chatPanel';
+import { selectionPrompt } from './panels/selectionPrompt';
 import { createCrewCommand } from './create/createCrew';
 import { DeployCommands } from './deploy/commands';
 import { FitnessCommands } from './fitness/commands';
@@ -71,6 +72,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('crewforge.removeDeployment', (node?: SourceNode) => guard(() => deploy.removeDeployment(node))),
     vscode.commands.registerCommand('crewforge.refreshCrews', () => tree.refresh()),
     vscode.commands.registerCommand('crewforge.askCrew', (node?: CrewNode) => commands.askCrew(node)),
+    vscode.commands.registerCommand('crewforge.askAboutSelection', () => commands.askAboutSelection()),
     vscode.commands.registerCommand('crewforge.continueConversation', () => commands.continueConversation()),
     vscode.commands.registerCommand('crewforge.exportConversation', () => commands.exportConversation()),
     vscode.commands.registerCommand('crewforge.selectContext', () => commands.selectContext()),
@@ -92,11 +94,28 @@ class Commands {
   ) {}
 
   async askCrew(node?: CrewNode): Promise<void> {
+    await guard(async () => void (await this.openChat(node)));
+  }
+
+  /** Opens a chat with a crew the person picks, with the editor's selection in the input, fenced, for their question. */
+  async askAboutSelection(): Promise<void> {
     await guard(async () => {
-      const crew = node?.kind === 'crew' ? node.crew : await this.pickCrew();
-      if (!crew) return;
-      ChatPanel.show(this.extensionUri, this.tree.connection ?? connect(), crew, this.store);
+      const editor = vscode.window.activeTextEditor;
+      const text = editor?.document.getText(editor.selection);
+      if (!editor || !text?.trim()) {
+        void vscode.window.showInformationMessage('Select some text in an editor first.');
+        return;
+      }
+      const panel = await this.openChat();
+      panel?.prefill(selectionPrompt(vscode.workspace.asRelativePath(editor.document.uri), editor.document.languageId, text));
     });
+  }
+
+  /** Opens a chat with the crew clicked in the view, or with one the person picks. */
+  private async openChat(node?: CrewNode): Promise<ChatPanel | undefined> {
+    const crew = node?.kind === 'crew' ? node.crew : await this.pickCrew();
+    if (!crew) return undefined;
+    return ChatPanel.show(this.extensionUri, this.tree.connection ?? connect(), crew, this.store);
   }
 
   async continueConversation(): Promise<void> {

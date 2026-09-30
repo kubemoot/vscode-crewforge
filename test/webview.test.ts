@@ -4,7 +4,7 @@ import type { KubeClient } from '../src/k8s/request';
 import { ChatPanel } from '../src/panels/chatPanel';
 import { newConversation, type Conversation } from '../src/store/conversation';
 import { ConversationStore } from '../src/store/conversations';
-import type { HostMessage, WebviewMessage } from '../src/webview/protocol';
+import type { StateMessage, WebviewMessage } from '../src/webview/protocol';
 import { META_SEPARATOR } from '../src/webview/render';
 import { recorded, resetFake, Uri } from './vscodeFake';
 
@@ -28,12 +28,12 @@ async function loadPage(): Promise<void> {
   await import('../src/webview/main');
 }
 
-function stateMessage(conversation: Conversation, extra: Partial<HostMessage['view']> = {}, history: HostMessage['history'] = []): HostMessage {
+function stateMessage(conversation: Conversation, extra: Partial<StateMessage['view']> = {}, history: StateMessage['history'] = []): StateMessage {
   return { type: 'state', view: { conversation, busy: false, ...extra }, history, about: '2 agents' };
 }
 
 /** Delivers a message as VS Code's host frame does: with the page's own origin. */
-function post(conversation: Conversation, extra: Partial<HostMessage['view']> = {}, history: HostMessage['history'] = []): void {
+function post(conversation: Conversation, extra: Partial<StateMessage['view']> = {}, history: StateMessage['history'] = []): void {
   window.dispatchEvent(new MessageEvent('message', { data: stateMessage(conversation, extra, history), origin: window.origin }));
 }
 
@@ -296,6 +296,22 @@ describe('the chat page', () => {
   it('ignores a click in the conversations list that is not on a conversation', () => {
     post(newConversation('ctx', 'team-a', 'lab-ops'));
     ($('history').querySelector('.no-discussions') as HTMLElement).click();
+    expect(sent).toHaveLength(1);
+  });
+
+  it('puts text from the editor in the input after any draft, focused at the end', () => {
+    const input = $('input') as HTMLTextAreaElement;
+    const send = (data: unknown, origin = window.origin) => window.dispatchEvent(new MessageEvent('message', { data, origin }));
+    send({ type: 'prefill', text: 'From a.ts:\n\n```ts\nx\n```\n\n' });
+    expect(input.value).toBe('From a.ts:\n\n```ts\nx\n```\n\n');
+    expect(document.activeElement).toBe(input);
+    expect(input.selectionStart).toBe(input.value.length);
+    input.value = 'my draft  ';
+    send({ type: 'prefill', text: 'more' });
+    expect(input.value).toBe('my draft\n\nmore');
+    send({ type: 'prefill', text: 'from elsewhere' }, 'https://attacker.example');
+    send({ type: 'prefill', text: 42 });
+    expect(input.value).toBe('my draft\n\nmore');
     expect(sent).toHaveLength(1);
   });
 

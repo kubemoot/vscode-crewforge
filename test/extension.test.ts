@@ -71,6 +71,36 @@ describe('commands', () => {
     expect(recorded.panels).toHaveLength(1);
   });
 
+  it('askAboutSelection opens the picked crew with the selection fenced in the input', async () => {
+    const provider = recorded.treeViews[0].options.treeDataProvider as { getChildren: () => Promise<unknown> };
+    await provider.getChildren();
+    recorded.workspaceFolders = [{ name: 'w', uri: Uri.file('/w') }];
+    recorded.activeEditor = {
+      document: { uri: Uri.file('/w/src/app.ts'), languageId: 'typescript', getText: (range) => (range === 'sel' ? 'const a = 1;' : 'everything') },
+      selection: 'sel',
+    };
+    recorded.quickPicks.push((items: { crew: unknown }[]) => items[0]);
+    await run('crewforge.askAboutSelection');
+    const panel = recorded.panels[0];
+    expect(panel.title).toMatch(/^Ask /);
+    await panel.webview.receive({ type: 'ready' });
+    await new Promise((r) => setTimeout(r, 30));
+    expect(panel.webview.posted.at(-1)).toEqual({ type: 'prefill', text: 'From src/app.ts:\n\n```typescript\nconst a = 1;\n```\n\n' });
+  });
+
+  it('askAboutSelection needs a selection, and does nothing when no crew is picked', async () => {
+    await run('crewforge.askAboutSelection');
+    recorded.activeEditor = { document: { uri: Uri.file('/x.go'), languageId: 'go', getText: () => '' }, selection: 'sel' };
+    await run('crewforge.askAboutSelection');
+    recorded.activeEditor = { document: { uri: Uri.file('/x.go'), languageId: 'go', getText: () => '  \n ' }, selection: 'sel' };
+    await run('crewforge.askAboutSelection');
+    expect(recorded.info).toEqual(Array(3).fill('Select some text in an editor first.'));
+    recorded.activeEditor = { document: { uri: Uri.file('/x.go'), languageId: 'go', getText: () => 'x' }, selection: 'sel' };
+    recorded.quickPicks.push(undefined);
+    await run('crewforge.askAboutSelection');
+    expect(recorded.panels).toHaveLength(0);
+  });
+
   it('continueConversation says when there is nothing saved, and reopens a saved one', async () => {
     await run('crewforge.continueConversation');
     expect(recorded.info[0]).toMatch(/No saved conversations/);
