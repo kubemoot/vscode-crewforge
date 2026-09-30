@@ -10,7 +10,9 @@ on:
 
 jobs:
   test:
-    runs-on: homelab-runners
+    # Pull requests (including forks) run on GitHub-hosted runners; the self-hosted
+    # cluster runners take push, dispatch, and workflow_call runs from main only.
+    runs-on: ${{ github.event_name == 'pull_request' && 'ubuntu-latest' || 'homelab-runners' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v5
