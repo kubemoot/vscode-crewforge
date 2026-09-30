@@ -13,7 +13,9 @@ crew needs a public address and no extra credential is involved.
 
 ## Use it
 
-1. Install the `.vsix`: in VS Code, **Extensions: Install from VSIX...**, or
+1. Download `crewforge-<version>.vsix` from the repository's
+   [GitHub Releases](https://github.com/kubemoot/vscode-crewforge/releases) and install it:
+   in VS Code, **Extensions: Install from VSIX...**, or
    `code --install-extension crewforge-<version>.vsix`.
 2. Click the Kubemoot mark (the round table) in the activity bar on the left. The
    **Crews** view lists every crew your kubeconfig can read, grouped by namespace, with a
@@ -55,6 +57,9 @@ workspace and, under each, every namespace its crew is deployed to.
 - Its **Fitness** node lists its fitness runs with their results; a run opens as a report.
   CrewForge warns before starting a run while another is in progress, since crews share
   the GPUs.
+- In an open crew manifest, a CodeLens above the Crew offers **Ask in** each namespace it
+  is deployed to, and every other Kubemoot object shows its drift state in each
+  deployment where it was compared; click one for the diff.
 - With the Red Hat YAML extension installed, Kubemoot manifests are checked against the
   cluster's own schema, including fields the CRD does not define.
 
@@ -119,8 +124,12 @@ ID=$(kubectl create --raw $P -f <(printf '{"message":"<question>","conversationI
 kubectl get --raw $P/$ID/stream > test/fixtures/<name>.sse
 ```
 
-Versions come from git tags: conventional commits on `main` drive the release workflow,
-which tags, packages, and attaches the `.vsix` to a GitHub release.
+Versions come from git tags; `package.json` keeps `0.0.0` and the workflows set the
+version when they package. Every push to `main` tags a release candidate
+`vX.Y.Z-rc.N` (the conventional commits since the last release decide `X.Y.Z`) and
+packages its `.vsix` as a workflow artifact, publishing nothing. A maintainer promotes a
+tested candidate with the **Promote Release** workflow, which tags `vX.Y.Z` and writes
+the GitHub Release with the `.vsix` attached.
 
 ## Community and contributing
 
