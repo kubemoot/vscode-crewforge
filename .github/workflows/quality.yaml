@@ -1,0 +1,38 @@
+# Independent quality pipeline - runs in parallel with CI, never blocks builds.
+# Reports to the self-hosted SonarQube for centralized code quality analysis.
+# Main only: SonarQube is reachable from the self-hosted cluster runners, and pull
+# requests run on GitHub-hosted runners that cannot reach it.
+name: Quality
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  sonarqube:
+    runs-on: homelab-runners
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0  # full history for SonarQube new-code detection
+
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Tests with coverage
+        run: npm run test:coverage -- --coverage.reporter=lcov --coverage.reporter=text-summary
+        continue-on-error: true
+
+      - name: SonarQube Scan
+        uses: SonarSource/sonarqube-scan-action@v6
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
