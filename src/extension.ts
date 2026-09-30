@@ -23,6 +23,7 @@ import { MANIFEST_SCHEME, ManifestDocuments } from './views/manifestDocuments';
 import { SchemaProvider } from './schema/schemaProvider';
 import { CrewCodeLens } from './views/codeLens';
 import { SourceTreeProvider, type SourceNode } from './views/sourceTree';
+import { YamlCommands, type YamlTarget } from './views/yamlCommands';
 
 const REFRESH_MS = 30_000;
 
@@ -50,6 +51,7 @@ export function activate(context: vscode.ExtensionContext): void {
     tree.refresh();
   });
   const liveDocuments = new LiveDocuments(() => tree.connection ?? connect());
+  const yaml = new YamlCommands(documents, liveDocuments, service);
   const live = new LiveCrewActions({
     sources: async () => (sources.known.length ? sources.known : service.load()),
     deploy,
@@ -97,7 +99,9 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.languages.registerCodeLensProvider({ language: 'yaml' }, new CrewCodeLens(sources)),
     vscode.workspace.registerTextDocumentContentProvider(MANIFEST_SCHEME, documents),
     vscode.commands.registerCommand('crewforge.refreshSources', () => sources.refresh()),
-    vscode.commands.registerCommand('crewforge.showDrift', (node?: SourceNode) => showDrift(documents, node)),
+    vscode.commands.registerCommand('crewforge.showDrift', (target?: YamlTarget) => guard(() => yaml.compare(target))),
+    vscode.commands.registerCommand('crewforge.showSourceYaml', (target?: YamlTarget) => guard(() => yaml.showSource(target))),
+    vscode.commands.registerCommand('crewforge.showLiveYamlRaw', (target?: YamlTarget) => guard(() => yaml.showLive(target, true))),
     output,
     vscode.commands.registerCommand('crewforge.createCrew', () => guard(() => createCrewCommand(execProgram, currentConnection(tree), created))),
     vscode.commands.registerCommand('crewforge.newCrewHere', (folder?: vscode.Uri) => guard(() => createCrewCommand(execProgram, currentConnection(tree), created, folder?.fsPath))),
@@ -116,7 +120,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('crewforge.followRollout', either((crew) => live.followRollout(crew), (node) => followRolloutCommand(node, () => sources.refresh()))),
     vscode.commands.registerCommand('crewforge.removeDeployment', either((crew) => live.remove(crew), (node) => deploy.removeDeployment(node))),
     vscode.workspace.registerTextDocumentContentProvider(LIVE_SCHEME, liveDocuments),
-    vscode.commands.registerCommand('crewforge.showLiveYaml', (node?: CrewNode) => guard(() => showLiveYaml(liveDocuments, node))),
+    vscode.commands.registerCommand('crewforge.showLiveYaml', (target?: YamlTarget) => guard(() => yaml.showLive(target))),
     vscode.commands.registerCommand('crewforge.showCrewBundleYaml', (node?: CrewNode) => guard(() => showCrewBundleYaml(liveDocuments, node))),
     vscode.commands.registerCommand('crewforge.refreshCrews', () => tree.refresh()),
     vscode.commands.registerCommand('crewforge.askCrew', (node?: CrewNode) => commands.askCrew(node)),
@@ -275,19 +279,8 @@ async function listWorkspaceFiles(): Promise<{ charts: string[]; yamls: string[]
   return { charts: charts.map((u) => u.fsPath), yamls: yamls.map((u) => u.fsPath).filter((p) => !p.endsWith('Chart.yaml')) };
 }
 
-/** The live YAML of a crew, or of the object behind one of its leaves. */
-async function showLiveYaml(documents: LiveDocuments, node?: CrewNode): Promise<void> {
-  if (node?.kind === 'crew') return documents.show({ kind: 'object', ref: { kind: 'Crew', name: node.crew.name, namespace: node.crew.namespace } });
-  if (node?.kind === 'member' && node.view.ref) return documents.show({ kind: 'object', ref: node.view.ref });
-}
-
 async function showCrewBundleYaml(documents: LiveDocuments, node?: CrewNode): Promise<void> {
   if (node?.kind === 'crew') return documents.show({ kind: 'bundle', namespace: node.crew.namespace, crew: node.crew.name });
-}
-
-async function showDrift(documents: ManifestDocuments, node?: SourceNode): Promise<void> {
-  if (node?.kind !== 'resource') return;
-  await guard(() => documents.showDrift(node.deployment.namespace, node.drift));
 }
 
 /** A crew known only from a saved conversation, before the Crews view has loaded it. */

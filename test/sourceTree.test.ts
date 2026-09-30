@@ -2,13 +2,12 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import type { KubeClient } from '../src/k8s/request';
 import { ANNOTATIONS } from '../src/source/deployments';
 import { discoverKinds, liveObjects, objectPath } from '../src/source/live';
-import { objectKey, type Manifest } from '../src/source/manifests';
+import { objectKey } from '../src/source/manifests';
 import type { Exec } from '../src/source/render';
 import { SourceService, type SourceDeps } from '../src/source/service';
-import { ManifestDocuments, MANIFEST_SCHEME } from '../src/views/manifestDocuments';
 import { SourceTreeProvider, type SourceNode } from '../src/views/sourceTree';
 import { FakeCluster, obj } from './fakeCluster';
-import { recorded, resetFake, Uri } from './vscodeFake';
+import { recorded, resetFake } from './vscodeFake';
 
 const CHART = '/w/charts/demo-crew';
 const RENDERED = [
@@ -189,27 +188,5 @@ describe('SourceTreeProvider', () => {
     const [source] = await tree.getChildren();
     const [message] = await live(tree, source);
     expect(message.kind).toBe('message');
-  });
-});
-
-describe('ManifestDocuments', () => {
-  beforeEach(resetFake);
-
-  it('opens the live and source YAML side by side', async () => {
-    const docs = new ManifestDocuments();
-    const live: Manifest = obj('Crew', 'demo', 'ns', { description: 'old' });
-    await docs.showDrift('ns', { kind: 'Crew', name: 'demo', state: 'changed', paths: ['spec.description'], live, rendered: obj('Crew', 'demo', 'ns', { description: 'new' }) });
-    const [call] = recorded.executed;
-    expect(call.id).toBe('vscode.diff');
-    const [left, right, title] = call.args as [Uri, Uri, string];
-    expect(left.toString()).toBe(`${MANIFEST_SCHEME}:/live/ns/Crew-demo.yaml`);
-    expect(docs.provideTextDocumentContent(left as never)).toContain('description: old');
-    expect(docs.provideTextDocumentContent(right as never)).toContain('description: new');
-    expect(title).toBe('Crew/demo: live in ns vs source');
-    await docs.showDrift('ns', { kind: 'Agent', name: 'a', state: 'missing', paths: [] });
-    const [l2, r2] = recorded.executed[1].args as [Uri, Uri];
-    expect(docs.provideTextDocumentContent(l2 as never)).toBe('# not deployed\n');
-    expect(docs.provideTextDocumentContent(r2 as never)).toBe('# not in the source\n');
-    expect(docs.provideTextDocumentContent(Uri.parse('crewforge-manifest:/nothing') as never)).toBe('');
   });
 });

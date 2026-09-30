@@ -111,7 +111,7 @@
       },
       {
         "command": "crewforge.showDrift",
-        "title": "Compare with Live",
+        "title": "Compare Source with Live (normalized diff)",
         "category": "CrewForge",
         "icon": "$(diff)"
       },
@@ -205,15 +205,27 @@
       },
       {
         "command": "crewforge.showLiveYaml",
-        "title": "Show YAML",
+        "title": "Show Live YAML",
         "category": "CrewForge",
-        "icon": "$(file-code)"
+        "icon": "$(cloud)"
       },
       {
         "command": "crewforge.showCrewBundleYaml",
         "title": "Show Crew Bundle YAML",
         "category": "CrewForge",
         "icon": "$(files)"
+      },
+      {
+        "command": "crewforge.showSourceYaml",
+        "title": "Show Source YAML (as rendered)",
+        "category": "CrewForge",
+        "icon": "$(file-code)"
+      },
+      {
+        "command": "crewforge.showLiveYamlRaw",
+        "title": "Show Live YAML (raw)",
+        "category": "CrewForge",
+        "icon": "$(file-binary)"
       }
     ],
     "menus": {
@@ -387,6 +399,31 @@
           "command": "crewforge.removeDeployment",
           "when": "view == crewforge.crews && viewItem == crew",
           "group": "lifecycle@9"
+        },
+        {
+          "command": "crewforge.showSourceYaml",
+          "when": "view == crewforge.sources && viewItem =~ /^resource-/",
+          "group": "yaml@1"
+        },
+        {
+          "command": "crewforge.showLiveYaml",
+          "when": "view == crewforge.sources && viewItem =~ /^resource-(in-sync|changed|extra)$/",
+          "group": "yaml@2"
+        },
+        {
+          "command": "crewforge.showLiveYamlRaw",
+          "when": "view == crewforge.sources && viewItem =~ /^resource-(in-sync|changed|extra)$/",
+          "group": "yaml@3"
+        },
+        {
+          "command": "crewforge.showDrift",
+          "when": "view == crewforge.sources && viewItem =~ /^resource-/",
+          "group": "yaml@0"
+        },
+        {
+          "command": "crewforge.showLiveYamlRaw",
+          "when": "view == crewforge.crews && (viewItem == liveObject || viewItem =~ /^crew(-flux)?$/)",
+          "group": "yaml@3"
         }
       ],
       "editor/context": [
@@ -448,6 +485,14 @@
         {
           "command": "crewforge.newCrewHere",
           "when": "false"
+        },
+        {
+          "command": "crewforge.showSourceYaml",
+          "when": "false"
+        },
+        {
+          "command": "crewforge.showLiveYamlRaw",
+          "when": "false"
         }
       ],
       "explorer/context": [
@@ -455,6 +500,23 @@
           "command": "crewforge.newCrewHere",
           "when": "explorerResourceIsFolder",
           "group": "crewforge@1"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "crewforge.showSourceYaml",
+          "when": "resourceScheme == crewforge-manifest && resourcePath =~ /^\\/(live|source)\\//",
+          "group": "navigation@1"
+        },
+        {
+          "command": "crewforge.showLiveYaml",
+          "when": "resourceScheme == crewforge-manifest",
+          "group": "navigation@2"
+        },
+        {
+          "command": "crewforge.showLiveYamlRaw",
+          "when": "resourceScheme == crewforge-manifest || (resourceScheme == crewforge-live && resourceFilename =~ /^(?!.*\\.(raw|bundle)\\.yaml$).*\\.yaml$/)",
+          "group": "navigation@3"
         }
       ]
     },

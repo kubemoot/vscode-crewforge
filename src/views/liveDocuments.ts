@@ -3,14 +3,19 @@ import { connect, type Connection } from '../connection';
 import { bundleObjects, loadCrewDetails } from '../crew/details';
 import { checkName } from '../k8s/paths';
 import { discoverKinds, objectPath, type KubemootKind } from '../source/live';
-import { KUBEMOOT_GROUP, toLiveYaml, type Manifest } from '../source/manifests';
+import { dumpYaml, KUBEMOOT_GROUP, toLiveYaml, type Manifest } from '../source/manifests';
+import { NORMALIZED_NOTE, normalizedYaml } from '../source/normalize';
 import type { ObjectRef } from './crewDetailsTree';
 import { errorText } from './errors';
 
 export const LIVE_SCHEME = 'crewforge-live';
 
-/** What a live document shows: one object, or a crew's Crew, Agents, PromptModules, and Skills together. */
-export type LiveTarget = { kind: 'object'; ref: ObjectRef } | { kind: 'bundle'; namespace: string; crew: string };
+/**
+ * What a live document shows: one object, normalized as Compare with Live shows it or
+ * raw with all the server's metadata, or a crew's Crew, Agents, PromptModules, and
+ * Skills together.
+ */
+export type LiveTarget = { kind: 'object'; ref: ObjectRef; raw?: boolean } | { kind: 'bundle'; namespace: string; crew: string };
 
 /** The Flux kinds a crew's Deployment section can name, and where the API server serves them. */
 const FLUX_PATHS: Record<string, string> = {
@@ -28,7 +33,7 @@ export function livePath(ref: ObjectRef, kinds: Map<string, KubemootKind>): stri
 }
 
 export function liveUri(target: LiveTarget): vscode.Uri {
-  const path = target.kind === 'bundle' ? `/${target.namespace}/${target.crew}.bundle.yaml` : `/${target.ref.namespace}/${target.ref.kind}/${target.ref.name}.yaml`;
+  const path = target.kind === 'bundle' ? `/${target.namespace}/${target.crew}.bundle.yaml` : `/${target.ref.namespace}/${target.ref.kind}/${target.ref.name}${target.raw ? '.raw' : ''}.yaml`;
   return vscode.Uri.parse(`${LIVE_SCHEME}:${path}`);
 }
 
@@ -53,6 +58,11 @@ export class LiveDocuments implements vscode.TextDocumentContentProvider {
     }
   }
 
+  /** What an open live document shows, so a command on it can show the same object another way. */
+  targetOf(uri: vscode.Uri): LiveTarget | undefined {
+    return this.targets.get(uri.toString());
+  }
+
   /** Opens the live YAML of a target as a read-only YAML document. */
   async show(target: LiveTarget): Promise<void> {
     const uri = liveUri(target);
@@ -70,7 +80,9 @@ export class LiveDocuments implements vscode.TextDocumentContentProvider {
       const details = await loadCrewDetails(client, kinds, target.namespace, target.crew);
       return bundleObjects(details).map(toLiveYaml).join('---\n');
     }
-    const object = JSON.parse(await client.request('GET', livePath(target.ref, kinds))) as Manifest;
-    return toLiveYaml({ ...object, apiVersion: object.apiVersion ?? `${KUBEMOOT_GROUP}/v1alpha1`, kind: object.kind ?? target.ref.kind });
+    const read = JSON.parse(await client.request('GET', livePath(target.ref, kinds))) as Manifest;
+    const object = { ...read, apiVersion: read.apiVersion ?? `${KUBEMOOT_GROUP}/v1alpha1`, kind: read.kind ?? target.ref.kind };
+    if (target.raw) return `# ${target.ref.kind}/${target.ref.name} as the API server holds it, with all its metadata and status.\n${dumpYaml(object)}`;
+    return `${NORMALIZED_NOTE}\n# Show Live YAML (raw) shows everything.\n${normalizedYaml(object)}`;
   }
 }

@@ -37,13 +37,13 @@ afterEach(() => {
 const run = (id: string, ...args: unknown[]) => recorded.commands.get(id)!(...args);
 
 describe('activate', () => {
-  it('registers every command the manifest contributes, and the Crews view', () => {
+  it('registers every command the manifest contributes, and the Deployed Crews view', () => {
     const declared = manifest.contributes.commands.map((c) => c.command).sort();
     expect([...recorded.commands.keys()].sort()).toEqual(declared);
     expect(recorded.treeViews.map((v) => v.id)).toEqual(['crewforge.crews', 'crewforge.sources']);
   });
 
-  it('refreshes the Crews view on the command and on a CrewForge setting change', () => {
+  it('refreshes the Deployed Crews view on the command and on a CrewForge setting change', () => {
     const view = recorded.treeViews[0];
     const provider = view.options.treeDataProvider as { onDidChangeTreeData: (l: () => void) => void };
     let refreshed = 0;
@@ -153,14 +153,26 @@ describe('commands', () => {
 
   it('showDrift opens the diff for a resource and ignores anything else', async () => {
     const drift = { kind: 'Crew', name: 'demo', state: 'missing', paths: [] };
-    await run('crewforge.showDrift', { kind: 'resource', deployment: { namespace: 'ns' }, drift });
+    const entry = { source: { kind: 'bundle', root: '/w/demo', label: 'demo' }, identity: { id: 'local:demo' } };
+    await run('crewforge.showDrift', { kind: 'resource', entry, deployment: { namespace: 'ns', crew: { name: 'demo', namespace: 'ns' } }, drift });
     await run('crewforge.showDrift', { kind: 'message', text: 'x' });
     await run('crewforge.showDrift');
     expect(recorded.executed.map((e) => e.id)).toEqual(['vscode.diff']);
     expect(recorded.documentProviders.has('crewforge-manifest')).toBe(true);
+    await run('crewforge.showSourceYaml', { kind: 'resource', entry, deployment: { namespace: 'ns', crew: { name: 'demo', namespace: 'ns' } }, drift });
+    await run('crewforge.showSourceYaml', { kind: 'message', text: 'x' });
+    await run('crewforge.showSourceYaml');
+    expect(recorded.shownDocuments).toEqual(['crewforge-manifest:/rendered/ns/Crew-demo.yaml (yaml)']);
   });
 
-  it('runs the lifecycle commands on a live crew from the Crews view', async () => {
+  it('showLiveYamlRaw opens the raw YAML of a crew and ignores anything else', async () => {
+    await run('crewforge.showLiveYamlRaw', { kind: 'crew', crew: { name: 'lab-ops', namespace: 'team-a', ready: true, phase: 'Ready' } });
+    await run('crewforge.showLiveYamlRaw', { kind: 'message', text: 'x' });
+    await run('crewforge.showLiveYamlRaw');
+    expect(recorded.shownDocuments).toEqual(['crewforge-live:/team-a/Crew/lab-ops.raw.yaml (yaml)']);
+  });
+
+  it('runs the lifecycle commands on a live crew from the Deployed Crews view', async () => {
     const crew = { name: 'lab-ops', namespace: 'team-a', ready: true, phase: 'Ready' };
     await run('crewforge.followRollout', { kind: 'crew', crew });
     expect(recorded.info[0]).toBe('lab-ops in team-a is not managed by a Flux HelmRelease.');
@@ -278,7 +290,7 @@ describe('Commands', () => {
   const tree = () => new CrewTreeProvider();
   const view = (id = 'crewforge.crews') => ({ id, reveal: (node: unknown, options?: unknown) => (recorded.revealed.push({ view: id, node, options }), Promise.resolve()) }) as unknown as FakeTreeView;
 
-  it('reveals a live crew in the Crews view, or says its namespace is not listed', async () => {
+  it('reveals a live crew in the Deployed Crews view, or says its namespace is not listed', async () => {
     const commands = new Commands(Uri.file('/ext') as never, tree(), view() as never, new ConversationStore(path.join(storage, 'c')));
     await commands.revealLive({ name: 'lab-ops', namespace: 'team-a', ready: true, phase: 'Ready' });
     expect(recorded.revealed).toMatchObject([{ view: 'crewforge.crews', node: { kind: 'crew', crew: { name: 'lab-ops' } }, options: { select: true, expand: true } }]);

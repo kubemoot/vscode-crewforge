@@ -5,7 +5,8 @@ import { describe, expect, it } from 'vitest';
 import { channelOf, deployedAtByRevision, stripDirty, deploymentDescription, deploymentsOf, historyLines, ANNOTATIONS } from '../src/source/deployments';
 import { discoverSources, type CrewSource } from '../src/source/discover';
 import { identify, normalizeRemote } from '../src/source/identity';
-import { crewOf, isKubemoot, objectKey, parseManifests, toYaml } from '../src/source/manifests';
+import { crewOf, isKubemoot, objectKey, parseManifests } from '../src/source/manifests';
+import { normalizedYaml } from '../src/source/normalize';
 import { byCodeUnits, execProgram, readText, readYamlFiles } from '../src/source/nodeDeps';
 import { render, type Exec } from '../src/source/render';
 import type { CrewSummary } from '../src/k8s/crews';
@@ -36,15 +37,15 @@ describe('manifests', () => {
   });
 
   it('shows YAML without server bookkeeping', () => {
-    const text = toYaml({
+    const text = normalizedYaml({
       apiVersion: 'kubemoot.ai/v1alpha1',
       kind: 'Crew',
       metadata: { name: 'demo', uid: 'u', resourceVersion: '1', managedFields: [], annotations: { 'kubectl.kubernetes.io/last-applied-configuration': '{}' } },
     });
     expect(text).toContain('name: demo');
     expect(text).not.toMatch(/uid|resourceVersion|managedFields|annotations/);
-    expect(toYaml({ apiVersion: 'v1', kind: 'X', metadata: { name: 'a', annotations: { keep: 'me' } } })).toContain('keep: me');
-    expect(toYaml({ apiVersion: 'v1', kind: 'X', metadata: { name: 'a' } })).not.toContain('annotations');
+    expect(normalizedYaml({ apiVersion: 'v1', kind: 'X', metadata: { name: 'a', annotations: { keep: 'me' } } })).toContain('keep: me');
+    expect(normalizedYaml({ apiVersion: 'v1', kind: 'X', metadata: { name: 'a' } })).not.toContain('annotations');
   });
 });
 

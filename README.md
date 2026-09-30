@@ -160,6 +160,18 @@ workspace and, under each, every namespace its crew is deployed to.
 - Each deployment shows its **drift**: the Kubemoot objects whose spec differs from the
   source, missing ones, and extra ones. Click one for a live-versus-source diff. Flux
   deployments render with their HelmRelease values and show the release state.
+- The diff is normalized so that only what a person wrote can differ: both sides leave out
+  `status`, the server's bookkeeping (managedFields, resourceVersion, uid, generation,
+  creationTimestamp, finalizers), the annotations Helm, kubectl, and CrewForge add
+  (`meta.helm.sh/*`, `kubectl.kubernetes.io/*`, `crewforge.kubemoot.ai/*`), and the labels
+  releases stamp (`helm.toolkit.fluxcd.io/*`, `helm.sh/chart`, `app.kubernetes.io/version`,
+  `kubemoot.ai/crew-version`), and every map's keys are sorted. When the chart version of
+  the source differs from the deployed one, a banner on top of both sides and the diff's
+  title say so, for example "source 0.2.2, deployed 0.46.0-rc.0".
+- To see one side alone, a resource's menu (and the diff editor's title bar) has **Show
+  Source YAML** (the object as the source renders it, read-only, with a link that opens
+  its source file at the object for editing), **Show Live YAML** (normalized the same
+  way), and **Show Live YAML (raw)** (everything the API server holds, status and all).
 - A deployment's menu has **Update Deployment from Source** (a bundle applies only what
   differs), **Deploy a Revision** (any commit that touched the source, to roll back or
   forward), **Run Fitness**, **Follow GitOps Rollout** (Flux), and **Remove Deployment**.

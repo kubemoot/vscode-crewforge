@@ -4,6 +4,7 @@ import type { KubeClient } from '../src/k8s/request';
 import { toLiveYaml, type Manifest } from '../src/source/manifests';
 import { discoverKinds } from '../src/source/live';
 import { LiveDocuments, livePath, liveUri } from '../src/views/liveDocuments';
+import { NORMALIZED_NOTE } from '../src/source/normalize';
 import { FakeCluster, seedCrew } from './fakeCluster';
 import { recorded, resetFake, Uri } from './vscodeFake';
 
@@ -35,14 +36,24 @@ describe('livePath and liveUri', () => {
 });
 
 describe('LiveDocuments', () => {
-  it('opens one live object as read-only YAML, without managedFields', async () => {
+  it('opens one live object as read-only YAML, normalized by default and raw on request', async () => {
     await documents.show({ kind: 'object', ref: { kind: 'Crew', name: 'lab-ops', namespace: 'team-a' } });
     expect(recorded.shownDocuments).toEqual(['crewforge-live:/team-a/Crew/lab-ops.yaml (yaml)']);
     const yaml = await text('crewforge-live:/team-a/Crew/lab-ops.yaml');
+    expect(yaml.split('\n').slice(0, 2)).toEqual([NORMALIZED_NOTE, '# Show Live YAML (raw) shows everything.']);
     const [crew] = loadAll(yaml) as Manifest[];
-    expect(crew).toMatchObject({ apiVersion: 'kubemoot.ai/v1alpha1', kind: 'Crew', metadata: { name: 'lab-ops' }, status: { ready: true } });
+    expect(crew).toMatchObject({ apiVersion: 'kubemoot.ai/v1alpha1', kind: 'Crew', metadata: { name: 'lab-ops' } });
+    expect(crew.status).toBeUndefined();
     expect(crew.metadata.managedFields).toBeUndefined();
-    expect(crew.metadata.annotations).toEqual({ 'meta.helm.sh/release-name': 'lab', 'meta.helm.sh/release-namespace': 'team-a' });
+    expect(crew.metadata.annotations).toBeUndefined();
+    expect(crew.metadata.labels).toEqual({ 'app.kubernetes.io/instance': 'lab', 'app.kubernetes.io/managed-by': 'Helm' });
+    const target = { kind: 'object' as const, ref: { kind: 'Crew', name: 'lab-ops', namespace: 'team-a' }, raw: true };
+    await documents.show(target);
+    expect(recorded.shownDocuments[1]).toBe('crewforge-live:/team-a/Crew/lab-ops.raw.yaml (yaml)');
+    expect(documents.targetOf(Uri.parse('crewforge-live:/team-a/Crew/lab-ops.raw.yaml') as never)).toEqual(target);
+    const [raw] = loadAll(await text('crewforge-live:/team-a/Crew/lab-ops.raw.yaml')) as Manifest[];
+    expect(raw.metadata.managedFields).toEqual([{ manager: 'helm' }]);
+    expect(raw).toMatchObject({ status: { ready: true }, metadata: { annotations: { 'meta.helm.sh/release-name': 'lab' } } });
   });
 
   it('fills in the kind and apiVersion when the API server leaves them out', async () => {

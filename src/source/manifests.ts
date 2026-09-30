@@ -1,5 +1,10 @@
 import { dump, loadAll } from 'js-yaml';
 
+/** YAML as CrewForge shows objects in an editor: long lines kept, no anchors. */
+export function dumpYaml(value: unknown): string {
+  return dump(value, { lineWidth: 120, noRefs: true });
+}
+
 /** A Kubernetes object as it appears in a manifest file or comes back from the API server. */
 export interface Manifest {
   apiVersion: string;
@@ -46,20 +51,12 @@ export function objectKey(m: Pick<Manifest, 'kind' | 'metadata'>): string {
   return keyOf(m.kind, m.metadata.name);
 }
 
-/** YAML for showing an object in an editor: server bookkeeping removed, keys in a readable order. */
-export function toYaml(m: Manifest): string {
-  return dump(presentable(m), { lineWidth: 120, noRefs: true });
-}
-
-const SERVER_METADATA = ['managedFields', 'resourceVersion', 'uid', 'generation', 'creationTimestamp'];
-
-function presentable(m: Manifest): Manifest {
-  return stripMetadata(m, SERVER_METADATA);
-}
+/** kubectl's copy of the object as last applied, which is noise in any view of it. */
+export const LAST_APPLIED = 'kubectl.kubernetes.io/last-applied-configuration';
 
 /** YAML of a live object as the API server holds it, less managedFields and kubectl's last-applied copy of the object. */
 export function toLiveYaml(m: Manifest): string {
-  return dump(stripMetadata(m, ['managedFields']), { lineWidth: 120, noRefs: true });
+  return dumpYaml(stripMetadata(m, ['managedFields']));
 }
 
 /** A copy of the object without the named metadata fields and kubectl's last-applied annotation; an emptied annotation map goes too. */
@@ -67,7 +64,7 @@ function stripMetadata(m: Manifest, fields: string[]): Manifest {
   const metadata = { ...m.metadata };
   for (const field of fields) delete metadata[field];
   const annotations = { ...metadata.annotations };
-  delete annotations['kubectl.kubernetes.io/last-applied-configuration'];
+  delete annotations[LAST_APPLIED];
   if (Object.keys(annotations).length) metadata.annotations = annotations;
   else delete metadata.annotations;
   return { ...m, metadata };

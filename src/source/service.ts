@@ -1,4 +1,5 @@
 import * as path from 'node:path';
+import { FAILSAFE_SCHEMA, load } from 'js-yaml';
 import type { CrewSummary } from '../k8s/crews';
 import type { KubeTransport } from '../k8s/request';
 import { deploymentsOf, type Deployment } from './deployments';
@@ -30,6 +31,27 @@ export interface SourceEntry {
   errorAt?: SourceLocation;
   /** What the source rendered when it was loaded, with the file of each object. */
   rendered?: Rendered[];
+  /** A chart's name, version, appVersion, and description, from its Chart.yaml. */
+  chart?: ChartInfo;
+}
+
+export interface ChartInfo {
+  name?: string;
+  version?: string;
+  appVersion?: string;
+  description?: string;
+}
+
+/** What a Chart.yaml says about the chart; nothing for a file that cannot be read or parsed. */
+export async function readChart(root: string, readText: ReadText): Promise<ChartInfo | undefined> {
+  try {
+    // Every scalar as written: a version like 1.10 must not become the number 1.1.
+    const doc = load(await readText(path.join(root, 'Chart.yaml')), { schema: FAILSAFE_SCHEMA }) as Record<string, unknown> | null;
+    const text = (key: string) => (typeof doc?.[key] === 'string' ? doc[key] : undefined);
+    return { name: text('name'), version: text('version'), appVersion: text('appVersion'), description: text('description') };
+  } catch {
+    return undefined;
+  }
 }
 
 /** The crew source a file belongs to: the innermost source folder that holds it. */
@@ -122,12 +144,13 @@ export class SourceService {
 
   private async describe(source: CrewSource): Promise<SourceEntry> {
     const identity = await identify(source, this.deps.exec);
+    const chart = source.kind === 'helm' ? await readChart(source.root, this.deps.readText) : undefined;
     try {
       const rendered = await renderWithOrigins(source, { namespace: PROBE_NAMESPACE }, this.deps);
       const crew = crewOf(rendered.map((r) => r.manifest));
-      return crew ? { source, identity, crewName: crew.metadata.name, rendered } : { source, identity, error: 'renders no Crew' };
+      return crew ? { source, identity, chart, crewName: crew.metadata.name, rendered } : { source, identity, chart, error: 'renders no Crew' };
     } catch (err) {
-      return { source, identity, error: err instanceof Error ? err.message : String(err), errorAt: locationOf(err) };
+      return { source, identity, chart, error: err instanceof Error ? err.message : String(err), errorAt: locationOf(err) };
     }
   }
 
