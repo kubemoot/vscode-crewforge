@@ -1,6 +1,11 @@
 /** Escapes text for use inside HTML element content and attribute values. */
 export function escapeHtml(text: string): string {
-  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  return text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#39;');
+}
+
+/** ` name="value"`, the value escaped, for appending to an element's opening tag. */
+export function htmlAttribute(name: string, value: string): string {
+  return ` ${name}="${escapeHtml(value)}"`;
 }
 
 /** Reports whether a link target is an http(s) or mailto URL, the only kinds rendered as links. */

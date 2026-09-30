@@ -4,7 +4,7 @@ import { turnStatus } from '../discussion/turnStatus';
 import type { TurnState } from '../discussion/reducer';
 import type { ChatMessage, ConversationMeta } from '../store/conversation';
 import type { HostMessage, WebviewMessage } from './protocol';
-import { escapeHtml, formatAgo, formatTime, icons, isWebLink } from './render';
+import { escapeHtml, formatAgo, formatTime, htmlAttribute, icons, isWebLink } from './render';
 
 interface VsCodeApi {
   postMessage(message: WebviewMessage): void;
@@ -24,7 +24,8 @@ marked.use({
     link({ href, title, tokens }) {
       const text = this.parser.parseInline(tokens);
       if (!isWebLink(href)) return text;
-      return `<a href="${escapeHtml(href)}"${title ? ` title="${escapeHtml(title)}"` : ''}>${text}</a>`;
+      const titleAttr = title ? htmlAttribute('title', title) : '';
+      return `<a${htmlAttribute('href', href)}${titleAttr}>${text}</a>`;
     },
   },
 });
@@ -45,8 +46,11 @@ const els = {
 
 let state: HostMessage | undefined;
 
+// VS Code's webview host frame forwards each extension host message into this page with
+// its own origin as the target, and this page is served from that same origin; a message
+// with any other origin came from some other window and is ignored.
 window.addEventListener('message', (event: MessageEvent<HostMessage>) => {
-  if (event.data?.type !== 'state') return;
+  if (event.origin !== window.origin || event.data?.type !== 'state') return;
   state = event.data;
   render();
 });
@@ -142,7 +146,7 @@ function renderMessages(): void {
     els.messages.innerHTML = emptyState(conversation.crewName, state.about);
     return;
   }
-  const parts = conversation.messages.map(renderMessage);
+  const parts = conversation.messages.map((m, index) => renderMessage(m, index));
   if (turn) parts.push(renderTurn(turn));
   els.messages.innerHTML = parts.join('');
   if (atBottom || turn) els.messages.scrollTop = els.messages.scrollHeight;
@@ -158,7 +162,7 @@ function emptyState(crew: string, about: string): string {
 function renderMessage(m: ChatMessage, index: number): string {
   if (m.role === 'system') return `<div class="notice">${escapeHtml(m.content)}</div>`;
   const user = m.role === 'user';
-  const body = user ? `<div class="message-text">${escapeHtml(m.content)}</div>` : `<div class="message-text markdown-content">${marked.parse(m.content, { async: false }) as string}</div>`;
+  const body = user ? `<div class="message-text">${escapeHtml(m.content)}</div>` : `<div class="message-text markdown-content">${marked.parse(m.content, { async: false })}</div>`;
   return `<div class="message${user ? ' user' : ''}">
     <div class="message-avatar">${user ? icons.user : icons.crew}</div>
     <div class="message-content">${body}
@@ -169,18 +173,24 @@ function renderMessage(m: ChatMessage, index: number): string {
     </div></div>`;
 }
 
+/** The extra class of a card whose agent is still at work, by status. */
+const CARD_CLASSES: Record<string, string> = {
+  triaging: ' finding-triaging',
+  evaluating: ' finding-evaluating',
+};
+
 function renderTurn(turn: TurnState): string {
   const cards = turn.cards
     .map((card) => {
       const { text, working } = cardText(card);
-      const cls = card.status === 'triaging' ? ' finding-triaging' : card.status === 'evaluating' ? ' finding-evaluating' : '';
+      const cls = CARD_CLASSES[card.status] ?? '';
       return `<div class="finding-card${cls}"><span class="finding-agent">${escapeHtml(card.agent)}</span>
         <span class="${working ? 'finding-status' : 'finding-summary'}">${escapeHtml(text)}</span>${working ? '<div class="finding-spinner"></div>' : ''}</div>`;
     })
     .join('');
   const feed = cards ? `<div class="findings-feed">${cards}</div>` : '';
   const answer = turn.synthesis
-    ? `<div class="message-text markdown-content">${marked.parse(turn.synthesis, { async: false }) as string}</div>`
+    ? `<div class="message-text markdown-content">${marked.parse(turn.synthesis, { async: false })}</div>`
     : `<div class="loading-indicator"><div class="loading-spinner"></div><span class="loading-text">${escapeHtml(turnStatus(turn))}</span></div>`;
   return `<div class="message"><div class="message-avatar">${icons.crew}</div><div class="message-content turn">${feed}${answer}</div></div>`;
 }

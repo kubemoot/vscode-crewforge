@@ -27,9 +27,13 @@ async function loadPage(): Promise<void> {
   await import('../src/webview/main');
 }
 
+function stateMessage(conversation: Conversation, extra: Partial<HostMessage['view']> = {}, history: HostMessage['history'] = []): HostMessage {
+  return { type: 'state', view: { conversation, busy: false, ...extra }, history, about: '2 agents' };
+}
+
+/** Delivers a message as VS Code's host frame does: with the page's own origin. */
 function post(conversation: Conversation, extra: Partial<HostMessage['view']> = {}, history: HostMessage['history'] = []): void {
-  const message: HostMessage = { type: 'state', view: { conversation, busy: false, ...extra }, history, about: '2 agents' };
-  window.dispatchEvent(new MessageEvent('message', { data: message }));
+  window.dispatchEvent(new MessageEvent('message', { data: stateMessage(conversation, extra, history), origin: window.origin }));
 }
 
 const $ = (id: string) => document.getElementById(id)!;
@@ -138,7 +142,43 @@ describe('the chat page', () => {
   });
 
   it('ignores messages that are not state', () => {
-    window.dispatchEvent(new MessageEvent('message', { data: { type: 'other' } }));
+    window.dispatchEvent(new MessageEvent('message', { data: { type: 'other' }, origin: window.origin }));
     expect($('title').textContent).toBe('');
+  });
+
+  it('ignores a state message from any origin but its own', () => {
+    const data = stateMessage(newConversation('ctx', 'team-a', 'lab-ops'));
+    for (const origin of ['https://attacker.example', '', 'null', 'vscode-webview://another-webview']) {
+      window.dispatchEvent(new MessageEvent('message', { data, origin }));
+    }
+    expect($('title').textContent).toBe('');
+    expect($('messages').textContent).toBe('');
+    window.dispatchEvent(new MessageEvent('message', { data, origin: window.origin }));
+    expect($('title').textContent).toBe('lab-ops');
+  });
+
+  it('shows a link title from the Markdown, escaped', () => {
+    const c = newConversation('ctx', 'team-a', 'lab-ops');
+    c.messages.push({ role: 'assistant', content: '[docs](https://kubemoot.org "the \\"docs\\" <site>") [plain](https://kubemoot.org/a)', timestamp: c.startedAt });
+    post(c);
+    const [titled, plain] = [...$('messages').querySelectorAll('a')];
+    expect(titled.getAttribute('title')).toBe('the "docs" <site>');
+    expect(titled.getAttribute('href')).toBe('https://kubemoot.org');
+    expect(plain.hasAttribute('title')).toBe(false);
+  });
+
+  it('marks queued and analyzing cards, and shows the synthesis as Markdown once it arrives', () => {
+    const c = newConversation('ctx', 'team-a', 'lab-ops');
+    c.messages.push({ role: 'user', content: 'q', timestamp: c.startedAt });
+    const cards = [
+      { agent: 'a', status: 'triaging', stoodAside: false },
+      { agent: 'b', status: 'evaluating', stoodAside: false },
+      { agent: 'c', status: 'done', signal: 'agree', summary: 'fine', stoodAside: false },
+    ];
+    post(c, { busy: true, turn: { startedAt: Date.now(), connected: true, threadId: 't', done: false, cards, synthesis: '**all good**' } });
+    const classes = [...$('messages').querySelectorAll('.finding-card')].map((el) => el.className);
+    expect(classes).toEqual(['finding-card finding-triaging', 'finding-card finding-evaluating', 'finding-card']);
+    expect($('messages').querySelector('.turn strong')?.textContent).toBe('all good');
+    expect($('messages').querySelector('.loading-text')).toBeNull();
   });
 });
