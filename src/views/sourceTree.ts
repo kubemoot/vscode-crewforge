@@ -156,7 +156,8 @@ function runItem(node: Extract<SourceNode, { kind: 'run' }>): vscode.TreeItem {
   const { run } = node;
   const item = new vscode.TreeItem(run.name, vscode.TreeItemCollapsibleState.None);
   item.description = runSummary(run);
-  item.tooltip = `${run.kind} ${run.namespace}/${run.name}\n${runSummary(run)}${run.error ? `\n${run.error}` : ''}`;
+  const error = run.error ? `\n${run.error}` : '';
+  item.tooltip = `${run.kind} ${run.namespace}/${run.name}\n${runSummary(run)}${error}`;
   const [icon, color] = isRunning(run) ? ['sync~spin'] : (RUN_ICONS[run.phase] ?? ['circle-outline']);
   item.iconPath = new vscode.ThemeIcon(icon, color ? new vscode.ThemeColor(color) : undefined);
   item.contextValue = 'run';

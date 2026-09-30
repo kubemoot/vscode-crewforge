@@ -56,7 +56,7 @@ const SERVER_METADATA = ['managedFields', 'resourceVersion', 'uid', 'generation'
 function presentable(m: Manifest): Manifest {
   const metadata = { ...m.metadata };
   for (const field of SERVER_METADATA) delete metadata[field];
-  const annotations = { ...(metadata.annotations ?? {}) };
+  const annotations = { ...metadata.annotations };
   delete annotations['kubectl.kubernetes.io/last-applied-configuration'];
   if (Object.keys(annotations).length) metadata.annotations = annotations;
   else delete metadata.annotations;

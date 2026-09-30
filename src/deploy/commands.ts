@@ -178,7 +178,9 @@ async function confirm(warnings: string[], action: string): Promise<boolean> {
 
 function revisionNote(date: string, current: boolean, deployedAt?: string): string {
   if (current) return `${date} · deployed now`;
-  return deployedAt !== undefined ? `${date} · deployed here before${deployedAt ? ` (${deployedAt})` : ''}` : date;
+  if (deployedAt === undefined) return date;
+  const when = deployedAt ? ` (${deployedAt})` : '';
+  return `${date} · deployed here before${when}`;
 }
 
 /** What removing does; a crew marked kubemoot.ai/manage-namespace takes its namespace with it. */

@@ -42,30 +42,29 @@ export class KubeClient implements KubeTransport {
     }
   }
 
-  private async once(method: string, path: string, body?: unknown, signal?: AbortSignal): Promise<{ status: number; retryAfter?: string; text: string }> {
+  private async once(method: string, path: string, body?: unknown, signal?: AbortSignal): Promise<RawResponse> {
     const payload = body === undefined ? undefined : JSON.stringify(body);
     const headers: Record<string, string> = payload ? { 'Content-Type': method === 'PATCH' ? 'application/merge-patch+json' : 'application/json' } : {};
     const { send, options } = await this.prepare(method, path, headers);
     if (signal?.aborted) throw abortError();
     return new Promise((resolve, reject) => {
+      const succeed = (response: RawResponse) => {
+        signal?.removeEventListener('abort', onAbort);
+        resolve(response);
+      };
+      const fail = (err: Error) => {
+        signal?.removeEventListener('abort', onAbort);
+        reject(err);
+      };
       const req = send(options, (res) => {
-        const header = res.headers['retry-after'];
-        const retryAfter = Array.isArray(header) ? header[0] : header;
-        collect(res).then(
-          (text) => done(() => resolve({ status: res.statusCode ?? 0, retryAfter, text })),
-          (err: Error) => done(() => reject(err)),
-        );
+        readResponse(res).then(succeed, fail);
       });
       const onAbort = () => {
         req.destroy();
         reject(abortError());
       };
-      const done = (settle: () => void) => {
-        signal?.removeEventListener('abort', onAbort);
-        settle();
-      };
       signal?.addEventListener('abort', onAbort, { once: true });
-      req.on('error', (err) => done(() => reject(signal?.aborted ? abortError() : connectionError(err))));
+      req.on('error', (err) => fail(signal?.aborted ? abortError() : connectionError(err)));
       if (payload) req.write(payload);
       req.end();
     });
@@ -102,7 +101,7 @@ export class KubeClient implements KubeTransport {
     const options: https.RequestOptions = {
       method,
       protocol: server.protocol,
-      hostname: server.hostname.replace(/^\[|\]$/g, ''),
+      hostname: server.hostname.replaceAll(/^\[|\]$/g, ''),
       port: server.port || undefined,
       path: server.pathname.replace(/\/$/, '') + path,
       headers: { Accept: 'application/json', ...headers },
@@ -133,6 +132,21 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
     }, ms);
     signal?.addEventListener('abort', onAbort, { once: true });
   });
+}
+
+/** One response as read off the wire, before it is judged a success or a failure. */
+interface RawResponse {
+  status: number;
+  retryAfter?: string;
+  text: string;
+}
+
+/** The status, Retry-After header, and whole body of a response. */
+async function readResponse(res: http.IncomingMessage): Promise<RawResponse> {
+  const header = res.headers['retry-after'];
+  const retryAfter = Array.isArray(header) ? header[0] : header;
+  const text = await collect(res);
+  return { status: res.statusCode ?? 0, retryAfter, text };
 }
 
 function collect(res: http.IncomingMessage): Promise<string> {

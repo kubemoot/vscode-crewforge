@@ -140,6 +140,20 @@ describe('deployRevision', () => {
     expect(fs.readdirSync(scratch)).toEqual([]);
   });
 
+  it('marks a revision deployed here at an unknown time without a time', async () => {
+    let offered: { label: string; description: string }[] = [];
+    recorded.quickPicks.push((items: { label: string; description: string }[]) => {
+      offered = items;
+      return undefined;
+    });
+    const deployed = node('helm', first);
+    const older = (await listRevisions(execProgram, source))[0].hash;
+    deployed.deployment.crew.revisions = [{ revision: older }];
+    await commands().deployRevision(deployed);
+    expect(offered.find((i) => i.label === older)?.description).toMatch(/ · deployed here before$/);
+    expect(offered.find((i) => i.label === first)?.description).toContain('deployed now');
+  });
+
   it('stops when no revision is picked or the developer declines, and sends Flux to git', async () => {
     recorded.quickPicks.push(undefined, (items: unknown[]) => items[0]);
     recorded.warningAnswers.push(undefined);

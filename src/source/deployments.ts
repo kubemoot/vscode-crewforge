@@ -68,7 +68,8 @@ export function historyLines(d: Deployment, limit = 5): string[] {
   const lines = revisions.slice(0, limit).map((r) => {
     const what = r.revision ?? r.crewVersion ?? 'unknown';
     const who = [r.channel, r.owner].filter(Boolean).join(' by ');
-    return `  ${what}${who ? ` via ${who}` : ''} (${r.deployedAt ?? r.observedAt ?? 'time unknown'})`;
+    const via = who ? ` via ${who}` : '';
+    return `  ${what}${via} (${r.deployedAt ?? r.observedAt ?? 'time unknown'})`;
   });
   return ['Deployed revisions:', ...lines];
 }

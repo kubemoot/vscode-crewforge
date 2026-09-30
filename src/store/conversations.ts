@@ -45,7 +45,7 @@ export class ConversationStore {
 
 /** A path segment that cannot climb out of its directory or trip a file system. */
 export function safeSegment(value: string): string {
-  const cleaned = value.replace(/[^A-Za-z0-9._-]/g, '_');
+  const cleaned = value.replaceAll(/[^A-Za-z0-9._-]/g, '_');
   return cleaned === '' || /^\.+$/.test(cleaned) ? '_' : cleaned;
 }
 

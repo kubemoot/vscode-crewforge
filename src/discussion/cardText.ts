@@ -24,7 +24,10 @@ export function cardText(card: AgentCard): CardText {
   const working = WORKING[card.status];
   if (working) return { text: working(card), working: true };
   if (card.stoodAside) return { text: standAsideText(card.reason), working: false };
-  if (card.summary) return { text: `${card.signal ? `${card.signal}: ` : ''}${readable(card.summary)}`, working: false };
+  if (card.summary) {
+    const signal = card.signal ? `${card.signal}: ` : '';
+    return { text: `${signal}${readable(card.summary)}`, working: false };
+  }
   return { text: card.signal || card.status || 'waiting', working: false };
 }
 

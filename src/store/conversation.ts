@@ -43,7 +43,7 @@ export interface ConversationMeta {
 
 export function newConversation(context: string, namespace: string, crewName: string, now = new Date()): Conversation {
   return {
-    id: now.toISOString().replace(/[:.]/g, '-'),
+    id: now.toISOString().replaceAll(/[:.]/g, '-'),
     crewName,
     title: 'New conversation',
     startedAt: now.toISOString(),
@@ -57,7 +57,7 @@ export function newConversation(context: string, namespace: string, crewName: st
 
 /** A conversation's title is its first question, cut to a line's length. */
 export function titleFrom(question: string): string {
-  const oneLine = question.replace(/\s+/g, ' ').trim();
+  const oneLine = question.replaceAll(/\s+/g, ' ').trim();
   return oneLine.length > 80 ? `${oneLine.slice(0, 79)}...` : oneLine || 'Untitled';
 }
 

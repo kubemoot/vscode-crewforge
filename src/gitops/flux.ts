@@ -66,7 +66,8 @@ function readiness(conditions: { type: string; status: string; message?: string 
 /** One line on how Flux stands with the release. */
 export function fluxSummary(state: FluxState): string {
   if (state.suspended) return 'Flux suspended';
-  if (state.ready === 'True' && state.current) return `Flux ready${state.revision ? ` at ${state.revision}` : ''}`;
+  const at = state.revision ? ` at ${state.revision}` : '';
+  if (state.ready === 'True' && state.current) return `Flux ready${at}`;
   if (state.ready === 'False') return `Flux failed: ${state.message}`;
   return 'Flux reconciling';
 }

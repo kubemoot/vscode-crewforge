@@ -29,7 +29,7 @@ export function buildSchema(openapi: OpenApiDocument): JsonObject {
   for (const [name, schema] of Object.entries(schemas)) {
     definitions[name] = strict(rewriteRefs(schema));
     const gvk = kindOf(schema);
-    if (gvk && gvk.group === 'kubemoot.ai' && !gvk.kind.endsWith('List')) rules.push(rule(gvk, name));
+    if (gvk?.group === 'kubemoot.ai' && !gvk.kind.endsWith('List')) rules.push(rule(gvk, name));
   }
   return { $schema: 'http://json-schema.org/draft-07/schema#', title: 'Kubemoot resources', allOf: rules, definitions };
 }

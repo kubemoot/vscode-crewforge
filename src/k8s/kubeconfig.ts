@@ -62,7 +62,7 @@ export function mergeFiles(files: string[]): KubeConfig {
     clusters: firstByName(parts.flatMap((p) => p.getClusters())),
     users: firstByName(parts.flatMap((p) => p.getUsers())),
     contexts: firstByName(parts.flatMap((p) => p.getContexts())),
-    currentContext: parts.map((p) => p.getCurrentContext()).find((c) => c) ?? '',
+    currentContext: parts.map((p) => p.getCurrentContext()).find(Boolean) ?? '',
   });
   return merged;
 }

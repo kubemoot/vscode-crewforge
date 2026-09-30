@@ -20,8 +20,13 @@ export function groupByNamespace(crews: CrewSummary[]): NamespaceGroup[] {
 
 /** The one line under a crew's name in the tree. */
 export function crewDescription(crew: CrewSummary): string {
-  const agents = crew.agents !== undefined ? `, ${crew.agents} agent${crew.agents === 1 ? '' : 's'}` : '';
+  const agents = crew.agents === undefined ? '' : `, ${agentCount(crew.agents)}`;
   return `${crew.phase}${agents}`;
+}
+
+/** "1 agent", "3 agents". */
+export function agentCount(n: number): string {
+  return n === 1 ? '1 agent' : `${n} agents`;
 }
 
 /** The hover text of a crew. */
@@ -35,7 +40,7 @@ export function crewTooltip(crew: CrewSummary): string {
 /** The empty state's line about a crew. */
 export function crewAbout(crew: CrewSummary): string {
   const parts: string[] = [];
-  if (crew.agents !== undefined) parts.push(`${crew.agents} agent${crew.agents === 1 ? '' : 's'}`);
+  if (crew.agents !== undefined) parts.push(agentCount(crew.agents));
   if (crew.coordinator) parts.push(`coordinator ${crew.coordinator}`);
   if (!crew.ready) parts.push(`phase ${crew.phase}: it may not answer yet`);
   return parts.join(', ');

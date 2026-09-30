@@ -42,7 +42,10 @@ async function renderChart(source: CrewSource, options: RenderOptions, exec: Exe
   const release = options.release ?? source.label;
   const overrides = Object.entries(options.values ?? {}).flatMap(([key, value]) => ['--set-json', `${key}=${JSON.stringify(value)}`]);
   const result = await exec('helm', ['template', release, source.root, '--namespace', options.namespace, ...overrides], { cwd: path.dirname(source.root) });
-  if (result.code !== 0) throw new Error(`helm template failed for ${source.label}: ${result.stderr.trim() || `exit ${result.code}`}`);
+  if (result.code !== 0) {
+    const detail = result.stderr.trim() || `exit ${result.code}`;
+    throw new Error(`helm template failed for ${source.label}: ${detail}`);
+  }
   return parseManifests(result.stdout).map((m) => inNamespace(m, options.namespace));
 }
 

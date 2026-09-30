@@ -119,6 +119,9 @@ export function toDocuments(objects: Manifest[]): string {
 }
 
 function succeeded(result: ExecResult, what: string): string {
-  if (result.code !== 0) throw new Error(`${what} failed: ${result.stderr.trim() || result.stdout.trim() || `exit ${result.code}`}`);
+  if (result.code !== 0) {
+    const detail = result.stderr.trim() || result.stdout.trim() || `exit ${result.code}`;
+    throw new Error(`${what} failed: ${detail}`);
+  }
   return [result.stdout.trim(), result.stderr.trim()].filter(Boolean).join('\n');
 }

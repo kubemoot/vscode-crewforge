@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { cardText } from '../src/discussion/cardText';
 import type { CrewSummary } from '../src/k8s/crews';
-import { crewAbout, crewDescription, crewTooltip, groupByNamespace } from '../src/views/treeModel';
-import { escapeHtml, formatAgo, isWebLink } from '../src/webview/render';
+import { agentCount, crewAbout, crewDescription, crewTooltip, groupByNamespace } from '../src/views/treeModel';
+import { escapeHtml, formatAgo, htmlAttribute, isWebLink } from '../src/webview/render';
 
 const crew = (name: string, namespace: string, extra: Partial<CrewSummary> = {}): CrewSummary => ({ name, namespace, ready: true, phase: 'Ready', ...extra });
 
@@ -21,6 +21,13 @@ describe('tree model', () => {
     expect(crewTooltip(c)).toBe('team-1/lab-ops\nPhase: Ready (ready)\nCoordinator: coord\nCrew operational');
     expect(crewAbout(c)).toBe('2 agents, coordinator coord');
     expect(crewAbout(crew('x', 'n', { ready: false, phase: 'Pending' }))).toBe('phase Pending: it may not answer yet');
+    expect(crewAbout(crew('x', 'n', { agents: 1 }))).toBe('1 agent');
+  });
+
+  it('counts agents, singular only for one', () => {
+    expect(agentCount(0)).toBe('0 agents');
+    expect(agentCount(1)).toBe('1 agent');
+    expect(agentCount(12)).toBe('12 agents');
   });
 });
 
@@ -48,6 +55,13 @@ describe('cardText', () => {
 describe('render helpers', () => {
   it('escapes every HTML-significant character', () => {
     expect(escapeHtml(`<img src=x onerror="a('b')">&`)).toBe('&lt;img src=x onerror=&quot;a(&#39;b&#39;)&quot;&gt;&amp;');
+    expect(escapeHtml('a && b && c')).toBe('a &amp;&amp; b &amp;&amp; c');
+  });
+
+  it('writes an attribute with its value escaped, leading space included', () => {
+    expect(htmlAttribute('title', 'plain')).toBe(' title="plain"');
+    expect(htmlAttribute('title', '" onmouseover="x')).toBe(' title="&quot; onmouseover=&quot;x"');
+    expect(htmlAttribute('href', '')).toBe(' href=""');
   });
 
   it('renders only web and mail links as anchors', () => {

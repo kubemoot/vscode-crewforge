@@ -26,7 +26,8 @@ export async function identify(source: CrewSource, exec: Exec): Promise<SourceId
     git('config', 'user.email'),
   ]);
   const hash = commit.stdout.trim();
-  const revision = hash ? `${hash}${status.stdout.trim() ? '-dirty' : ''}` : undefined;
+  const dirty = status.stdout.trim() ? '-dirty' : '';
+  const revision = hash ? `${hash}${dirty}` : undefined;
   return { id: `${repo}//${relative}`, revision, owner: email.stdout.trim() || undefined };
 }
 
