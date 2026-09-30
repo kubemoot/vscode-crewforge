@@ -1,4 +1,5 @@
 import type { KubeTransport } from '../k8s/request';
+import { trimEnd } from '../text';
 import { objectPath, type KubemootKind } from '../source/live';
 import type { Manifest } from '../source/manifests';
 
@@ -110,7 +111,7 @@ export async function startRun(client: KubeTransport, kinds: Map<string, Kubemoo
 /** `<definition>-<yyyymmdd-hhmmss>`, cut so it stays a valid name. */
 export function runName(definition: string, now: Date): string {
   const stamp = now.toISOString().replaceAll(/[-:]/g, '').replace('T', '-').slice(0, 15);
-  return `${definition.slice(0, 63 - stamp.length - 1).replace(/-+$/, '')}-${stamp}`;
+  return `${trimEnd(definition.slice(0, 63 - stamp.length - 1), '-')}-${stamp}`;
 }
 
 /** The line under a run in the tree. */

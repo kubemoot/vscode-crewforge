@@ -1,6 +1,7 @@
 import * as path from 'node:path';
 import type { CrewSource } from './discover';
 import type { Exec } from './render';
+import { trimEnd } from '../text';
 
 /** Who and what a deployment came from, as CrewForge records it on the Crew. */
 export interface SourceIdentity {
@@ -38,5 +39,5 @@ export async function identify(source: CrewSource, exec: Exec): Promise<SourceId
 export function normalizeRemote(url: string): string {
   const scp = /^[^@/]+@([^:]+):(.+)$/.exec(url);
   const bare = scp ? `${scp[1]}/${scp[2]}` : url.replace(/^[a-z+]+:\/\//i, '').replace(/^[^@/]+@/, '');
-  return bare.replace(/\.git$/, '').replace(/\/+$/, '');
+  return trimEnd(bare.replace(/\.git$/, ''), '/');
 }

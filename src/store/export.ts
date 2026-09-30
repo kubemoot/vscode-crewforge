@@ -1,3 +1,4 @@
+import { trimBoth } from '../text';
 import type { Conversation } from './conversation';
 
 /** A conversation as Markdown: header, every message, then the agents' signals. */
@@ -26,6 +27,6 @@ export function exportAsMarkdown(c: Conversation): string {
 
 /** A file name for an export: crew, then the title's words. */
 export function exportFileName(c: Conversation): string {
-  const words = c.title.replaceAll(/[^A-Za-z0-9]+/g, '-').replaceAll(/^-+|-+$/g, '').slice(0, 50);
+  const words = trimBoth(c.title.replaceAll(/[^A-Za-z0-9]+/g, '-'), '-').slice(0, 50);
   return `${c.crewName}-${words || 'conversation'}.md`;
 }
