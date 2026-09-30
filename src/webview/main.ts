@@ -49,8 +49,8 @@ let state: HostMessage | undefined;
 // VS Code's webview host frame forwards each extension host message into this page with
 // its own origin as the target, and this page is served from that same origin; a message
 // with any other origin came from some other window and is ignored.
-window.addEventListener('message', (event: MessageEvent<HostMessage>) => {
-  if (event.origin !== window.origin || event.data?.type !== 'state') return;
+globalThis.addEventListener('message', (event: MessageEvent<HostMessage>) => {
+  if (event.origin !== globalThis.origin || event.data?.type !== 'state') return;
   state = event.data;
   render();
 });
