@@ -79,9 +79,17 @@ describe('reduce', () => {
   });
 
   it('ends the turn on error with the message, falling back to content, then a default', () => {
-    expect(fold([{ type: 'error', error: 'boom' }])).toMatchObject({ done: true, error: 'boom' });
-    expect(fold([{ type: 'error', content: 'from content' }]).error).toBe('from content');
-    expect(fold([{ type: 'error' }]).error).toMatch(/error/);
+    expect(fold([{ type: 'error', error: 'boom' }])).toMatchObject({ done: true, error: "The crew's discussion gateway reported an error: boom" });
+    expect(fold([{ type: 'error', content: 'from content' }]).error).toBe("The crew's discussion gateway reported an error: from content");
+    expect(fold([{ type: 'error' }]).error).toBe("The crew's discussion gateway reported an error.");
+  });
+
+  it('keeps a reason only with the status it came with', () => {
+    const t = fold([
+      { type: 'phase', agent: 'k8s', status: 'waiting', model: 'm', reason: 'gpu-busy' },
+      { type: 'phase', agent: 'k8s', status: 'done', stood_aside: true, signal: 'stand_aside' },
+    ]);
+    expect(t.cards[0]).toMatchObject({ stoodAside: true, reason: undefined });
   });
 
   it('ignores heartbeats, unknown types, and anything after the turn is done', () => {

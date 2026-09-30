@@ -56,13 +56,20 @@ describe('waiting for a GPU', () => {
   it('says the agents are waiting on a busy cluster, and counts waiting agents as working', () => {
     let t = reduce(reduce(reduce(initialTurn(0), { type: 'connected' }), { type: 'thread_found', threadId: 't' }), { type: 'phase', agent: 'rules', status: 'waiting', model: 'qwen3:14b', reason: 'gpu-busy' });
     expect(turnStatus(t, 1000)).toBe('1 agent is waiting for a GPU with room; the cluster is busy · 1s');
-    expect(cardText(t.cards[0])).toEqual({ text: 'waiting for a GPU with room for qwen3:14b...', working: true });
+    expect(cardText(t.cards[0])).toEqual({ text: 'waiting for a GPU with room for qwen3:14b...', working: true, problem: false });
     t = reduce(t, { type: 'phase', agent: 'other', status: 'evaluating', gpu: 'g' });
     expect(turnStatus(t, 1000)).toBe('2 of 2 agents still working · 1s');
     t = reduce(t, { type: 'phase', agent: 'third', status: 'waiting' });
     t = reduce(t, { type: 'phase', agent: 'other', status: 'done', stood_aside: true, signal: 'stand_aside' });
     expect(turnStatus(t, 1000)).toBe('2 agents are waiting for a GPU with room; the cluster is busy · 1s');
     expect(cardText(t.cards.find((c) => c.agent === 'third')!).text).toBe('waiting for a GPU with room for its model...');
+  });
+
+  it('does not count an agent starting up or ready as working on the turn', () => {
+    let t = reduce(reduce(reduce(initialTurn(0), { type: 'connected' }), { type: 'thread_found', threadId: 't' }), { type: 'phase', agent: 'a', status: 'waking' });
+    t = reduce(t, { type: 'phase', agent: 'b', status: 'ready' });
+    t = reduce(t, { type: 'phase', agent: 'c', status: 'evaluating' });
+    expect(turnStatus(t, 1000)).toBe('1 of 3 agents still working · 1s');
   });
 
   it('explains why an agent stood aside', () => {

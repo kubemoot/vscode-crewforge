@@ -1,6 +1,5 @@
+import { WORKING_STATUSES } from './cardText';
 import type { TurnState } from './reducer';
-
-const WORKING = new Set(['triaging', 'evaluating', 'waiting']);
 
 /**
  * One line saying where the turn stands, from what the stream has reported: the
@@ -26,7 +25,7 @@ function waitingStage(turn: TurnState): string | undefined {
 }
 
 function agentsStage(turn: TurnState): string {
-  const working = turn.cards.filter((c) => WORKING.has(c.status)).length;
+  const working = turn.cards.filter((c) => WORKING_STATUSES.has(c.status)).length;
   const waiting = turn.cards.filter((c) => c.status === 'waiting').length;
   if (waiting > 0 && waiting === working) return `${waiting} agent${waiting === 1 ? ' is' : 's are'} waiting for a GPU with room; the cluster is busy`;
   if (working > 0) return `${working} of ${turn.cards.length} agent${turn.cards.length === 1 ? '' : 's'} still working`;

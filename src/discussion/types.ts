@@ -41,3 +41,9 @@ export type EventType =
 export function isTerminal(e: DiscussionEvent): boolean {
   return e.type === 'done' || e.type === 'error';
 }
+
+/** What an error event says went wrong, in plain words. */
+export function eventErrorText(e: DiscussionEvent): string {
+  const detail = e.error || e.content;
+  return detail ? `The crew's discussion gateway reported an error: ${detail}` : "The crew's discussion gateway reported an error.";
+}

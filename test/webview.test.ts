@@ -226,6 +226,39 @@ describe('the chat page', () => {
     expect(header.map((b) => b.disabled)).toEqual([true, true, false, false]);
   });
 
+  it('shows what went wrong under an answer and a notice, escaped, and ignores a malformed list', () => {
+    const c = newConversation('ctx', 'team-a', 'lab-ops');
+    c.messages.push(
+      { role: 'user', content: 'q', timestamp: c.startedAt },
+      { role: 'assistant', content: 'a', timestamp: c.startedAt, problems: ['k8s failed: <b>tool</b> error'] },
+      { role: 'system', content: 'Stopped.', timestamp: c.startedAt, problems: ['rules did not finish before the turn ended'] },
+      { role: 'assistant', content: 'old', timestamp: c.startedAt, problems: 'bad' as unknown as string[] },
+    );
+    post(c);
+    const lists = [...$('messages').querySelectorAll('.turn-problems')];
+    expect(lists.map((l) => l.textContent)).toEqual(['k8s failed: <b>tool</b> error', 'rules did not finish before the turn ended']);
+    expect(lists[0].querySelector('b')).toBeNull();
+    expect(lists[0].closest('.message.crew')).not.toBeNull();
+    expect(lists[1].closest('.notice')).not.toBeNull();
+  });
+
+  it('marks the card of an agent that failed or could not run', () => {
+    const c = newConversation('ctx', 'team-a', 'lab-ops');
+    c.messages.push({ role: 'user', content: 'q', timestamp: c.startedAt });
+    const cards = [
+      { agent: 'k8s', status: 'finding', signal: 'failure', summary: 'tool error', stoodAside: false },
+      { agent: 'big', status: 'done', stoodAside: true, reason: 'model-too-large' },
+      { agent: 'fine', status: 'finding', signal: 'agree', summary: 'ok', stoodAside: false },
+    ];
+    post(c, { busy: true, turn: { startedAt: Date.now(), connected: true, threadId: 't', done: false, cards } });
+    const shown = [...$('messages').querySelectorAll('.finding-card')].map((el) => [el.className, el.querySelector('.finding-summary')?.textContent]);
+    expect(shown).toEqual([
+      ['finding-card finding-problem', 'failed: tool error'],
+      ['finding-card finding-problem', 'stood aside: no GPU in this cluster can hold its model'],
+      ['finding-card', 'agrees: ok'],
+    ]);
+  });
+
   it('hides the conversations pane, and remembers a dragged width', () => {
     $('toggle').click();
     expect($('sidebar').classList.contains('hidden')).toBe(true);

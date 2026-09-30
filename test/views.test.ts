@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { cardText } from '../src/discussion/cardText';
+import { agentProblems, cardText } from '../src/discussion/cardText';
 import type { CrewSummary } from '../src/k8s/crews';
 import { agentCount, crewAbout, crewDescription, crewTooltip, groupByNamespace } from '../src/views/treeModel';
-import { escapeHtml, formatAgo, formatDuration, htmlAttribute, isWebLink, META_SEPARATOR, metaLine } from '../src/webview/render';
+import { formatDuration } from '../src/text';
+import { escapeHtml, formatAgo, htmlAttribute, isWebLink, META_SEPARATOR, metaLine } from '../src/webview/render';
 
 const crew = (name: string, namespace: string, extra: Partial<CrewSummary> = {}): CrewSummary => ({ name, namespace, ready: true, phase: 'Ready', ...extra });
 
@@ -34,21 +35,62 @@ describe('tree model', () => {
 describe('cardText', () => {
   const base = { agent: 'a', status: '', stoodAside: false };
 
-  it('shows queued and analyzing with the GPU while an agent works', () => {
-    expect(cardText({ ...base, status: 'triaging', gpu: 'rig0' })).toEqual({ text: 'queued on rig0...', working: true });
-    expect(cardText({ ...base, status: 'evaluating' })).toEqual({ text: 'analyzing...', working: true });
+  it('shows every working status the gateway sends, with the GPU when known', () => {
+    expect(cardText({ ...base, status: 'waking' })).toEqual({ text: 'starting up', working: false, problem: false });
+    expect(cardText({ ...base, status: 'ready' })).toEqual({ text: 'ready', working: false, problem: false });
+    expect(cardText({ ...base, status: 'triaging', gpu: 'rig0' })).toEqual({ text: 'queued on rig0...', working: true, problem: false });
+    expect(cardText({ ...base, status: 'evaluating' })).toEqual({ text: 'analyzing...', working: true, problem: false });
   });
 
-  it('shows stood aside, the finding, or the last status when done', () => {
-    expect(cardText({ ...base, status: 'done', stoodAside: true, signal: 'stand_aside' }).text).toBe('stood aside');
-    expect(cardText({ ...base, status: 'finding', signal: 'concern', summary: 'key B is wrong' }).text).toBe('concern: key B is wrong');
-    expect(cardText({ ...base, status: 'done', signal: 'agree' }).text).toBe('agree');
+  it('says each verdict in plain words, marking a failure as a problem', () => {
+    expect(cardText({ ...base, status: 'finding', signal: 'agree', summary: 'rig0 has one' })).toEqual({ text: 'agrees: rig0 has one', working: false, problem: false });
+    expect(cardText({ ...base, status: 'finding', signal: 'concern', summary: 'key B is wrong' }).text).toBe('has a concern: key B is wrong');
+    expect(cardText({ ...base, status: 'finding', signal: 'block', summary: 'unsafe' }).text).toBe('objects: unsafe');
+    expect(cardText({ ...base, status: 'finding', signal: 'failure', summary: 'the MCP server did not answer' })).toEqual({ text: 'failed: the MCP server did not answer', working: false, problem: true });
+    expect(cardText({ ...base, status: 'finding', signal: 'failure' })).toEqual({ text: 'failed', working: false, problem: true });
+    expect(cardText({ ...base, status: 'done', signal: 'agree' }).text).toBe('agrees');
+    expect(cardText({ ...base, status: 'finding', signal: 'novel', summary: 'x' }).text).toBe('novel: x');
+    expect(cardText({ ...base, status: 'finding', summary: 'no verdict' }).text).toBe('no verdict');
+  });
+
+  it('shows stood aside, marking it a problem only when the agent could not run', () => {
+    expect(cardText({ ...base, status: 'done', stoodAside: true, signal: 'stand_aside' })).toEqual({ text: 'stood aside', working: false, problem: false });
+    expect(cardText({ ...base, status: 'done', stoodAside: true, reason: 'gpu-busy' }).problem).toBe(true);
+    expect(cardText({ ...base, status: 'done', stoodAside: true, reason: 'not-relevant' })).toEqual({ text: 'stood aside', working: false, problem: false });
     expect(cardText(base).text).toBe('waiting');
+  });
+
+  it('finds nothing on the prototype for a status, verdict or reason named like one of its keys', () => {
+    expect(cardText({ ...base, status: 'constructor' })).toEqual({ text: 'constructor', working: false, problem: false });
+    expect(cardText({ ...base, status: 'done', signal: 'toString' }).text).toBe('toString');
+    expect(cardText({ ...base, status: 'done', stoodAside: true, reason: 'constructor' })).toEqual({ text: 'stood aside', working: false, problem: false });
   });
 
   it('reads an artifact reference as what it is', () => {
     const summary = '[ARTIFACT key=lab-ops/t/node-watcher/agree-1 bytes=50032 - the FULL data is in the file ...';
-    expect(cardText({ ...base, status: 'finding', signal: 'agree', summary }).text).toBe("agree: wrote a 50032-byte result to the crew's artifact store");
+    expect(cardText({ ...base, status: 'finding', signal: 'agree', summary }).text).toBe("agrees: wrote a 50032-byte result to the crew's artifact store");
+  });
+});
+
+describe('agentProblems', () => {
+  it('lists agents that failed, could not run, or were still working, and nothing else', () => {
+    const cards = [
+      { agent: 'ok', status: 'finding', signal: 'agree', summary: 'fine', stoodAside: false },
+      { agent: 'quiet', status: 'done', signal: 'stand_aside', stoodAside: true },
+      { agent: 'broken', status: 'finding', signal: 'failure', summary: 'tool error', stoodAside: false },
+      { agent: 'crowded', status: 'done', stoodAside: true, reason: 'gpu-busy' },
+      { agent: 'slow', status: 'evaluating', gpu: 'rig0', stoodAside: false },
+      { agent: 'parked', status: 'waiting', stoodAside: false },
+      { agent: 'idle', status: 'ready', stoodAside: false },
+      { agent: 'booting', status: 'waking', stoodAside: false },
+    ];
+    expect(agentProblems(cards)).toEqual([
+      'broken failed: tool error',
+      'crowded stood aside: every GPU was busy, so it could not run',
+      'slow did not finish before the turn ended',
+      'parked did not finish before the turn ended',
+    ]);
+    expect(agentProblems([])).toEqual([]);
   });
 });
 

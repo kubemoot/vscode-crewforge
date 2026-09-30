@@ -1,5 +1,6 @@
 import type { KubeTransport } from '../k8s/request';
 import { titleFrom, type ChatSignal, type Conversation } from '../store/conversation';
+import { agentProblems } from './cardText';
 import { ask, DEFAULT_TIMING, streamTurn, type TurnEnd, type TurnTiming } from './client';
 import { initialTurn, reduce, type TurnState } from './reducer';
 import type { DiscussionEvent } from './types';
@@ -113,9 +114,11 @@ export class ChatSession {
   private async finish(end: TurnEnd, startedAt: number): Promise<void> {
     const c = this.conversation;
     const synthesis = this.turn?.synthesis;
-    const ended = { timestamp: now(), durationMs: Date.now() - startedAt };
+    const answered = Boolean(synthesis);
+    const problems = [...agentProblems(this.turn?.cards ?? []), ...endProblems(end, answered)];
+    const ended = { timestamp: now(), durationMs: Date.now() - startedAt, ...(problems.length > 0 ? { problems } : {}) };
     if (synthesis) c.messages.push({ role: 'assistant', content: synthesis, agentName: 'Crew', ...ended });
-    const notice = noticeFor(end, synthesis !== undefined);
+    const notice = noticeFor(end, answered);
     if (notice) c.messages.push({ role: 'system', content: notice, ...ended });
     // Saved before the turn ends on screen, so the refreshed conversation list includes it.
     try {
@@ -143,6 +146,15 @@ export function noticeFor(end: TurnEnd, answered: boolean): string | undefined {
     default:
       return answered ? undefined : end.message;
   }
+}
+
+/**
+ * How a turn that has an answer ended short, when it did: stopped, timed out, or ended by
+ * an error. A turn without an answer says so in its notice instead.
+ */
+export function endProblems(end: TurnEnd, answered: boolean): string[] {
+  if (!answered || end.kind === 'done') return [];
+  return [end.kind === 'aborted' ? 'You stopped the turn, so the answer may be incomplete.' : end.message];
 }
 
 function toSignal(e: DiscussionEvent): ChatSignal | undefined {

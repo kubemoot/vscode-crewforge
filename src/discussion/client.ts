@@ -1,7 +1,7 @@
 import { ConnectionError, KubeError, type KubeTransport } from '../k8s/request';
 import { startPath, streamPath } from './proxyPath';
 import { SseParser } from './sse';
-import { isTerminal, type DiscussionEvent } from './types';
+import { eventErrorText, isTerminal, type DiscussionEvent } from './types';
 
 /** Safety nets for a turn. The normal path ends on the stream's own `done` event. */
 export interface TurnTiming {
@@ -190,7 +190,7 @@ class TurnStream {
       } finally {
         if (e.id) this.lastEventId = e.id;
       }
-      if (isTerminal(e)) this.finish(e.type === 'done' ? { kind: 'done' } : { kind: 'error', message: e.error || e.content || 'The discussion reported an error' });
+      if (isTerminal(e)) this.finish(e.type === 'done' ? { kind: 'done' } : { kind: 'error', message: eventErrorText(e) });
     }
   }
 }

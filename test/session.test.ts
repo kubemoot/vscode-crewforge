@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { TurnTiming } from '../src/discussion/client';
-import { ChatSession, noticeFor, type SessionView } from '../src/discussion/session';
+import { ChatSession, endProblems, noticeFor, type SessionView } from '../src/discussion/session';
 import { newConversation, type Conversation } from '../src/store/conversation';
 import { FakeTransport, fixture } from './fakes';
 
@@ -153,6 +153,64 @@ describe('ChatSession', () => {
     expect(session.view.conversation.title).toBe('Still here');
   });
 
+  it('keeps what went wrong with the answer: a failed agent, and an error after the answer', async () => {
+    const { t, saved, session } = setup();
+    t.responses.push('{"conversationId":"c"}');
+    t.streams.push(
+      'data: {"type":"connected"}\n\ndata: {"type":"thread_found","threadId":"A"}\n\n' +
+        'data: {"type":"finding","agent":"k8s","signal":"failure","summary":"the MCP server did not answer"}\n\n' +
+        'data: {"type":"finding","agent":"rules","signal":"agree","summary":"fine"}\n\n' +
+        'data: {"type":"synthesis","content":"partial"}\n\ndata: {"type":"error","error":"consumer lost"}\n\n',
+    );
+    await session.send('q');
+    const answer = session.view.conversation.messages[1];
+    expect(answer).toMatchObject({ role: 'assistant', content: 'partial' });
+    expect(answer.problems).toEqual(['k8s failed: the MCP server did not answer', "The crew's discussion gateway reported an error: consumer lost"]);
+    expect(saved[0].messages[1].problems).toEqual(answer.problems);
+  });
+
+  it('lists the agents still working when a turn is stopped, under its notice', async () => {
+    const { t, session } = setup();
+    t.holdOpen = true;
+    t.responses.push('{"conversationId":"c"}');
+    t.streams.push('data: {"type":"connected"}\n\ndata: {"type":"thread_found","threadId":"A"}\n\ndata: {"type":"phase","agent":"k8s","status":"evaluating"}\n\n');
+    const turn = session.send('q');
+    await new Promise((r) => setTimeout(r, 5));
+    session.stop();
+    await turn;
+    expect(session.view.conversation.messages[1]).toMatchObject({ role: 'system', content: 'Stopped.', problems: ['k8s did not finish before the turn ended'] });
+  });
+
+  it('treats an empty answer as none, so its notice keeps what went wrong', async () => {
+    const { t, session } = setup();
+    t.responses.push('{"conversationId":"c"}');
+    t.streams.push(
+      'data: {"type":"connected"}\n\ndata: {"type":"thread_found","threadId":"A"}\n\n' +
+        'data: {"type":"finding","agent":"k8s","signal":"failure"}\n\ndata: {"type":"synthesis","content":""}\n\ndata: {"type":"error","error":"boom"}\n\n',
+    );
+    await session.send('q');
+    expect(session.view.conversation.messages.slice(1)).toMatchObject([
+      { role: 'system', content: "The crew's discussion gateway reported an error: boom", problems: ['k8s failed'] },
+    ]);
+  });
+
+  it('keeps no problems on a turn that went well, even with an agent that only started up', async () => {
+    const { t, session } = setup();
+    t.responses.push('{"conversationId":"c"}');
+    t.streams.push('data: {"type":"connected"}\n\ndata: {"type":"thread_found","threadId":"A"}\n\ndata: {"type":"phase","agent":"idle","status":"ready"}\n\ndata: {"type":"synthesis","content":"fine"}\n\ndata: {"type":"done"}\n\n');
+    await session.send('q');
+    expect(session.view.conversation.messages[1]).toMatchObject({ content: 'fine' });
+    expect(session.view.conversation.messages[1].problems).toBeUndefined();
+  });
+
+  it('keeps no problems on a turn that went well', async () => {
+    const { t, session } = setup();
+    t.responses.push('{"conversationId":"c"}');
+    t.streams.push(fixture('turn2.sse'));
+    await session.send('q');
+    expect(session.view.conversation.messages[1].problems).toBeUndefined();
+  });
+
   it('ignores blank questions and a second question while a turn runs', async () => {
     const { t, session } = setup();
     await session.send('   ');
@@ -226,5 +284,15 @@ describe('noticeFor', () => {
     expect(noticeFor({ kind: 'aborted' }, false)).toBe('Stopped.');
     expect(noticeFor({ kind: 'error', message: 'boom' }, false)).toBe('boom');
     expect(noticeFor({ kind: 'timeout', message: 'went quiet' }, false)).toBe('went quiet');
+  });
+});
+
+describe('endProblems', () => {
+  it('says how an answered turn ended short, and nothing otherwise', () => {
+    expect(endProblems({ kind: 'done' }, true)).toEqual([]);
+    expect(endProblems({ kind: 'aborted' }, true)).toEqual(['You stopped the turn, so the answer may be incomplete.']);
+    expect(endProblems({ kind: 'timeout', message: 'went quiet' }, true)).toEqual(['went quiet']);
+    expect(endProblems({ kind: 'error', message: 'boom' }, true)).toEqual(['boom']);
+    expect(endProblems({ kind: 'error', message: 'boom' }, false)).toEqual([]);
   });
 });

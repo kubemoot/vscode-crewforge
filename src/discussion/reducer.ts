@@ -1,4 +1,4 @@
-import type { DiscussionEvent } from './types';
+import { eventErrorText, type DiscussionEvent } from './types';
 
 /** What one agent is doing in the current turn, as the stream has told us. */
 export interface AgentCard {
@@ -49,7 +49,8 @@ const handlers: Record<string, Handler> = {
       signal: e.signal ?? c.signal,
       stoodAside: e.stood_aside ?? c.stoodAside,
       model: e.model ?? c.model,
-      reason: e.reason ?? c.reason,
+      // Why an agent waits or stood aside belongs to that status, not to the ones after it.
+      reason: e.reason,
     })),
   finding: (s, e) =>
     upsertCard(s, e.agent, (c) => ({
@@ -60,7 +61,7 @@ const handlers: Record<string, Handler> = {
     })),
   synthesis: (s, e) => ({ ...s, synthesis: e.content ?? s.synthesis }),
   done: (s) => ({ ...s, done: true }),
-  error: (s, e) => ({ ...s, done: true, error: e.error || e.content || 'The discussion reported an error' }),
+  error: (s, e) => ({ ...s, done: true, error: eventErrorText(e) }),
 };
 
 /**

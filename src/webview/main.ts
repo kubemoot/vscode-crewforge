@@ -1,8 +1,8 @@
 import { marked } from 'marked';
 import { cardText } from '../discussion/cardText';
 import { turnStatus } from '../discussion/turnStatus';
-import type { TurnState } from '../discussion/reducer';
-import type { ChatMessage, ConversationMeta } from '../store/conversation';
+import type { AgentCard, TurnState } from '../discussion/reducer';
+import { problemsOf, type ChatMessage, type ConversationMeta } from '../store/conversation';
 import type { HostMessage, WebviewMessage } from './protocol';
 import { escapeHtml, formatAgo, htmlAttribute, icons, isWebLink, metaLine } from './render';
 
@@ -243,14 +243,22 @@ function editMessage(index: number): void {
 
 function renderMessage(m: ChatMessage, index: number, busy: boolean): string {
   const meta = `<span class="message-time"${htmlAttribute('title', m.timestamp)}>${escapeHtml(metaLine(m.timestamp, m.durationMs))}</span>`;
-  if (m.role === 'system') return `<div class="notice"><div class="notice-text">${escapeHtml(m.content)}</div><div class="message-meta">${meta}</div></div>`;
+  if (m.role === 'system') return `<div class="notice" role="status"><div class="notice-text">${escapeHtml(m.content)}</div>${problemList(m)}<div class="message-meta">${meta}</div></div>`;
   const role = ROLES[m.role];
-  return `<div class="message ${role.cls}">${role.body(m)}
+  return `<div class="message ${role.cls}">${role.body(m)}${problemList(m)}
     <div class="message-meta">
       <span class="message-avatar" aria-hidden="true">${role.icon}</span>
       ${meta}
       ${actionRow(role.actions, index, busy)}
     </div></div>`;
+}
+
+/** What went wrong in the turn a message ends, as a list, or nothing when all went well. */
+function problemList(m: ChatMessage): string {
+  const problems = problemsOf(m);
+  if (problems.length === 0) return '';
+  const items = problems.map((p) => `<li>${escapeHtml(p)}</li>`).join('');
+  return `<div class="turn-problems" role="note" aria-label="What went wrong in this turn"><ul>${items}</ul></div>`;
 }
 
 /** The buttons under a message; ones that ask are disabled while a turn runs. */
@@ -267,17 +275,22 @@ function actionRow(actions: MessageAction[], index: number, busy: boolean): stri
   return `<div class="message-actions" role="toolbar" aria-label="Message actions">${buttons.join('')}</div>`;
 }
 
-/** The extra class of a card whose agent is still at work, by status. */
-const CARD_CLASSES: Record<string, string> = {
-  triaging: ' finding-triaging',
-  evaluating: ' finding-evaluating',
-};
+const CARD_CLASSES = new Map([
+  ['triaging', ' finding-triaging'],
+  ['evaluating', ' finding-evaluating'],
+]);
+
+/** The extra class of a card, by what its agent is doing or what went wrong for it. */
+function cardClass(card: AgentCard, problem: boolean): string {
+  if (problem) return ' finding-problem';
+  return CARD_CLASSES.get(card.status) ?? '';
+}
 
 function renderTurn(turn: TurnState): string {
   const cards = turn.cards
     .map((card) => {
-      const { text, working } = cardText(card);
-      const cls = CARD_CLASSES[card.status] ?? '';
+      const { text, working, problem } = cardText(card);
+      const cls = cardClass(card, problem);
       return `<div class="finding-card${cls}"><span class="finding-agent">${escapeHtml(card.agent)}</span>
         <span class="${working ? 'finding-status' : 'finding-summary'}">${escapeHtml(text)}</span>${working ? '<div class="finding-spinner"></div>' : ''}</div>`;
     })

@@ -27,8 +27,12 @@ in `KUBECONFIG` (merged as kubectl merges them), else `~/.kube/config`. To use a
 different file, run **CrewForge: Select Kubeconfig File** from the Command Palette; to
 change cluster, **CrewForge: Select Kubernetes Context** (the server icon on the view).
 
-While a turn runs, each agent has a card: queued, analyzing (with the GPU it landed on),
-then its finding or "stood aside". The crew's answer follows, rendered as Markdown, with
+While a turn runs, each agent has a card: starting up, queued, analyzing (with the GPU it
+landed on), then what it found, in plain words ("agrees", "has a concern", "objects",
+"failed"), or "stood aside". A card turns red when its agent failed or could not run. When
+the turn ends, anything that went wrong stays under the answer or notice: an agent that
+failed, could not run, or had not finished, an error from the crew's discussion gateway, a
+turn that timed out, or one you stopped. The crew's answer follows, rendered as Markdown, with
 its time and how long the crew took, for example `03:36 PM` and `42 s`. Ask again in the same
 panel and the crew keeps the conversation's context. The square button stops a turn.
 

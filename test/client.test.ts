@@ -65,7 +65,7 @@ describe('streamTurn', () => {
   it('ends with the error event message', async () => {
     const t = new FakeTransport();
     t.streams.push('data: {"type":"connected"}\n\ndata: {"type":"error","error":"no coordinator"}\n\n');
-    expect(await streamTurn(t, 'ns', 'crew', turn(), () => {}, new AbortController().signal, FAST)).toEqual({ kind: 'error', message: 'no coordinator' });
+    expect(await streamTurn(t, 'ns', 'crew', turn(), () => {}, new AbortController().signal, FAST)).toEqual({ kind: 'error', message: "The crew's discussion gateway reported an error: no coordinator" });
   });
 
   it('sends when the question was queued, so the gateway picks this turn\'s thread', async () => {

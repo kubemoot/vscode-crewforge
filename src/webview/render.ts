@@ -1,3 +1,5 @@
+import { formatDuration } from '../text';
+
 /** Escapes text for use inside HTML element content and attribute values. */
 export function escapeHtml(text: string): string {
   return text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#39;');
@@ -16,19 +18,6 @@ export function isWebLink(href: string): boolean {
 export function formatTime(iso: string): string {
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? '' : d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-}
-
-/**
- * How long a turn took: "42 s", "3 min 05 s". Empty when there is no valid duration, as
- * in conversations saved before durations were kept.
- */
-export function formatDuration(ms: unknown): string {
-  if (typeof ms !== 'number' || !Number.isFinite(ms) || ms < 0) return '';
-  const total = Math.round(ms / 1000);
-  if (total < 1) return 'under 1 s';
-  const minutes = Math.floor(total / 60);
-  const seconds = total % 60;
-  return minutes > 0 ? `${minutes} min ${String(seconds).padStart(2, '0')} s` : `${seconds} s`;
 }
 
 /** What separates the parts of a meta line: a middle dot with a space either side. */

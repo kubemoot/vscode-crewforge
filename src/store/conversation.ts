@@ -27,6 +27,11 @@ export interface ChatMessage {
    * saved before durations were kept have none.
    */
   durationMs?: number;
+  /**
+   * On the message that ends a turn: what went wrong in it, one plain line each, such as
+   * an agent that failed or a turn that was stopped. Absent when nothing did.
+   */
+  problems?: string[];
 }
 
 export interface ChatSignal {
@@ -75,6 +80,11 @@ export function questionFor(messages: ChatMessage[], index: number): string | un
     if (messages[i].role === 'user') return messages[i].content;
   }
   return undefined;
+}
+
+/** A message's problems, as far as a saved file holds a list of lines: never anything else. */
+export function problemsOf(m: ChatMessage): string[] {
+  return Array.isArray(m.problems) ? m.problems.filter((p): p is string => typeof p === 'string') : [];
 }
 
 export function metaOf(c: Conversation): ConversationMeta {
