@@ -2,14 +2,38 @@ import * as path from 'node:path';
 import * as vscode from 'vscode';
 import type { Connection } from '../connection';
 import type { Exec } from '../source/render';
-import { scaffoldCrew } from './scaffold';
+import { kmctlProblem, scaffoldCrew, type CreateCrewRequest } from './scaffold';
 import { nameProblem } from '../k8s/paths';
 
 /** The families kmctl's scaffold has model sizes for. */
 const MODEL_FAMILIES = ['qwen', 'gemma', 'llama', 'mistral'];
 
-/** Asks for a name, a size, and a model family, then scaffolds the crew in the workspace. */
+/**
+ * Checks kmctl first, then asks for a name, a size, and a model family, and scaffolds
+ * the crew in the workspace. A missing or old kmctl, or a failed scaffold, is a modal
+ * error, so it is seen before or instead of a toast that fades.
+ */
 export async function createCrewCommand(exec: Exec, connection: Pick<Connection, 'source' | 'context'> | undefined, afterCreate: () => void): Promise<void> {
+  const problem = await kmctlProblem(exec);
+  if (problem) {
+    void vscode.window.showErrorMessage(problem, { modal: true });
+    return;
+  }
+  const request = await askRequest();
+  if (!request) return;
+  let created: { root: string; warnings: string };
+  try {
+    created = await scaffoldCrew(exec, request, connection);
+  } catch (err) {
+    void vscode.window.showErrorMessage(`CrewForge could not create ${request.name}. ${err instanceof Error ? err.message : String(err)}`, { modal: true });
+    return;
+  }
+  afterCreate();
+  if (created.warnings) void vscode.window.showWarningMessage(created.warnings);
+  await vscode.window.showTextDocument(vscode.Uri.file(path.join(created.root, 'README.md')));
+}
+
+async function askRequest(): Promise<CreateCrewRequest | undefined> {
   const parent = await pickParent();
   if (!parent) return;
   const name = await vscode.window.showInputBox({ title: 'Create a crew', prompt: 'Crew name (lowercase letters, digits, hyphens)', validateInput: (value) => nameProblem('crew', value) });
@@ -23,11 +47,7 @@ export async function createCrewCommand(exec: Exec, connection: Pick<Connection,
     placeHolder: 'Which model family should its Models use?',
   });
   if (!family) return;
-  const request = { name, parent, members: Number(size.label), modelFamily: family.label === 'none' ? undefined : family.label };
-  const { root, warnings } = await scaffoldCrew(exec, request, connection);
-  afterCreate();
-  if (warnings) void vscode.window.showWarningMessage(warnings);
-  await vscode.window.showTextDocument(vscode.Uri.file(path.join(root, 'README.md')));
+  return { name, parent, members: Number(size.label), modelFamily: family.label === 'none' ? undefined : family.label };
 }
 
 async function pickParent(): Promise<string | undefined> {

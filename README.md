@@ -42,7 +42,8 @@ The **Crew Sources** view finds crew Helm charts and plain-manifest bundles in t
 workspace and, under each, every namespace its crew is deployed to.
 
 - **Create Crew** (the + on the view) scaffolds a working crew as a Helm chart with
-  `kmctl create --chart`; kmctl must be on your PATH.
+  `kmctl create --chart`. It needs [kmctl](https://github.com/kubemoot/kmctl/releases)
+  0.12.0 or later on your PATH, and checks the version before asking anything.
 - **Deploy Crew to a Namespace** (the upload icon on a source) deploys into any namespace
   you name, through Helm (`helm upgrade --install`), as a bundle (`kubectl apply
   --server-side`), or, for a crew Flux manages, by commit and push. A crew keeps the

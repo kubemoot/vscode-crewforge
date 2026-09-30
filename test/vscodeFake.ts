@@ -97,6 +97,8 @@ export const recorded = {
   executed: [] as { id: string; args: unknown[] }[],
   info: [] as string[],
   errors: [] as string[],
+  /** Error messages shown as modal dialogs (also in errors). */
+  modalErrors: [] as string[],
   clipboard: [] as string[],
   opened: [] as string[],
   panels: [] as FakePanel[],
@@ -127,6 +129,7 @@ export function resetFake(): void {
   recorded.executed = [];
   recorded.info = [];
   recorded.errors = [];
+  recorded.modalErrors = [];
   recorded.clipboard = [];
   recorded.opened = [];
   recorded.panels = [];
@@ -221,8 +224,9 @@ export const window = {
     recorded.info.push(message);
     return Promise.resolve(undefined);
   },
-  showErrorMessage(message: string) {
+  showErrorMessage(message: string, options?: { modal?: boolean }) {
     recorded.errors.push(message);
+    if (typeof options === 'object' && options?.modal) recorded.modalErrors.push(message);
     return Promise.resolve(undefined);
   },
   showQuickPick(items: unknown[]) {
