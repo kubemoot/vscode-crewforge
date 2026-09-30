@@ -24,6 +24,13 @@ describe('differences', () => {
     expect(differences({ cpu: 2, temp: '0.2', unset: null }, { cpu: '2', temp: 0.2 }, 'spec')).toEqual([]);
     expect(differences({ cpu: 2 }, { cpu: null }, 'spec')).toEqual(['spec.cpu']);
     expect(differences({ flag: false }, {}, 'spec')).toEqual(['spec.flag']);
+    expect(differences({ flag: true }, { flag: 'true' }, 'spec')).toEqual([]);
+  });
+
+  it('never matches a scalar with an object or array whose text happens to agree', () => {
+    expect(differences({ v: '[object Object]' }, { v: {} }, 'spec')).toEqual(['spec.v']);
+    expect(differences({ v: 'a,b' }, { v: ['a', 'b'] }, 'spec')).toEqual(['spec.v']);
+    expect(differences({ v: '' }, { v: [] }, 'spec')).toEqual(['spec.v']);
   });
 });
 

@@ -1,11 +1,12 @@
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { channelOf, deployedAtByRevision, stripDirty, deploymentDescription, deploymentsOf, historyLines, ANNOTATIONS } from '../src/source/deployments';
 import { discoverSources, type CrewSource } from '../src/source/discover';
 import { identify, normalizeRemote } from '../src/source/identity';
 import { crewOf, isKubemoot, objectKey, parseManifests, toYaml } from '../src/source/manifests';
-import { execProgram, readText, readYamlFiles } from '../src/source/nodeDeps';
+import { byCodeUnits, execProgram, readText, readYamlFiles } from '../src/source/nodeDeps';
 import { render, type Exec } from '../src/source/render';
 import type { CrewSummary } from '../src/k8s/crews';
 
@@ -43,6 +44,28 @@ describe('manifests', () => {
     expect(text).toContain('name: demo');
     expect(text).not.toMatch(/uid|resourceVersion|managedFields|annotations/);
     expect(toYaml({ apiVersion: 'v1', kind: 'X', metadata: { name: 'a', annotations: { keep: 'me' } } })).toContain('keep: me');
+    expect(toYaml({ apiVersion: 'v1', kind: 'X', metadata: { name: 'a' } })).not.toContain('annotations');
+  });
+});
+
+describe('readYamlFiles', () => {
+  it('reads only the YAML files in a folder, in code-unit order whatever the locale', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'crewforge-yaml-'));
+    try {
+      for (const name of ['b.yaml', 'a.yml', 'B.yaml', '_x.yaml', 'notes.txt']) fs.writeFileSync(path.join(dir, name), `name: ${name}\n`);
+      const files = await readYamlFiles(dir);
+      expect(files.map((f) => path.basename(f.file))).toEqual(['B.yaml', '_x.yaml', 'a.yml', 'b.yaml']);
+      expect(files[0].text).toBe('name: B.yaml\n');
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('orders by code units: negative, positive, or zero', () => {
+    expect(byCodeUnits('B', 'a')).toBe(-1);
+    expect(byCodeUnits('a', 'B')).toBe(1);
+    expect(byCodeUnits('a', 'a')).toBe(0);
+    expect(['10', '9', '1'].sort(byCodeUnits)).toEqual(['1', '10', '9']);
   });
 });
 

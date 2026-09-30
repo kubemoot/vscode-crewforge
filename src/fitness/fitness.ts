@@ -49,7 +49,7 @@ export function toRun(kind: FitnessKind, m: FitnessObject): FitnessRun {
     namespace: m.metadata.namespace ?? '',
     crew: m.spec?.crewRef ?? '',
     phase: status.phase ?? '',
-    createdAt: String(m.metadata.creationTimestamp ?? ''),
+    createdAt: typeof m.metadata.creationTimestamp === 'string' ? m.metadata.creationTimestamp : '',
     passed: status.passed,
     failed: status.failed,
     errored: status.errored,
@@ -109,7 +109,7 @@ export async function startRun(client: KubeTransport, kinds: Map<string, Kubemoo
 
 /** `<definition>-<yyyymmdd-hhmmss>`, cut so it stays a valid name. */
 export function runName(definition: string, now: Date): string {
-  const stamp = now.toISOString().replace(/[-:]/g, '').replace('T', '-').slice(0, 15);
+  const stamp = now.toISOString().replaceAll(/[-:]/g, '').replace('T', '-').slice(0, 15);
   return `${definition.slice(0, 63 - stamp.length - 1).replace(/-+$/, '')}-${stamp}`;
 }
 
@@ -138,5 +138,5 @@ export function runReport(run: FitnessRun): string {
 }
 
 function cell(text: string): string {
-  return text.replace(/\|/g, '\\|').replace(/\n/g, ' ');
+  return text.replaceAll('|', String.raw`\|`).replaceAll('\n', ' ');
 }

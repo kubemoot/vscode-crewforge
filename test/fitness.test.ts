@@ -33,6 +33,14 @@ describe('runs', () => {
     expect(isRunning(suite)).toBe(false);
   });
 
+  it('keeps a text creation time and drops any other kind', () => {
+    const at = (created: unknown) => toRun('CrewFitness', { apiVersion: 'kubemoot.ai/v1alpha1', kind: 'CrewFitness', metadata: { name: 'n', creationTimestamp: created } } as never).createdAt;
+    expect(at('2026-09-27T10:00:00Z')).toBe('2026-09-27T10:00:00Z');
+    expect(at({ seconds: 1 })).toBe('');
+    expect(at(1_758_967_200)).toBe('');
+    expect(at(null)).toBe('');
+  });
+
   it('writes a Markdown report with every assertion, escaping table cells', () => {
     const run: FitnessRun = { kind: 'CrewFitness', name: 'f', namespace: 'ns', crew: 'demo', phase: 'Failed', createdAt: '2026-09-27T10:00:00Z', assertions: [assertion(true), assertion(false)], error: 'judge down' };
     const report = runReport(run);

@@ -29,6 +29,15 @@ export function readText(file: string): Promise<string> {
 
 /** The .yaml and .yml files directly in a folder, in name order. */
 export async function readYamlFiles(dir: string): Promise<{ file: string; text: string }[]> {
-  const names = (await fs.readdir(dir)).filter((n) => /\.ya?ml$/.test(n)).sort();
+  const names = (await fs.readdir(dir)).filter((n) => /\.ya?ml$/.test(n)).sort(byCodeUnits);
   return Promise.all(names.map(async (n) => ({ file: path.join(dir, n), text: await readText(path.join(dir, n)) })));
+}
+
+/**
+ * Orders names by UTF-16 code units, the same on every machine whatever its locale, so a
+ * bundle's files are applied in one fixed order.
+ */
+export function byCodeUnits(a: string, b: string): number {
+  if (a < b) return -1;
+  return a > b ? 1 : 0;
 }

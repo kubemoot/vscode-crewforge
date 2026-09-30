@@ -57,9 +57,16 @@ function objectDifferences(want: Record<string, unknown>, have: unknown, at: str
   return Object.entries(want).flatMap(([key, value]) => differences(value, other[key], `${at}.${key}`));
 }
 
-/** YAML and JSON disagree on some scalars (a quantity written 2 comes back "2"); compare their text. */
+/**
+ * YAML and JSON disagree on some scalars (a quantity written 2 comes back "2"); compare
+ * their text. An object or array never matches a scalar.
+ */
 function sameScalar(want: unknown, have: unknown): boolean {
-  return want === have || (have !== undefined && have !== null && String(want) === String(have));
+  return want === have || (isScalar(want) && isScalar(have) && String(want) === String(have));
+}
+
+function isScalar(value: unknown): value is string | number | boolean | bigint {
+  return ['string', 'number', 'boolean', 'bigint'].includes(typeof value);
 }
 
 /** Counts per state, for a one-line summary. */
