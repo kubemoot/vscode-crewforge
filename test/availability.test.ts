@@ -168,6 +168,21 @@ describe('ChatPanel availability', () => {
     expect(states().at(-1)).toMatchObject({ view: { busy: false }, availability: { state: 'ready' } });
   });
 
+  it('names the question of the turn running now, and none when idle or closed', async () => {
+    expect(ChatPanel.activeTurn('ctx', crew())).toBeUndefined();
+    ChatPanel.show(Uri.file('/ext') as never, connection, crew(), store, undefined, links);
+    await settle();
+    expect(ChatPanel.activeTurn('ctx', crew())).toBeUndefined();
+    transport.responses.push('{"conversationId":"conv-1"}');
+    transport.holdOpen = true;
+    transport.streams.push(fixture('turn1.sse').split('data: {"type":"done"}')[0]);
+    void recorded.panels[0].webview.receive({ type: 'send', text: 'Which nodes?' });
+    await settle();
+    expect(ChatPanel.activeTurn('ctx', crew())).toBe('Which nodes?');
+    recorded.panels[0].dispose();
+    expect(ChatPanel.activeTurn('ctx', crew())).toBeUndefined();
+  });
+
   it('reads it again when a turn ends', async () => {
     ChatPanel.show(Uri.file('/ext') as never, connection, crew(), store, undefined, links);
     await settle();

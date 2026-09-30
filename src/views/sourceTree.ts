@@ -47,6 +47,10 @@ export class SourceTreeProvider implements vscode.TreeDataProvider<SourceNode> {
   private fresh?: SourceNode[];
   /** Where each source stands, by folder, shown on its line; set by the inner loop. */
   stateOf: (root: string) => SourceState | undefined = () => undefined;
+  /** Whether a crew has a fitness run in progress, by namespace and crew; its items then hide Run Fitness. */
+  fitnessBusy: (namespace: string, crew: string) => boolean = () => false;
+  /** Told the runs read for a deployment, so the busy state follows them. */
+  onRuns: (namespace: string, crew: string, runs: FitnessRun[]) => void = () => undefined;
 
   constructor(
     private readonly service: SourceService,
@@ -56,6 +60,12 @@ export class SourceTreeProvider implements vscode.TreeDataProvider<SourceNode> {
   /** Redraws the view, loading the workspace's sources again. */
   refresh(): void {
     this.fresh = undefined;
+    this.changed.fire(undefined);
+  }
+
+  /** Redraws the view from the sources already loaded, as when a crew's fitness state changes. */
+  redraw(): void {
+    this.fresh = this.roots.length ? this.roots : undefined;
     this.changed.fire(undefined);
   }
 
@@ -106,13 +116,13 @@ export class SourceTreeProvider implements vscode.TreeDataProvider<SourceNode> {
   getTreeItem(node: SourceNode): vscode.TreeItem {
     switch (node.kind) {
       case 'source':
-        return sourceItem(node.entry, this.stateOf(node.entry.source.root));
+        return sourceItem(node, this.stateOf(node.entry.source.root), this.sourceBusy(node.entry));
       case 'deployment':
-        return deploymentItem(node);
+        return deploymentItem(node, this.busy(node.deployment));
       case 'resource':
         return resourceItem(node);
       case 'fitness':
-        return fitnessItem();
+        return fitnessItem(node, this.busy(node.deployment));
       case 'run':
         return runItem(node);
       case 'declSection':
@@ -128,6 +138,15 @@ export class SourceTreeProvider implements vscode.TreeDataProvider<SourceNode> {
     const nodes = this.fresh;
     this.fresh = undefined;
     return nodes;
+  }
+
+  private busy(d: Deployment): boolean {
+    return this.fitnessBusy(d.namespace, d.crew.name);
+  }
+
+  /** A source is busy when one of its loaded deployments has a fitness run in progress. */
+  private sourceBusy(entry: SourceEntry): boolean {
+    return this.deploymentsOf(entry.source.root).some((n) => this.busy(n.deployment));
   }
 
   private async loadRoot(): Promise<SourceNode[]> {
@@ -181,6 +200,7 @@ export class SourceTreeProvider implements vscode.TreeDataProvider<SourceNode> {
     try {
       const connection = this.connection ?? this.connectTo();
       const runs = await this.service.runs(node.deployment, connection.client);
+      this.onRuns(node.deployment.namespace, node.deployment.crew.name, runs);
       if (runs.length === 0) return [{ kind: 'message', text: 'No fitness runs yet', icon: 'info' }];
       return runs.map((run) => ({ kind: 'run', entry: node.entry, deployment: node.deployment, run }));
     } catch (err) {
@@ -214,10 +234,16 @@ function deploymentChildren(node: Extract<SourceNode, { kind: 'deployment' }>): 
   return [...(node.drift ?? []).map((drift): SourceNode => ({ kind: 'resource', entry: node.entry, deployment: node.deployment, drift })), fitness];
 }
 
-function fitnessItem(): vscode.TreeItem {
+/** The suffix a node's context value carries while its crew has a fitness run in progress, which hides Run Fitness. */
+const running = (busy: boolean) => (busy ? '-running' : '');
+
+function fitnessItem(node: Extract<SourceNode, { kind: 'fitness' }>, busy: boolean): vscode.TreeItem {
   const item = new vscode.TreeItem('Fitness', vscode.TreeItemCollapsibleState.Collapsed);
   item.iconPath = new vscode.ThemeIcon('beaker');
-  item.contextValue = 'fitness';
+  item.description = busy ? 'run in progress' : undefined;
+  item.tooltip = 'Click for the Fitness dashboard; expand for the runs.';
+  item.contextValue = `fitness${running(busy)}`;
+  item.command = { command: 'crewforge.openFitnessDashboard', title: 'Open Fitness Dashboard', arguments: [node] };
   return item;
 }
 
@@ -226,6 +252,8 @@ const RUN_ICONS: Record<string, [string, string?]> = {
   Completed: ['pass', 'testing.iconPassed'],
   Failed: ['error', 'testing.iconFailed'],
   Error: ['error', 'testing.iconErrored'],
+  Cancelled: ['circle-slash', 'testing.iconSkipped'],
+  Paused: ['debug-pause'],
 };
 
 function runItem(node: Extract<SourceNode, { kind: 'run' }>): vscode.TreeItem {
@@ -234,10 +262,10 @@ function runItem(node: Extract<SourceNode, { kind: 'run' }>): vscode.TreeItem {
   item.description = runSummary(run);
   const error = run.error ? `\n${run.error}` : '';
   item.tooltip = `${run.kind} ${run.namespace}/${run.name}\n${runSummary(run)}${error}`;
-  const [icon, color] = isRunning(run) ? ['sync~spin'] : (RUN_ICONS[run.phase] ?? ['circle-outline']);
+  const [icon, color] = RUN_ICONS[run.phase] ?? (isRunning(run) ? ['sync~spin'] : ['circle-outline']);
   item.iconPath = new vscode.ThemeIcon(icon, color ? new vscode.ThemeColor(color) : undefined);
   item.contextValue = 'run';
-  item.command = { command: 'crewforge.showRun', title: 'Show Fitness Run', arguments: [node] };
+  item.command = { command: 'crewforge.openFitnessDashboard', title: 'Open Fitness Dashboard', arguments: [node] };
   return item;
 }
 
@@ -265,7 +293,7 @@ function declaredItem(declared: DeclaredItem): vscode.TreeItem {
   item.description = declared.description;
   item.tooltip = declared.file ? `${declared.tooltip}\n${declared.file}:${declared.line + 1}` : declared.tooltip;
   item.iconPath = new vscode.ThemeIcon(declared.icon, declared.warn ? new vscode.ThemeColor('list.warningForeground') : undefined);
-  item.contextValue = 'declared';
+  item.contextValue = declared.scenario ? 'declared-scenario' : 'declared';
   if (declared.file) item.command = openAt(declared.file, declared.line);
   return item;
 }
@@ -276,18 +304,21 @@ export function openAt(file: string, line: number): vscode.Command {
   return { command: 'vscode.open', title: 'Open', arguments: [vscode.Uri.file(file), { selection: at }] };
 }
 
-function sourceItem(entry: SourceEntry, state?: SourceState): vscode.TreeItem {
+function sourceItem(node: Extract<SourceNode, { kind: 'source' }>, state: SourceState | undefined, busy: boolean): vscode.TreeItem {
+  const { entry } = node;
   const item = new vscode.TreeItem(entry.source.label, vscode.TreeItemCollapsibleState.Collapsed);
   item.id = `source:${entry.source.root}`;
   const what = entry.crewName ? `crew ${entry.crewName} · ${entry.source.kind}` : entry.source.kind;
   item.description = state ? `${what} · ${state.text}` : what;
-  item.tooltip = [entry.source.root, entry.identity.id, entry.identity.revision ? `revision ${entry.identity.revision}` : ''].filter(Boolean).join('\n');
+  const lines = [entry.source.root, entry.identity.id, entry.identity.revision ? `revision ${entry.identity.revision}` : '', 'Click for the crew dashboard; expand for what it declares and where it runs.'];
+  item.tooltip = lines.filter(Boolean).join('\n');
   item.iconPath = new vscode.ThemeIcon(entry.source.kind === 'helm' ? 'package' : 'files');
-  item.contextValue = `source-${entry.source.kind}${state?.changed ? '-changed' : ''}`;
+  item.contextValue = `source-${entry.source.kind}${state?.changed ? '-changed' : ''}${running(busy)}`;
+  item.command = { command: 'crewforge.openCrewDashboard', title: 'Open Crew Dashboard', arguments: [node] };
   return item;
 }
 
-function deploymentItem(node: Extract<SourceNode, { kind: 'deployment' }>): vscode.TreeItem {
+function deploymentItem(node: Extract<SourceNode, { kind: 'deployment' }>, busy: boolean): vscode.TreeItem {
   const { deployment } = node;
   const item = new vscode.TreeItem(deployment.namespace, vscode.TreeItemCollapsibleState.Collapsed);
   const drift = node.error ? 'cannot compare' : summarize(node.drift ?? []);
@@ -295,7 +326,7 @@ function deploymentItem(node: Extract<SourceNode, { kind: 'deployment' }>): vsco
   item.tooltip = [deploymentTooltip(deployment, drift, node.error), ...fluxLines(node), ...historyLines(deployment)].join('\n');
   const inSync = drift === 'in sync';
   item.iconPath = new vscode.ThemeIcon(inSync ? 'pass' : 'diff', new vscode.ThemeColor(inSync ? 'testing.iconPassed' : 'list.warningForeground'));
-  item.contextValue = `deployment-${deployment.channel}`;
+  item.contextValue = `deployment-${deployment.channel}${running(busy)}`;
   return item;
 }
 

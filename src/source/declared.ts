@@ -2,6 +2,7 @@ import { agentLine, agentTooltip, byName, lines, missingPromptTooltip, promptLin
 import { promptModulesOf, serverRefs, toAgent, toPromptModule, toSkill, type AgentInfo, type PromptModuleInfo } from '../crew/details';
 import { isFitness } from '../fitness/fitness';
 import { scenarioLine, type Located } from './locate';
+import { scriptForm, scriptName } from './scripts';
 import { crewOf, isKubemoot, type Manifest } from './manifests';
 
 /** The groups a crew source's declarations appear in, in tree order. */
@@ -17,6 +18,21 @@ export interface DeclaredItem {
   warn?: boolean;
   file?: string;
   line: number;
+  /** For a fitness scenario: what kind it is, so it can be run, renamed, or deleted. */
+  scenario?: ScenarioRef;
+}
+
+/**
+ * A fitness scenario and where it lives: a script of a CrewFitnessSuite, a CrewFitness of
+ * its own, or a loose `.adl` or `.md` script in a fitness folder.
+ */
+export interface ScenarioRef {
+  kind: 'suite-script' | 'fitness' | 'script-file';
+  /** The scenario's name: its testRef, or the script file's name without extension. */
+  name: string;
+  /** The suite (or CrewFitness) that holds it. */
+  owner?: string;
+  file: string;
 }
 
 export interface Declarations {
@@ -34,7 +50,7 @@ const strings = (value: unknown): string[] => (Array.isArray(value) ? value.filt
  * servers, and fitness scenarios. `fitness` holds the fitness definitions found beside
  * the chart as well as the rendered ones; `readText` finds each scenario's line.
  */
-export async function declarationsOf(located: Located[], fitness: Located[], readText: (file: string) => Promise<string>): Promise<Declarations> {
+export async function declarationsOf(located: Located[], fitness: Located[], readText: (file: string) => Promise<string>, scripts: string[] = []): Promise<Declarations> {
   const where = new Map(located.map((l) => [l.manifest, l]));
   const at = (m?: Manifest): Pick<DeclaredItem, 'file' | 'line'> => {
     const l = m && where.get(m);
@@ -51,7 +67,7 @@ export async function declarationsOf(located: Located[], fitness: Located[], rea
       { section: 'prompts', items: promptsOf(agents, ofKind('PromptModule')).map((m) => ({ ...promptItem(m), ...at(m.object) })) },
       { section: 'skills', items: skills.map((s) => ({ label: s.name, description: `order ${s.order}`, tooltip: lines(`Skill ${s.name}`, `Order: ${s.order}`, s.description), icon: 'mortar-board', ...at(s.object) })) },
       { section: 'mcp', items: serversOf([...agents.map((a) => a.object as Obj), ...skills.map((s) => s.object as Obj)], ofKind('MCPServer'), at) },
-      { section: 'fitness', items: await scenariosOf(fitness, readText) },
+      { section: 'fitness', items: [...(await scenariosOf(fitness, readText)), ...scripts.map(scriptItem)] },
     ],
   };
 }
@@ -104,10 +120,26 @@ async function scenariosIn(l: Located, readText: (file: string) => Promise<strin
   const scripts = Array.isArray(m.spec?.scripts) ? (m.spec.scripts as { testRef?: unknown }[]) : [];
   const refs = scripts.map((s) => s?.testRef).filter((r): r is string => typeof r === 'string');
   if (m.kind !== 'CrewFitnessSuite' || refs.length === 0) {
-    return [{ label: m.metadata.name, description: m.kind, tooltip: `${m.kind} ${m.metadata.name}`, icon: 'beaker', file: l.file, line: l.line }];
+    const scenario: ScenarioRef | undefined = l.file ? { kind: 'fitness', name: text(m.spec?.testRef) ?? m.metadata.name, owner: m.metadata.name, file: l.file } : undefined;
+    return [{ label: m.metadata.name, description: m.kind, tooltip: `${m.kind} ${m.metadata.name}`, icon: 'beaker', file: l.file, line: l.line, scenario }];
   }
   const body = l.file ? await readText(l.file).catch(() => '') : '';
-  return refs.map((ref) => ({ label: ref, description: `suite ${m.metadata.name}`, tooltip: lines(`Scenario ${ref} of CrewFitnessSuite ${m.metadata.name}`, text(m.spec?.description)), icon: 'beaker', file: l.file, line: scenarioLine(body, l.line, ref) }));
+  return refs.map((ref) => ({
+    label: ref,
+    description: `suite ${m.metadata.name}`,
+    tooltip: lines(`Scenario ${ref} of CrewFitnessSuite ${m.metadata.name}`, text(m.spec?.description)),
+    icon: 'beaker',
+    file: l.file,
+    line: scenarioLine(body, l.line, ref),
+    scenario: l.file ? { kind: 'suite-script', name: ref, owner: m.metadata.name, file: l.file } : undefined,
+  }));
+}
+
+/** A loose fitness script, `<name>.adl` (ADL) or `<name>.md` (prose), in a fitness folder. */
+function scriptItem(file: string): DeclaredItem {
+  const name = scriptName(file);
+  const form = scriptForm(file);
+  return { label: name, description: `${form} script`, tooltip: `Fitness script ${file}`, icon: 'beaker', file, line: 0, scenario: { kind: 'script-file', name, file } };
 }
 
 /** The Kubemoot objects of one kind among located ones. */

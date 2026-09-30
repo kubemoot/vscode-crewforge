@@ -238,6 +238,54 @@
         "title": "Rename Crew",
         "category": "CrewForge",
         "icon": "$(edit)"
+      },
+      {
+        "command": "crewforge.openCrewDashboard",
+        "title": "Open Crew Dashboard",
+        "category": "CrewForge",
+        "icon": "$(dashboard)"
+      },
+      {
+        "command": "crewforge.openCrewsOverview",
+        "title": "Open Crews Overview",
+        "category": "CrewForge",
+        "icon": "$(dashboard)"
+      },
+      {
+        "command": "crewforge.openFitnessDashboard",
+        "title": "Open Fitness Dashboard",
+        "category": "CrewForge",
+        "icon": "$(pulse)"
+      },
+      {
+        "command": "crewforge.showConnectionInfo",
+        "title": "Show Connection Info",
+        "category": "CrewForge",
+        "icon": "$(plug)"
+      },
+      {
+        "command": "crewforge.addScenario",
+        "title": "Add Fitness Scenario (ADL or prose file)",
+        "category": "CrewForge",
+        "icon": "$(add)"
+      },
+      {
+        "command": "crewforge.renameScenario",
+        "title": "Rename Fitness Scenario",
+        "category": "CrewForge",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "crewforge.deleteScenario",
+        "title": "Delete Fitness Scenario (to trash, or out of its suite)",
+        "category": "CrewForge",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "crewforge.runScenario",
+        "title": "Run This Scenario Only (one iteration, dev namespace)",
+        "category": "CrewForge",
+        "icon": "$(play)"
       }
     ],
     "menus": {
@@ -279,17 +327,22 @@
           "command": "crewforge.createCrew",
           "when": "view == crewforge.crews",
           "group": "navigation@0"
+        },
+        {
+          "command": "crewforge.openCrewsOverview",
+          "when": "view == crewforge.crews",
+          "group": "navigation@0"
         }
       ],
       "view/item/context": [
         {
           "command": "crewforge.deployDev",
-          "when": "view == crewforge.sources && viewItem =~ /^source-(helm|bundle)$/",
+          "when": "view == crewforge.sources && viewItem =~ /^source-(helm|bundle)(-running)?$/",
           "group": "inline@1"
         },
         {
           "command": "crewforge.redeployDev",
-          "when": "view == crewforge.sources && viewItem =~ /^source-.*-changed$/",
+          "when": "view == crewforge.sources && viewItem =~ /^source-.*-changed/",
           "group": "inline@1"
         },
         {
@@ -309,7 +362,7 @@
         },
         {
           "command": "crewforge.runFitness",
-          "when": "view == crewforge.sources && viewItem =~ /^source-/",
+          "when": "view == crewforge.sources && viewItem =~ /^source-(?!.*-running$)/",
           "group": "loop@3"
         },
         {
@@ -319,7 +372,7 @@
         },
         {
           "command": "crewforge.askCrew",
-          "when": "view == crewforge.crews && viewItem == crew",
+          "when": "view == crewforge.crews && viewItem =~ /^crew(-flux)?(-running)?$/",
           "group": "inline"
         },
         {
@@ -339,7 +392,7 @@
         },
         {
           "command": "crewforge.removeDeployment",
-          "when": "view == crewforge.sources && viewItem =~ /^deployment-(helm|bundle)$/",
+          "when": "view == crewforge.sources && viewItem =~ /^deployment-(helm|bundle)(-running)?$/",
           "group": "deploy@9"
         },
         {
@@ -359,18 +412,13 @@
         },
         {
           "command": "crewforge.runFitness",
-          "when": "view == crewforge.sources && viewItem =~ /^deployment-/",
+          "when": "view == crewforge.sources && viewItem =~ /^deployment-(?!.*-running$)/",
           "group": "deploy@3"
         },
         {
           "command": "crewforge.followRollout",
-          "when": "view == crewforge.sources && viewItem == deployment-flux",
+          "when": "view == crewforge.sources && viewItem =~ /^deployment-flux(-running)?$/",
           "group": "inline@2"
-        },
-        {
-          "command": "crewforge.askCrew",
-          "when": "view == crewforge.crews && viewItem == crew-flux",
-          "group": "inline"
         },
         {
           "command": "crewforge.showLiveYaml",
@@ -379,22 +427,22 @@
         },
         {
           "command": "crewforge.showLiveYaml",
-          "when": "view == crewforge.crews && viewItem =~ /^crew(-flux)?$/",
+          "when": "view == crewforge.crews && viewItem =~ /^crew(-flux)?(-running)?$/",
           "group": "yaml@1"
         },
         {
           "command": "crewforge.showCrewBundleYaml",
-          "when": "view == crewforge.crews && viewItem =~ /^crew(-flux)?$/",
+          "when": "view == crewforge.crews && viewItem =~ /^crew(-flux)?(-running)?$/",
           "group": "yaml@2"
         },
         {
           "command": "crewforge.updateDeployment",
-          "when": "view == crewforge.crews && viewItem =~ /^crew(-flux)?$/",
+          "when": "view == crewforge.crews && viewItem =~ /^crew(-flux)?(-running)?$/",
           "group": "lifecycle@1"
         },
         {
           "command": "crewforge.deployRevision",
-          "when": "view == crewforge.crews && viewItem =~ /^crew(-flux)?$/",
+          "when": "view == crewforge.crews && viewItem =~ /^crew(-flux)?(-running)?$/",
           "group": "lifecycle@2"
         },
         {
@@ -404,12 +452,12 @@
         },
         {
           "command": "crewforge.followRollout",
-          "when": "view == crewforge.crews && viewItem == crew-flux",
+          "when": "view == crewforge.crews && viewItem =~ /^crew-flux(-running)?$/",
           "group": "lifecycle@4"
         },
         {
           "command": "crewforge.removeDeployment",
-          "when": "view == crewforge.crews && viewItem == crew",
+          "when": "view == crewforge.crews && viewItem =~ /^crew(-running)?$/",
           "group": "lifecycle@9"
         },
         {
@@ -434,7 +482,7 @@
         },
         {
           "command": "crewforge.showLiveYamlRaw",
-          "when": "view == crewforge.crews && (viewItem == liveObject || viewItem =~ /^crew(-flux)?$/)",
+          "when": "view == crewforge.crews && (viewItem == liveObject || viewItem =~ /^crew(-flux)?(-running)?$/)",
           "group": "yaml@3"
         },
         {
@@ -456,6 +504,56 @@
           "command": "crewforge.deleteSource",
           "when": "view == crewforge.sources && viewItem =~ /^source-/",
           "group": "source@9"
+        },
+        {
+          "command": "crewforge.openCrewDashboard",
+          "when": "view == crewforge.sources && viewItem =~ /^source-/",
+          "group": "dashboard@0"
+        },
+        {
+          "command": "crewforge.openCrewDashboard",
+          "when": "view == crewforge.crews && viewItem =~ /^crew/",
+          "group": "dashboard@0"
+        },
+        {
+          "command": "crewforge.openFitnessDashboard",
+          "when": "view == crewforge.sources && viewItem =~ /^(fitness|run)/",
+          "group": "dashboard@1"
+        },
+        {
+          "command": "crewforge.openFitnessDashboard",
+          "when": "view == crewforge.crews && viewItem =~ /^crew/",
+          "group": "dashboard@1"
+        },
+        {
+          "command": "crewforge.addScenario",
+          "when": "view == crewforge.sources && viewItem =~ /^(fitness|declSection-fitness)/",
+          "group": "scenario@1"
+        },
+        {
+          "command": "crewforge.addScenario",
+          "when": "view == crewforge.sources && viewItem == declSection-fitness",
+          "group": "inline"
+        },
+        {
+          "command": "crewforge.runScenario",
+          "when": "view == crewforge.sources && viewItem == declared-scenario",
+          "group": "inline"
+        },
+        {
+          "command": "crewforge.runScenario",
+          "when": "view == crewforge.sources && viewItem == declared-scenario",
+          "group": "scenario@1"
+        },
+        {
+          "command": "crewforge.renameScenario",
+          "when": "view == crewforge.sources && viewItem == declared-scenario",
+          "group": "scenario@2"
+        },
+        {
+          "command": "crewforge.deleteScenario",
+          "when": "view == crewforge.sources && viewItem == declared-scenario",
+          "group": "scenario@9"
         }
       ],
       "editor/context": [
@@ -533,6 +631,30 @@
         {
           "command": "crewforge.renameCrew",
           "when": "false"
+        },
+        {
+          "command": "crewforge.openCrewDashboard",
+          "when": "false"
+        },
+        {
+          "command": "crewforge.openFitnessDashboard",
+          "when": "false"
+        },
+        {
+          "command": "crewforge.addScenario",
+          "when": "false"
+        },
+        {
+          "command": "crewforge.renameScenario",
+          "when": "false"
+        },
+        {
+          "command": "crewforge.deleteScenario",
+          "when": "false"
+        },
+        {
+          "command": "crewforge.runScenario",
+          "when": "false"
         }
       ],
       "explorer/context": [
@@ -591,6 +713,11 @@
           "type": "string",
           "default": "",
           "markdownDescription": "URL of the Kubemoot dashboard for this cluster, opened from **Powered by Kubemoot** in a chat and from **Open this turn in the Kubemoot dashboard** under a crew's answer (shown only when this is set). With a `kubectl port-forward` to the dashboard service, use its local address, for example `http://localhost:8080/dashboard`."
+        },
+        "crewforge.dashboardService": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "The Kubemoot dashboard's Service, as `namespace/name:port`, which the crew and fitness dashboards read through the Kubernetes service proxy (read-only) for thread counts, discussion failures, fitness scores, and archived iterations. Empty finds the Service labelled `app.kubernetes.io/name=kubemoot-dashboard`."
         }
       }
     }

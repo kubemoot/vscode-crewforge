@@ -28,6 +28,14 @@ const builds = [
     format: 'iife',
     target: 'es2022',
   },
+  {
+    ...common,
+    entryPoints: ['src/webview/page.ts'],
+    outfile: 'dist/page.js',
+    platform: 'browser',
+    format: 'iife',
+    target: 'es2022',
+  },
 ];
 
 if (watch) {

@@ -192,7 +192,7 @@ export const recorded = {
   revealed: [] as { view: string; node: unknown; options?: unknown }[],
   /** Values stored in the fake workspace state. */
   workspaceState: new Map<string, unknown>(),
-  /** File system watchers created, in order. */
+  /** File system watchers created, by glob. */
   watchers: [] as FakeWatcher[],
   folderListeners: [] as Listener<unknown>[],
   /** Paths moved to the trash (or deleted) through workspace.fs. */

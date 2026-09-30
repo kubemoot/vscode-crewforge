@@ -16,6 +16,8 @@ import { locationOf, render, renderWithOrigins, type Rendered, type RenderDeps, 
 
 export interface SourceDeps extends RenderDeps {
   readText: ReadText;
+  /** The loose fitness scripts (`.adl`, `.md` other than README.md) directly in a folder; none when it does not exist. */
+  listScripts?: (dir: string) => Promise<string[]>;
   /** Chart.yaml paths and every other YAML path in the workspace. */
   listFiles: () => Promise<{ charts: string[]; yamls: string[] }>;
 }
@@ -120,13 +122,20 @@ export class SourceService {
   /** What a source declares, each item with the file and line it starts at. */
   async declarations(entry: SourceEntry): Promise<Declarations> {
     const located = await this.located(entry);
-    return declarationsOf(located, await this.fitnessLocated(entry, located), this.deps.readText);
+    return declarationsOf(located, await this.fitnessLocated(entry, located), this.deps.readText, await this.scripts(entry));
   }
 
   /** The source's objects, where each starts in its files; the render from loading serves the probe namespace. */
   async located(entry: SourceEntry, namespace = PROBE_NAMESPACE): Promise<Located[]> {
     const rendered = namespace === PROBE_NAMESPACE && entry.rendered ? entry.rendered : await renderWithOrigins(entry.source, { namespace }, this.deps);
     return locate(rendered, this.deps.readText);
+  }
+
+  /** The loose fitness scripts of a source, from its fitness folders. */
+  async scripts(entry: SourceEntry): Promise<string[]> {
+    const list = this.deps.listScripts;
+    if (!list) return [];
+    return (await Promise.all(fitnessFolders(entry.source).map((f) => list(f)))).flat();
   }
 
   private async fitnessLocated(entry: SourceEntry, located: Located[]): Promise<Located[]> {

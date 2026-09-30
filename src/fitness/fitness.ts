@@ -25,9 +25,37 @@ export interface FitnessRun {
   errored?: number;
   assertions: Assertion[];
   error?: string;
+  /** A suite's planned and finished iterations. */
+  iterationsTotal?: number;
+  iterationsCompleted?: number;
+  startedAt?: string;
+  completedAt?: string;
+  /** A single CrewFitness's own duration. */
+  durationMs?: number;
+  /** A suite's run id, and where its XLSX is once written. */
+  runId?: string;
+  artifact?: { bucket: string; objectKey: string };
+  conditions?: { type: string; status: string; reason?: string; message?: string }[];
+  /** A suite's spec.suspend and spec.cancel, as set. */
+  suspend?: boolean;
+  cancel?: boolean;
+  /** A suite's scripts, by testRef, in order. */
+  scripts?: string[];
+  /** Started by CrewForge's Run Scenario: one scenario, one iteration. */
+  single?: boolean;
+  /** For an iteration a suite ran: the suite's name, and the scenario it ran. */
+  iterationOf?: string;
+  testRef?: string;
 }
 
-const RUNNING = new Set(['', 'Pending', 'Running']);
+/** Marks a run CrewForge started for one scenario, so its dashboard offers Stop. */
+export const SINGLE_SCENARIO = 'crewforge.kubemoot.ai/single-scenario';
+
+/** The label the operator puts on each iteration a suite runs, naming the suite. */
+export const SUITE_LABEL = 'kubemoot.ai/fitness-suite';
+
+/** Phases of a run still going: waiting, running, or paused between iterations. */
+const RUNNING = new Set(['', 'Pending', 'Running', 'Paused']);
 
 export function isFitness(m: Manifest): boolean {
   return (FITNESS_KINDS as readonly string[]).includes(m.kind);
@@ -37,9 +65,26 @@ export function isRunning(run: FitnessRun): boolean {
   return RUNNING.has(run.phase);
 }
 
+interface FitnessStatus {
+  phase?: string;
+  passed?: number;
+  failed?: number;
+  errored?: number;
+  assertions?: Assertion[];
+  error?: string;
+  iterationsTotal?: number;
+  iterationsCompleted?: number;
+  startedAt?: string;
+  completedAt?: string;
+  durationMs?: number;
+  runId?: string;
+  artifactRef?: { bucket: string; objectKey: string };
+  conditions?: FitnessRun['conditions'];
+}
+
 interface FitnessObject extends Manifest {
-  spec?: { crewRef?: string };
-  status?: { phase?: string; passed?: number; failed?: number; errored?: number; assertions?: Assertion[]; error?: string };
+  spec?: { crewRef?: string; testRef?: string; suspend?: boolean; cancel?: boolean; scripts?: { testRef?: string }[] };
+  status?: FitnessStatus;
 }
 
 export function toRun(kind: FitnessKind, m: FitnessObject): FitnessRun {
@@ -56,6 +101,25 @@ export function toRun(kind: FitnessKind, m: FitnessObject): FitnessRun {
     errored: status.errored,
     assertions: status.assertions ?? [],
     error: status.error || undefined,
+    ...progressOf(status),
+    ...controlsOf(m),
+  };
+}
+
+function progressOf(status: FitnessStatus): Partial<FitnessRun> {
+  const { iterationsTotal, iterationsCompleted, startedAt, completedAt, durationMs, runId, conditions } = status;
+  return { iterationsTotal, iterationsCompleted, startedAt, completedAt, durationMs, runId, artifact: status.artifactRef, conditions };
+}
+
+function controlsOf(m: FitnessObject): Partial<FitnessRun> {
+  const scripts = m.spec?.scripts?.map((s) => s?.testRef).filter((r): r is string => typeof r === 'string');
+  return {
+    suspend: m.spec?.suspend === true,
+    cancel: m.spec?.cancel === true,
+    scripts,
+    single: m.metadata.annotations?.[SINGLE_SCENARIO] === 'true',
+    iterationOf: m.metadata.labels?.[SUITE_LABEL],
+    testRef: m.spec?.testRef,
   };
 }
 
@@ -64,8 +128,43 @@ export async function listRuns(client: KubeTransport, kinds: Map<string, Kubemoo
   const lists = await Promise.all(FITNESS_KINDS.filter((k) => kinds.has(k)).map((k) => listKind(client, kinds.get(k) as KubemootKind, k, namespace)));
   return lists
     .flat()
-    .filter((run) => run.crew === crew)
+    .filter((run) => run.crew === crew && !run.iterationOf)
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || a.name.localeCompare(b.name));
+}
+
+/** The iterations a suite has run so far, as CrewFitness objects the operator labels with the suite; it removes them after the run. */
+export async function listIterations(client: KubeTransport, kinds: Map<string, KubemootKind>, namespace: string, suite: string): Promise<FitnessRun[]> {
+  const kind = kinds.get('CrewFitness');
+  if (!kind) return [];
+  return (await listKind(client, kind, 'CrewFitness', namespace)).filter((run) => run.iterationOf === suite);
+}
+
+/** One scenario of a suite run: how its iterations went. */
+export interface ScenarioResult {
+  scenario: string;
+  done: number;
+  passed: number;
+  failed: number;
+  errored: number;
+  running: number;
+  /** The mean duration of its finished iterations. */
+  meanMs?: number;
+}
+
+const OUTCOME: Record<string, keyof Pick<ScenarioResult, 'passed' | 'failed' | 'errored'>> = { Passed: 'passed', Failed: 'failed', Error: 'errored', Timeout: 'errored' };
+
+/** Groups iterations by scenario, in the suite's script order, then any other scenario by name. */
+export function scenarioResults(scripts: string[], iterations: { scenario: string; status: string; durationMs?: number }[]): ScenarioResult[] {
+  const order = [...scripts, ...[...new Set(iterations.map((i) => i.scenario))].filter((s) => !scripts.includes(s)).sort()];
+  return order.map((scenario) => {
+    const mine = iterations.filter((i) => i.scenario === scenario);
+    const finished = mine.filter((i) => OUTCOME[i.status]);
+    const result: ScenarioResult = { scenario, done: finished.length, passed: 0, failed: 0, errored: 0, running: mine.length - finished.length };
+    for (const i of finished) result[OUTCOME[i.status]]++;
+    const timed = finished.map((i) => i.durationMs ?? 0).filter((ms) => ms > 0);
+    if (timed.length) result.meanMs = timed.reduce((a, b) => a + b, 0) / timed.length;
+    return result;
+  });
 }
 
 async function listKind(client: KubeTransport, kind: KubemootKind, fitnessKind: FitnessKind, namespace: string): Promise<FitnessRun[]> {

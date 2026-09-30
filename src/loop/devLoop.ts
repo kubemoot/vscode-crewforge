@@ -119,6 +119,12 @@ export class DevLoop {
     if (node) await this.deps.chat.ask(node.deployment.crew);
   }
 
+  /** The dev deployment of the target's source, or undefined after saying why there is none. */
+  async devDeploymentOf(target?: LoopTarget): Promise<DeploymentNode | undefined> {
+    const entry = deployable(await this.entryFor(target));
+    return entry && this.deploymentOf(entry);
+  }
+
   /** Runs a fitness definition against the dev deployment; `rerun` starts the last one again without asking. */
   async runFitness(target?: LoopTarget, rerun = false): Promise<void> {
     const entry = deployable(await this.entryFor(target));

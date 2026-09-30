@@ -46,7 +46,7 @@ describe('CrewTreeProvider', () => {
     expect(item.description).toBe('Ready, 2 agents');
     expect(item.contextValue).toBe('crew');
     expect((item.iconPath as ThemeIcon).id).toBe('pass-filled');
-    expect(item.command?.command).toBe('crewforge.askCrew');
+    expect(item.command?.command).toBe('crewforge.openCrewDashboard');
 
     const notReady = tree.getTreeItem((await tree.getChildren(roots[1]))[0]);
     expect((notReady.iconPath as ThemeIcon).id).toBe('circle-large-outline');

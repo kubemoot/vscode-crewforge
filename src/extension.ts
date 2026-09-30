@@ -15,7 +15,13 @@ import { registerLoop } from './loop/register';
 import { agentSourceMap } from './source/declared';
 import { readAvailability } from './discussion/availability';
 import { LIVE_SCHEME, LiveDocuments } from './views/liveDocuments';
-import { execProgram, readText, readYamlFiles } from './source/nodeDeps';
+import { execProgram, listScripts, readText, readYamlFiles } from './source/nodeDeps';
+import { connectionLines } from './connectionInfo';
+import { Dashboards } from './dashboard/register';
+import { FitnessActivity } from './fitness/controls';
+import { registerScenarioCommands } from './fitness/scenarioCommands';
+import { ScenarioFiles } from './fitness/scenarios';
+import { LoopMemory } from './loop/state';
 import { SourceService } from './source/service';
 import { SourceWatcher } from './source/watcher';
 import { IGNORED_GLOB } from './source/ignored';
@@ -34,7 +40,7 @@ export function activate(context: vscode.ExtensionContext): void {
   const store = new ConversationStore(path.join(context.globalStorageUri.fsPath, 'conversations'));
   const tree = new CrewTreeProvider();
   const view = vscode.window.createTreeView('crewforge.crews', { treeDataProvider: tree, showCollapseAll: true });
-  const service = new SourceService({ exec: execProgram, readText, readYamlFiles, listFiles: listWorkspaceFiles });
+  const service = new SourceService({ exec: execProgram, readText, readYamlFiles, listFiles: listWorkspaceFiles, listScripts });
   const sources = new SourceTreeProvider(service);
   const links: ChatLinks = {
     agentSources: async (crew) => {
@@ -47,7 +53,12 @@ export function activate(context: vscode.ExtensionContext): void {
     },
   };
   const commands = new Commands(context.extensionUri, tree, view, store, links);
-  const fitness = new FitnessCommands(service, () => sources.refresh());
+  const activity = new FitnessActivity();
+  const fitness = new FitnessCommands(service, () => sources.refresh(), undefined, activity);
+  const busy = (namespace: string, crew: string) => activity.isBusy(namespace, crew);
+  sources.fitnessBusy = busy;
+  tree.fitnessBusy = busy;
+  sources.onRuns = (namespace, crew, runs) => activity.record(namespace, crew, runs);
   const sourcesView = vscode.window.createTreeView('crewforge.sources', { treeDataProvider: sources, showCollapseAll: true });
   const documents = new ManifestDocuments();
   const output = vscode.window.createOutputChannel('CrewForge');
@@ -79,6 +90,24 @@ export function activate(context: vscode.ExtensionContext): void {
     output,
     guard,
   });
+  const dashboards = new Dashboards({
+    extensionUri: context.extensionUri,
+    crewforgeVersion: (context.extension?.packageJSON as { version?: string } | undefined)?.version ?? 'dev',
+    connect: () => tree.connection ?? connect(),
+    sources,
+    service,
+    details: (crew) => tree.detailsOf(crew),
+    store,
+    memory: new LoopMemory(context.workspaceState),
+    exec: execProgram,
+    activity,
+  });
+  tree.connectionItem = () => {
+    const info = dashboards.status.latest;
+    return info && { label: info.context ?? 'Not connected', tooltip: [...connectionLines(info), '', 'Click for the Crews Overview.'].join('\n') };
+  };
+  const updateStatus = () => void dashboards.status.update().then(() => tree.refresh());
+  updateStatus();
   const created = (root: string) =>
     showCreatedCrew(root, { reload: () => sources.reload(), reveal: (node) => sourcesView.reveal(node, { select: true, focus: true, expand: true }) });
   /** A lifecycle command from either view: a live crew goes through the adapter, a Crew Sources node straight on. */
@@ -100,8 +129,19 @@ export function activate(context: vscode.ExtensionContext): void {
       if (e.affectsConfiguration('crewforge')) {
         tree.refresh();
         sources.refresh();
+        updateStatus();
       }
     }),
+    dashboards,
+    activity.onDidChange(() => {
+      sources.redraw();
+      tree.refresh();
+    }),
+    vscode.commands.registerCommand('crewforge.openCrewDashboard', (node?: SourceNode | CrewNode) => guard(async () => void dashboards.openCrew(node))),
+    vscode.commands.registerCommand('crewforge.openCrewsOverview', () => guard(async () => void dashboards.openOverview())),
+    vscode.commands.registerCommand('crewforge.openFitnessDashboard', (node?: SourceNode | CrewNode) => guard(async () => void dashboards.openFitness(node))),
+    vscode.commands.registerCommand('crewforge.showConnectionInfo', () => guard(() => dashboards.showConnection())),
+    ...registerScenarioCommands({ files: new ScenarioFiles(), fitness, devDeployment: (node) => loop.devDeploymentOf(node), readText, reload: () => sources.reload(), guard }),
     sourcesView,
     new SourceWatcher(() => sources.known.map((e) => e.source.root), () => sources.reload()),
     vscode.languages.registerCodeLensProvider({ language: 'yaml' }, new CrewCodeLens(sources)),

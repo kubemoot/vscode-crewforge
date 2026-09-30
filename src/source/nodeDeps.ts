@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import type { Exec } from './render';
+import { isScriptFile } from './scripts';
 
 /**
  * Runs a program without a shell, feeding `input` to its standard input. A missing
@@ -40,4 +41,15 @@ export async function readYamlFiles(dir: string): Promise<{ file: string; text: 
 export function byCodeUnits(a: string, b: string): number {
   if (a < b) return -1;
   return a > b ? 1 : 0;
+}
+
+/** The loose fitness scripts directly in a folder: `.adl` files and `.md` files other than README.md, in name order; none when the folder does not exist. */
+export async function listScripts(dir: string): Promise<string[]> {
+  let names: string[];
+  try {
+    names = await fs.readdir(dir);
+  } catch {
+    return [];
+  }
+  return names.filter(isScriptFile).sort(byCodeUnits).map((n) => path.join(dir, n));
 }

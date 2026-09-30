@@ -9,6 +9,7 @@ import { errorLabel, errorText } from './errors';
 import { crewDescription, crewTooltip, groupByNamespace, type NamespaceGroup } from './treeModel';
 
 export type CrewNode =
+  | { kind: 'connection'; label: string; tooltip: string }
   | { kind: 'namespace'; group: NamespaceGroup }
   | { kind: 'crew'; crew: CrewSummary }
   | DetailNode
@@ -26,6 +27,10 @@ export class CrewTreeProvider implements vscode.TreeDataProvider<CrewNode> {
   private kinds?: Promise<Map<string, KubemootKind>>;
   private readonly details = new Map<string, CrewDetails>();
   connection?: Connection;
+  /** The first item: what the view is connected to, which opens the Crews Overview; none until set. */
+  connectionItem: () => { label: string; tooltip: string } | undefined = () => undefined;
+  /** Whether a crew has a fitness run in progress; its item then hides Run Fitness. */
+  fitnessBusy: (namespace: string, crew: string) => boolean = () => false;
 
   constructor(private readonly connectTo: () => Connection = () => connect()) {}
 
@@ -62,10 +67,12 @@ export class CrewTreeProvider implements vscode.TreeDataProvider<CrewNode> {
 
   getTreeItem(node: CrewNode): vscode.TreeItem {
     switch (node.kind) {
+      case 'connection':
+        return connectionItem(node);
       case 'namespace':
         return namespaceItem(node.group);
       case 'crew':
-        return crewItem(node.crew, this.details.get(crewKey(node.crew))?.archetype);
+        return crewItem(node.crew, this.details.get(crewKey(node.crew))?.archetype, this.fitnessBusy(node.crew.namespace, node.crew.name));
       case 'section':
         return sectionItem(node);
       case 'member':
@@ -120,8 +127,21 @@ export class CrewTreeProvider implements vscode.TreeDataProvider<CrewNode> {
       const message = errorText(err);
       return [{ kind: 'message', text: errorLabel(message), detail: message }];
     }
-    return groupByNamespace(this.crews).map((group) => ({ kind: 'namespace', group }));
+    const connection = this.connectionItem();
+    const head: CrewNode[] = connection ? [{ kind: 'connection', ...connection }] : [];
+    return [...head, ...groupByNamespace(this.crews).map((group): CrewNode => ({ kind: 'namespace', group }))];
   }
+}
+
+function connectionItem(node: Extract<CrewNode, { kind: 'connection' }>): vscode.TreeItem {
+  const item = new vscode.TreeItem(node.label, vscode.TreeItemCollapsibleState.None);
+  item.id = 'connection';
+  item.description = 'Crews Overview';
+  item.tooltip = node.tooltip;
+  item.iconPath = new vscode.ThemeIcon('plug');
+  item.contextValue = 'connection';
+  item.command = { command: 'crewforge.openCrewsOverview', title: 'Open Crews Overview' };
+  return item;
 }
 
 function namespaceItem(group: NamespaceGroup): vscode.TreeItem {
@@ -144,14 +164,14 @@ export function crewContext(crew: CrewSummary): string {
   return channelOf(crew) === 'flux' ? 'crew-flux' : 'crew';
 }
 
-function crewItem(crew: CrewSummary, archetype?: string): vscode.TreeItem {
+function crewItem(crew: CrewSummary, archetype: string | undefined, busy: boolean): vscode.TreeItem {
   const item = new vscode.TreeItem(crew.name, vscode.TreeItemCollapsibleState.Collapsed);
   item.id = `crew:${crew.namespace}/${crew.name}`;
   item.description = crewDescription(crew);
   item.tooltip = crewTooltip(crew, archetype);
-  item.contextValue = crewContext(crew);
+  item.contextValue = `${crewContext(crew)}${busy ? '-running' : ''}`;
   const { icon, color } = readyIcon(crew.ready);
   item.iconPath = new vscode.ThemeIcon(icon, color ? new vscode.ThemeColor(color) : undefined);
-  item.command = { command: 'crewforge.askCrew', title: 'Ask Crew', arguments: [{ kind: 'crew', crew }] };
+  item.command = { command: 'crewforge.openCrewDashboard', title: 'Open Crew Dashboard', arguments: [{ kind: 'crew', crew }] };
   return item;
 }

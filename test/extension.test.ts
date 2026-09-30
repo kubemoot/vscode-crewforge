@@ -175,6 +175,31 @@ describe('commands', () => {
     expect(recorded.warnings).toEqual([]);
   });
 
+  it('opens the dashboards and the connection info, and routes the scenario commands', async () => {
+    const crew = { name: 'lab-ops', namespace: 'team-a', ready: true, phase: 'Ready' };
+    await run('crewforge.openCrewsOverview');
+    await run('crewforge.openCrewDashboard', { kind: 'crew', crew });
+    await run('crewforge.openFitnessDashboard', { kind: 'crew', crew });
+    await run('crewforge.openCrewDashboard');
+    await run('crewforge.openFitnessDashboard', { kind: 'message', text: 'x' });
+    expect(recorded.panels.map((p) => p.title)).toEqual(['Crews Overview', 'Crew lab-ops', 'Fitness lab-ops']);
+    recorded.quickPicks.push(undefined);
+    await run('crewforge.showConnectionInfo');
+    for (const id of ['crewforge.addScenario', 'crewforge.renameScenario', 'crewforge.deleteScenario', 'crewforge.runScenario']) await run(id, { kind: 'message', text: 'x' });
+    expect(recorded.errors).toEqual([]);
+  });
+
+  it('follows fitness runs a view reads: the crew is marked busy and both views redraw', async () => {
+    const sources = recorded.treeViews[1].options.treeDataProvider as { onRuns: (ns: string, crew: string, runs: unknown[]) => void; fitnessBusy: (ns: string, crew: string) => boolean };
+    const crews = recorded.treeViews[0].options.treeDataProvider as { fitnessBusy: (ns: string, crew: string) => boolean; onDidChangeTreeData: (l: () => void) => void };
+    let redrawn = 0;
+    crews.onDidChangeTreeData(() => redrawn++);
+    sources.onRuns('team-a', 'lab-ops', [{ name: 'r', phase: 'Running' }]);
+    expect(sources.fitnessBusy('team-a', 'lab-ops')).toBe(true);
+    expect(crews.fitnessBusy('team-a', 'lab-ops')).toBe(true);
+    expect(redrawn).toBe(1);
+  });
+
   it('showLiveYamlRaw opens the raw YAML of a crew and ignores anything else', async () => {
     await run('crewforge.showLiveYamlRaw', { kind: 'crew', crew: { name: 'lab-ops', namespace: 'team-a', ready: true, phase: 'Ready' } });
     await run('crewforge.showLiveYamlRaw', { kind: 'message', text: 'x' });
@@ -237,7 +262,8 @@ describe('the inner loop in the extension', () => {
   const tick = () => new Promise((r) => setTimeout(r, 30));
 
   it('adds a status bar item and the Problems collection, and follows the active editor and saves', async () => {
-    expect(recorded.statusBarItems).toHaveLength(1);
+    expect(recorded.statusBarItems).toHaveLength(2);
+    expect(recorded.statusBarItems[1].command).toMatchObject({ command: 'crewforge.selectContext' });
     expect(recorded.diagnostics.map((d) => d.name)).toEqual(['crewforge']);
     await loadBundle();
     const source = await loadBundle();

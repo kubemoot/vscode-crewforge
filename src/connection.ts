@@ -1,19 +1,22 @@
 import * as vscode from 'vscode';
 import { loadKubeconfig } from './k8s/kubeconfig';
 import { KubeClient } from './k8s/request';
+import { trimEnd } from './text';
 
 /** The cluster CrewForge talks to: which kubeconfig, which context, and a client for it. */
 export interface Connection {
   source: string;
   context: string;
   client: KubeClient;
+  /** The API server's URL, from the kubeconfig's current cluster. */
+  server?: string;
 }
 
 /** Connects with the settings, or with an explicit context (to continue a saved conversation). */
 export function connect(contextOverride?: string): Connection {
   const settings = vscode.workspace.getConfiguration('crewforge');
   const { source, config } = loadKubeconfig(settings.get<string>('kubeconfig', ''), contextOverride ?? settings.get<string>('context', ''));
-  return { source, context: config.getCurrentContext(), client: new KubeClient(config) };
+  return { source, context: config.getCurrentContext(), client: new KubeClient(config), server: config.getCurrentCluster()?.server };
 }
 
 export function namespaceFilter(): string[] {
@@ -27,4 +30,9 @@ export function streamTimeoutMs(): number {
 
 export function dashboardUrl(): string {
   return vscode.workspace.getConfiguration('crewforge').get<string>('dashboardUrl', '').trim();
+}
+
+/** The dashboard URL without a trailing slash, for building paths on it; empty when unset. */
+export function dashboardBase(): string {
+  return trimEnd(dashboardUrl(), '/');
 }

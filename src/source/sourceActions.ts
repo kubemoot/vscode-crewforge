@@ -5,7 +5,7 @@ import type { DeployCommands } from '../deploy/commands';
 import { nameProblem } from '../k8s/paths';
 import type { DeploymentNode, SourceNode, SourceTreeProvider } from '../views/sourceTree';
 import { errorText } from '../views/errors';
-import { IGNORED_PATH } from './ignored';
+import { refuseIfDirty, renameWithEdit } from './fsEdit';
 import { renameCrewFiles } from './rename';
 import { fitnessFolders, type SourceEntry } from './service';
 
@@ -69,7 +69,7 @@ export class SourceActions {
    * name until it is undeployed, so the developer is offered that first.
    */
   async rename(node?: SourceNode): Promise<void> {
-    if (node?.kind !== 'source' || !node.entry.crewName || blockedByUnsaved(node.entry)) return;
+    if (node?.kind !== 'source' || !node.entry.crewName || refuseIfDirty([node.entry.source.root, ...outsideFitness(node.entry)], 'renaming the crew; the rename rewrites its files')) return;
     const { entry } = node;
     const from = node.entry.crewName;
     const to = await askNewName(from);
@@ -173,17 +173,6 @@ function isWorkspaceFolder(root: string): boolean {
 
 const namespacesOf = (deployments: DeploymentNode[]) => deployments.map((d) => d.deployment.namespace).join(', ');
 
-/**
- * True, after saying which, when an unsaved editor holds one of the files a rename
- * rewrites (the source's and those in the fitness folder beside it).
- */
-function blockedByUnsaved(entry: SourceEntry): boolean {
-  const folders = [entry.source.root, ...outsideFitness(entry)];
-  const dirty = vscode.workspace.textDocuments.find((d) => d.isDirty && !IGNORED_PATH.test(d.uri.fsPath) && folders.some((f) => d.uri.fsPath.startsWith(f + path.sep)));
-  if (dirty) void vscode.window.showErrorMessage(`CrewForge: save or close ${vscode.workspace.asRelativePath(dirty.uri)} before renaming the crew; the rename rewrites its files.`);
-  return dirty !== undefined;
-}
-
 /** The folders among these that exist. */
 async function existing(folders: string[]): Promise<string[]> {
   const found = await Promise.all(folders.map(exists));
@@ -195,10 +184,7 @@ async function renameFolder(root: string, from: string, to: string): Promise<str
   if (path.basename(root) !== from) return undefined;
   const target = path.join(path.dirname(root), to);
   if (await exists(target)) return undefined;
-  // A workspace edit, so editors open on the crew's files follow them to the new folder.
-  const edit = new vscode.WorkspaceEdit();
-  edit.renameFile(vscode.Uri.file(root), vscode.Uri.file(target));
-  if (!(await vscode.workspace.applyEdit(edit))) throw new Error(`could not move ${root} to ${target}`);
+  await renameWithEdit(root, target);
   return target;
 }
 

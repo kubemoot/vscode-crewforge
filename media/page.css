@@ -1,0 +1,26 @@
+body { padding: 0 1.25rem 2rem; color: var(--vscode-foreground); font-family: var(--vscode-font-family); font-size: var(--vscode-font-size); background: var(--vscode-editor-background); }
+h1 { font-size: 1.4em; margin: 1rem 0 0.25rem; display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+h2 { font-size: 1.05em; margin: 1.25rem 0 0.5rem; color: var(--vscode-descriptionForeground); text-transform: uppercase; letter-spacing: 0.04em; }
+section { border-top: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.35)); }
+.muted { color: var(--vscode-descriptionForeground); }
+.error { color: var(--vscode-errorForeground); }
+.banner { padding: 0.5rem 0.75rem; border-left: 3px solid var(--vscode-editorWarning-foreground, #cca700); background: var(--vscode-inputValidation-warningBackground, rgba(204, 167, 0, 0.1)); }
+.facts { display: grid; grid-template-columns: max-content 1fr; gap: 0.25rem 1rem; margin: 0; }
+.facts dt { color: var(--vscode-descriptionForeground); }
+.facts dd { margin: 0; word-break: break-word; }
+table { border-collapse: collapse; width: 100%; }
+th, td { text-align: left; padding: 0.3rem 0.6rem 0.3rem 0; border-bottom: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.25)); vertical-align: top; }
+th { color: var(--vscode-descriptionForeground); font-weight: normal; }
+.badge { padding: 0.05rem 0.45rem; border-radius: 0.6rem; font-size: 0.85em; border: 1px solid currentColor; }
+.badge.good { color: var(--vscode-testing-iconPassed, #73c991); }
+.badge.warn { color: var(--vscode-editorWarning-foreground, #cca700); }
+.badge.bad { color: var(--vscode-testing-iconFailed, #f14c4c); }
+.actions { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.75rem 0; }
+.btn { padding: 0.3rem 0.8rem; border: 1px solid var(--vscode-button-border, transparent); border-radius: 2px; background: var(--vscode-button-secondaryBackground); color: var(--vscode-button-secondaryForeground); cursor: pointer; font: inherit; }
+.btn:hover:not([disabled]) { background: var(--vscode-button-secondaryHoverBackground); }
+.btn.primary { background: var(--vscode-button-background); color: var(--vscode-button-foreground); }
+.btn.primary:hover:not([disabled]) { background: var(--vscode-button-hoverBackground); }
+.btn[disabled] { opacity: 0.5; cursor: default; }
+.link { background: none; border: none; padding: 0; color: var(--vscode-textLink-foreground); cursor: pointer; font: inherit; text-align: left; }
+.link:hover { text-decoration: underline; }
+.connection { color: var(--vscode-descriptionForeground); font-size: 0.9em; margin: 0.5rem 0; }

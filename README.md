@@ -178,9 +178,20 @@ workspace and, under each, every namespace its crew is deployed to.
 - A deployment's menu has **Redeploy from Source** (a bundle applies only what differs),
   **Deploy a Git Revision** (any commit that touched the source, to roll back or forward),
   **Run Fitness**, **Follow Flux Rollout** (Flux), and **Undeploy (Remove Deployment)**.
-- Its **Fitness** node lists its fitness runs with their results; a run opens as a report.
-  CrewForge warns before starting a run while another is in progress, since crews share
-  the GPUs.
+- Its **Fitness** node lists its fitness runs; clicking the node or a run opens the
+  [Fitness dashboard](#dashboards). **Run Fitness** is hidden, and refuses, while a run of
+  that crew is in progress; CrewForge warns before starting one while another crew's run
+  is in progress, since crews share the GPUs.
+- **Fitness Scenarios** under a source lists the scenarios in its fitness folder: the
+  scripts of each CrewFitnessSuite, each CrewFitness, and loose `.adl` (ADL) and `.md`
+  (prose) scripts. **Add Fitness Scenario** (on the Fitness node or the Fitness Scenarios
+  section) asks ADL or prose and a name, and writes the scenario in the folder's layout: a
+  one-scenario CrewFitnessSuite YAML shaped like the kmctl starter suite, or a loose
+  script when the folder holds those. On a scenario, **Rename Fitness Scenario**, **Delete
+  Fitness Scenario** (after a confirmation: a script file to the trash, or its script out
+  of a suite that keeps others), and **Run This Scenario Only** (the play icon: one
+  iteration against the dev deployment, as a suite of that one script or a CrewFitness).
+  These change local files only, except Run, which starts a run.
 - In an open crew manifest, a CodeLens above the Crew offers **Ask in** each namespace it
   is deployed to, and every other Kubemoot object shows its drift state in each
   deployment where it was compared; click one for the diff.
@@ -205,6 +216,10 @@ workspace and, under each, every namespace its crew is deployed to.
 | **Show Source YAML** / **Show Live YAML** / **Show Live YAML (raw)** | Look at one side alone | Nothing |
 | **Lint Crew (helm lint and schema check)** | Before deploying, or any time | Nothing; findings go to the Problems panel |
 | **Ask Crew** / **Run Fitness** | Try the deployed crew | Run Fitness creates a fitness run (a Kubemoot object) in the crew's namespace |
+| **Run This Scenario Only** | Try one scenario after changing a prompt | One fitness run of one scenario, one iteration, marked so its dashboard offers Stop |
+| **Add / Rename / Delete Fitness Scenario** | Grow or tidy the crew's fitness scenarios | Local files in the fitness folder only; Delete moves a file to the trash after a confirmation |
+| **Pause** / **Resume** / **Stop** (Fitness dashboard) | Hold or end a running suite | Sets `spec.suspend` (pause between iterations; the running one finishes) or `spec.cancel` (the suite becomes Cancelled, results so far kept) on the suite; Stop on a single-scenario CrewFitness deletes it. Shown only when the operator's CRD has those fields |
+| **Open Crew Dashboard** / **Open Crews Overview** / **Open Fitness Dashboard** | See a crew, every crew, or a crew's fitness at a glance | Nothing; read-only |
 
 CrewForge applies only Kubemoot objects and Helm releases of them. It never deletes a
 namespace or any other kind of object; the operator owns cleanup.
@@ -214,6 +229,58 @@ and context. Lint Crew reads the Kubemoot schemas from the cluster's OpenAPI; wi
 reachable cluster it lints with `helm lint` and the render alone, and says the schema
 check was skipped.
 
+## Dashboards
+
+Dashboards open as editor tabs and read again every few seconds while visible (the fitness
+dashboard, while a run is going). They are read-only pages: every value is escaped, the
+page runs one script under a strict content security policy, and it can only ask the
+extension to run one of its own buttons.
+
+- **Crew dashboard.** Click a crew in Crew Sources or Deployed Crews. It shows the crew's
+  name and description; the source's path, chart name, chart version, and app version; where
+  it is deployed (namespace and context, channel, Helm release, deployed chart and app
+  version, first deployed and last redeploy from `helm status`, and what a CrewForge
+  deploy recorded); its agents counted by role, with the capabilities each declares and
+  whether each is ready (the Models the source declares follow); the Crew's phase,
+  message, and status conditions; CrewForge's own conversations with it on this computer
+  (conversations, turns, the turn answering now in an open chat, and the newest problems
+  saved with a turn); and, from the Kubemoot dashboard, the number of discussion threads and
+  agent failures. A banner says when the source's chart version differs from the deployed
+  one. Its buttons are **Deploy (dev)**, **Redeploy**, **Undeploy**, **Ask**, **Run
+  Fitness**, **Fitness Runs**, **Lint**, **Show YAML**, and **Refresh**; a button that does
+  not apply is disabled, with the reason as its tooltip.
+- **Crews Overview.** The dashboard icon on Deployed Crews, **CrewForge: Open Crews
+  Overview**, or the first item of Deployed Crews. A table of every deployed crew the
+  kubeconfig can see: name, namespace, phase and readiness, agents ready out of total,
+  chart version, channel (helm, bundle, flux), last deploy time, the turn answering now,
+  recent problems, and whether a local source is open for it. Click a crew for its
+  dashboard. Its header says what CrewForge is connected to.
+- **Fitness dashboard.** Click a Fitness node or a run. The crew's runs, newest first, and
+  the selected run: phase (Pausing and Stopping until the operator settles), iterations done
+  out of total, passed, failed, and errored, start, end, and duration, and the results
+  workbook. For a suite, each scenario's iterations and outcomes with their mean duration and
+  its judge score, and where the deferred judge stands; for a single run, its assertions.
+  **Pause**, **Resume**, and **Stop** appear when the operator's CRD has `spec.suspend`
+  and `spec.cancel`; a single-scenario run started from CrewForge can be stopped. **Open
+  XLSX** downloads the workbook from the Kubemoot dashboard when `crewforge.dashboardUrl`
+  is set.
+- **Connection.** The status bar always shows the context CrewForge uses (`$(plug)
+  <context>`, with the kubeconfig file's name when it is not the default); click it to
+  select another context. Its tooltip, the first item of Deployed Crews, the Crews Overview
+  header, and **CrewForge: Show Connection Info** (with Copy for a bug report) give
+  CrewForge's version, the Kubemoot operator's version (its image tag and Helm chart version,
+  found by the operator's label, or in the namespace of the Helm release that installed the
+  Crew CRD), the Kubernetes server version, and the context and server URL. When the
+  cluster cannot be reached, they say so.
+
+Where the numbers come from: the Kubernetes API (Crews, Agents, fitness runs and their
+iterations, the operator Deployment, `/version`, and the CRD schema), `helm status` for
+release times, CrewForge's saved conversations on this computer, and, read-only through the
+Kubernetes service proxy, the Kubemoot dashboard's API: `/api/nats/history` for a crew's
+discussion threads and agent failures, and a suite's `/scores` and `/iterations`. The
+dashboard's Service is found by its `app.kubernetes.io/name=kubemoot-dashboard` label, or
+named in `crewforge.dashboardService`. Without it, those parts say they are not available.
+
 ## Settings
 
 | Setting | Default | Meaning |
@@ -222,12 +289,18 @@ check was skipped.
 | `crewforge.context` | empty | Context to use. Empty uses the kubeconfig's current context. |
 | `crewforge.namespaces` | `[]` | Show crews only in these namespaces. Set it when your account may read only some namespaces. |
 | `crewforge.streamTimeoutSeconds` | `600` | Longest a single turn may stream. |
+| `crewforge.dashboardService` | empty | The Kubemoot dashboard's Service as `namespace/name:port`, read through the service proxy for thread counts, discussion failures, fitness scores, and archived iterations. Empty finds it by its label. |
 | `crewforge.dashboardUrl` | empty | The Kubemoot dashboard, opened from **Powered by Kubemoot** in a chat, and from **Open this turn in the Kubemoot dashboard** under an answer (shown only when set). Empty makes Powered by Kubemoot open this setting. |
 
 ## What your account needs
 
 - `list` on `crews.kubemoot.ai`, cluster-wide or in each namespace of `crewforge.namespaces`.
-- `get` and `create` on `services/proxy` in the crew's namespace, to ask and to stream.
+- `get` and `create` on `services/proxy` in the crew's namespace, to ask and to stream;
+  `get` on `endpoints` there, to tell whether its discussion gateway is running.
+- For the dashboards (each optional; a part it cannot read says so): `get` on
+  `services/proxy` of the Kubemoot dashboard, `list` on `services` to find it, `list` on
+  `deployments` (or `get` on the Crew CRD) to find the operator's version, and `patch` on
+  `crewfitnesssuites` (`delete` on `crewfitnesses`) for Pause, Resume, and Stop.
 - To explore a crew: `get` and `list` on `agents`, `promptmodules`, `skills`,
   `mcpservers`, and `crewschedulingpolicies`; a kind it may not read shows as a warning
   under the crew. `delete` on those kinds and `crews` to remove a crew whose source is not

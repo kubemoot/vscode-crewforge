@@ -172,7 +172,7 @@ describe('fitness in the tree and commands', () => {
     const items = runs.map((r) => tree.getTreeItem(r));
     expect(items.map((i) => (i.iconPath as { id: string }).id)).toEqual(['pass', 'sync~spin', 'circle-outline']);
     expect(items[2].tooltip).toContain('odd');
-    expect(items[0].command).toMatchObject({ command: 'crewforge.showRun' });
+    expect(items[0].command).toMatchObject({ command: 'crewforge.openFitnessDashboard' });
     cluster.failures.set('/apis/kubemoot.ai/v1alpha1', new Error('discovery down'));
     const broken = new SourceTreeProvider(new SourceService(deps()), connection);
     expect(broken.getTreeItem((await broken.getChildren(fitnessNode))[0]).label).toBe('discovery down');
@@ -208,6 +208,9 @@ describe('fitness in the tree and commands', () => {
   it('reruns a remembered definition without asking, and asks when the source no longer has it', async () => {
     expect(await commands().runFitness(fitnessNode, 'rendered-suite')).toBe('rendered-suite');
     expect(recorded.quickPicks).toEqual([]);
+    expect(await commands().runFitness(fitnessNode, 'rendered-suite')).toBeUndefined();
+    expect(recorded.info.at(-1)).toMatch(/^A fitness run of demo is in progress \(rendered-suite-\d{8}-\d{6}\)/);
+    cluster.objects.at(-1)!.status = { phase: 'Completed' };
     recorded.quickPicks.push((items: { label: string }[]) => items[0]);
     recorded.warningAnswers.push('Start anyway');
     expect(await commands().runFitness(fitnessNode, 'gone')).toBe('rendered-suite');

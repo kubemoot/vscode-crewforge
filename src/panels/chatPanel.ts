@@ -54,6 +54,14 @@ export class ChatPanel {
     return ChatPanel.panels.get(panelKey(context, crew));
   }
 
+  /** The question of the turn running now in the chat with a crew, if one is. */
+  static activeTurn(context: string, crew: Pick<CrewSummary, 'namespace' | 'name'>): string | undefined {
+    const panel = ChatPanel.find(context, crew);
+    if (!panel?.session.busy) return undefined;
+    const messages = panel.session.view.conversation.messages;
+    return questionFor(messages, messages.length - 1);
+  }
+
   static get active(): ChatPanel | undefined {
     return ChatPanel.activePanel;
   }
