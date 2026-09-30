@@ -10,7 +10,7 @@ import type { RenderDeps } from '../source/render';
 import type { SourceEntry } from '../source/service';
 import type { SourceNode, SourceTreeProvider } from '../views/sourceTree';
 import { errorText } from '../views/errors';
-import { keyOf } from '../source/manifests';
+import { keyOf, objectKey, type Manifest } from '../source/manifests';
 import { listRevisions, materialize } from '../revisions/revisions';
 import { Deployer, isDeployable, KubeTools, type DeployChannel, type DeployRequest } from './deployer';
 import { channelOptions, ownershipWarnings, releaseOf, type ChannelOption } from './plan';
@@ -103,11 +103,29 @@ export class DeployCommands {
     if (node?.kind !== 'deployment') return;
     const { entry, deployment } = node;
     if (deployment.channel === 'flux') return gitOpsGuidance(deployment);
-    const warnings = [removalWarning(deployment)];
+    const warnings = [removalWarning(deployment, removalMethod(deployment))];
     if (!deployment.linked) warnings.push(notLinked(deployment));
+    await this.confirmAndRemove(deployment, warnings, (deployer) => deployer.remove(entry, deployment));
+  }
+
+  /**
+   * Removes a live crew whose source CrewForge does not know: a Helm crew by uninstalling
+   * its release, any other by deleting the given Kubemoot objects, after the developer
+   * confirms with the crew's name and the list of what goes.
+   */
+  async removeUnsourced(deployment: Deployment, objects: Manifest[]): Promise<void> {
+    if (deployment.channel === 'flux') return gitOpsGuidance(deployment);
+    const helm = deployment.channel === 'helm';
+    const method = helm ? removalMethod(deployment) : `CrewForge deletes these Kubemoot objects: ${objects.map(objectKey).join(', ')}.`;
+    await this.confirmAndRemove(deployment, [removalWarning(deployment, method)], (deployer) =>
+      helm ? deployer.uninstall(deployment) : deployer.deleteObjects(deployment.namespace, objects),
+    );
+  }
+
+  private async confirmAndRemove(deployment: Deployment, warnings: string[], remove: (deployer: Deployer) => Promise<string>): Promise<void> {
     if (!(await confirm(warnings, 'Remove'))) return;
-    const connection = this.connectTo();
-    await this.withLog(`Removing ${deployment.crew.name} from ${deployment.namespace}`, () => this.deployer(connection).remove(entry, deployment));
+    const deployer = this.deployer(this.connectTo());
+    await this.withLog(`Removing ${deployment.crew.name} from ${deployment.namespace}`, () => remove(deployer));
   }
 
   private async run(connection: Connection, request: DeployRequest): Promise<void> {
@@ -183,9 +201,16 @@ function revisionNote(date: string, current: boolean, deployedAt?: string): stri
   return `${date} · deployed here before${when}`;
 }
 
+/** How a removal happens, for the confirmation. */
+function removalMethod(d: Deployment): string {
+  return d.channel === 'helm'
+    ? `CrewForge runs helm uninstall ${d.release ?? d.crew.name}, which deletes what the release installed.`
+    : 'CrewForge deletes the Kubemoot objects the source renders; nothing else.';
+}
+
 /** What removing does; a crew marked kubemoot.ai/manage-namespace takes its namespace with it. */
-function removalWarning(d: Deployment): string {
-  const base = `Remove ${d.crew.name} from ${d.namespace}? Its agents stop and its Kubemoot objects are deleted;`;
+function removalWarning(d: Deployment, method: string): string {
+  const base = `Remove the crew ${d.crew.name} from ${d.namespace}? ${method} Its agents stop, and the Kubemoot operator's finalizers clean up what it made for them;`;
   return d.crew.annotations?.['kubemoot.ai/manage-namespace'] === 'true'
     ? `${base} this crew manages its namespace, so the operator deletes ${d.namespace} and everything in it too.`
     : `${base} the namespace stays.`;
@@ -195,7 +220,8 @@ function notLinked(d: Deployment): string {
   return `${d.crew.name} in ${d.namespace} does not name this source; it may come from another copy of the crew.`;
 }
 
-function gitOpsGuidance(d: Deployment, rollback?: string): void {
+/** Says that Flux owns the crew and how to change it through git; CrewForge does not touch it. */
+export function gitOpsGuidance(d: Deployment, rollback?: string): void {
   const release = d.crew.labels?.['helm.toolkit.fluxcd.io/name'];
   const via = release ? `the HelmRelease ${release}` : 'Flux';
   const how = rollback ? `To go back, ${rollback}; merging it deploys it.` : 'Commit and push your change; merging it deploys it, and removing it from git removes the crew.';

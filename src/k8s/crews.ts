@@ -25,11 +25,25 @@ export interface CrewSummary {
   annotations?: Record<string, string>;
   /** The operator's record of what was deployed, newest first; absent on operators without it. */
   revisions?: CrewRevision[];
+  /** metadata.creationTimestamp. */
+  created?: string;
+  description?: string;
+  conditions?: CrewCondition[];
+}
+
+/** One status condition, as metav1.Condition carries it. */
+export interface CrewCondition {
+  type: string;
+  status: string;
+  reason?: string;
+  message?: string;
 }
 
 interface CrewObject {
-  metadata?: { name?: string; namespace?: string; labels?: Record<string, string>; annotations?: Record<string, string> };
+  metadata?: { name?: string; namespace?: string; labels?: Record<string, string>; annotations?: Record<string, string>; creationTimestamp?: string };
+  spec?: { description?: string };
   status?: {
+    conditions?: CrewCondition[];
     ready?: boolean;
     phase?: string;
     message?: string;
@@ -60,11 +74,12 @@ function toSummary(c: CrewObject): CrewSummary {
     coordinator: status.coordinatorRef || undefined,
     ...marks(c),
     revisions: status.revisions,
+    conditions: status.conditions,
   };
 }
 
-function marks(c: CrewObject): Pick<CrewSummary, 'labels' | 'annotations'> {
-  return { labels: c.metadata?.labels, annotations: c.metadata?.annotations };
+function marks(c: CrewObject): Pick<CrewSummary, 'labels' | 'annotations' | 'created' | 'description'> {
+  return { labels: c.metadata?.labels, annotations: c.metadata?.annotations, created: c.metadata?.creationTimestamp, description: c.spec?.description || undefined };
 }
 
 /**

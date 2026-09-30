@@ -10,6 +10,7 @@ import type { CrewSource } from '../src/source/discover';
 import type { Manifest } from '../src/source/manifests';
 import type { Exec, ExecOptions } from '../src/source/render';
 import type { SourceEntry } from '../src/source/service';
+import { FakeCluster, obj } from './fakeCluster';
 
 const chart: CrewSource = { kind: 'helm', root: '/w/demo-crew', label: 'demo-crew' };
 const bundle: CrewSource = { kind: 'bundle', root: '/w/demo/crew', label: 'crew' };
@@ -190,6 +191,31 @@ describe('Deployer', () => {
     expect(del.args).toEqual(['--context', 'lab', 'delete', '--ignore-not-found', '--wait=false', '-f', '-']);
     expect((loadAll(del.options?.input ?? '') as Manifest[]).map((d) => d.kind)).toEqual(['Crew', 'PromptModule', 'Agent']);
     await expect(deployer.remove(entry(chart), deployment('flux'))).rejects.toThrow('remove it from your GitOps repository');
+  });
+
+  it('never deletes what is not a Kubemoot object, when removing a bundle', async () => {
+    const ran: Ran[] = [];
+    const exec: Exec = async (command, args, options) => {
+      ran.push({ command, args, options });
+      return { code: 0, stdout: '', stderr: '' };
+    };
+    const text = `${RENDERED}\n---\napiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: settings`;
+    const deployer = new Deployer(new KubeTools(exec, '/k/config', 'lab'), new Api(200), { exec, readYamlFiles: async () => [{ file: 'all.yaml', text }] });
+    await deployer.remove(entry(bundle), deployment('bundle'));
+    expect((loadAll(ran[0].options?.input ?? '') as Manifest[]).map((d) => d.kind)).toEqual(['Crew', 'PromptModule', 'Agent']);
+  });
+
+  it('deletes live objects only of Kubemoot kinds the cluster serves, and passes other failures on', async () => {
+    const cluster = new FakeCluster().add(obj('Agent', 'a', 'team-a'));
+    const exec: Exec = async () => ({ code: 0, stdout: '', stderr: '' });
+    const deployer = new Deployer(new KubeTools(exec, '/k/config', 'lab'), cluster, { exec, readYamlFiles: async () => [] });
+    await expect(deployer.deleteObjects('team-a', [obj('Agent', 'a', 'team-a'), { apiVersion: 'v1', kind: 'Namespace', metadata: { name: 'team-a' } }])).rejects.toThrow(
+      'CrewForge deletes only Kubemoot objects, not Namespace/team-a.',
+    );
+    await expect(deployer.deleteObjects('team-a', [obj('MootArchetype', 'x', 'team-a')])).rejects.toThrow('The cluster does not serve MootArchetype.');
+    expect(cluster.calls.filter((c) => c.method === 'DELETE')).toEqual([]);
+    cluster.failures.set('/apis/kubemoot.ai/v1alpha1/namespaces/team-a/agents/a', new KubeError('forbidden', 403));
+    await expect(deployer.deleteObjects('team-a', [obj('Agent', 'a', 'team-a')])).rejects.toThrow('forbidden');
   });
 
   it('reports a tool failure with its message', async () => {

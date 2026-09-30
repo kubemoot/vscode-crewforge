@@ -58,6 +58,10 @@ export const languages = {
     recorded.codeLensProviders.push(provider);
     return { dispose: () => undefined };
   },
+  setTextDocumentLanguage<T extends { languageId?: string }>(document: T, languageId: string) {
+    document.languageId = languageId;
+    return Promise.resolve(document);
+  },
 };
 
 export class ThemeIcon {
@@ -97,6 +101,8 @@ export const recorded = {
   executed: [] as { id: string; args: unknown[] }[],
   info: [] as string[],
   errors: [] as string[],
+  /** Error messages shown as modal dialogs (also in errors). */
+  modalErrors: [] as string[],
   clipboard: [] as string[],
   opened: [] as string[],
   panels: [] as FakePanel[],
@@ -129,6 +135,7 @@ export function resetFake(): void {
   recorded.executed = [];
   recorded.info = [];
   recorded.errors = [];
+  recorded.modalErrors = [];
   recorded.clipboard = [];
   recorded.opened = [];
   recorded.panels = [];
@@ -227,8 +234,9 @@ export const window = {
     recorded.info.push(message);
     return Promise.resolve(undefined);
   },
-  showErrorMessage(message: string) {
+  showErrorMessage(message: string, options?: { modal?: boolean }) {
     recorded.errors.push(message);
+    if (typeof options === 'object' && options?.modal) recorded.modalErrors.push(message);
     return Promise.resolve(undefined);
   },
   showQuickPick(items: unknown[]) {
@@ -256,7 +264,11 @@ export const window = {
       dispose: () => undefined,
     };
   },
-  showTextDocument(target: Uri | { content: string }) {
+  showTextDocument(target: Uri | { content: string } | { uri: Uri; languageId: string }) {
+    if ('uri' in target) {
+      recorded.shownDocuments.push(`${target.uri.toString()} (${target.languageId})`);
+      return Promise.resolve(undefined);
+    }
     recorded.shownDocuments.push(target instanceof Uri ? target.fsPath : target.content);
     return Promise.resolve(undefined);
   },
@@ -284,7 +296,8 @@ export const workspace = {
   get textDocuments() {
     return recorded.textDocuments;
   },
-  openTextDocument(options: { content: string; language: string }) {
+  openTextDocument(options: { content: string; language: string } | Uri) {
+    if (options instanceof Uri) return Promise.resolve({ uri: options, languageId: 'plaintext' });
     return Promise.resolve({ content: options.content, language: options.language });
   },
   get workspaceFolders() {

@@ -159,6 +159,37 @@ describe('commands', () => {
     expect(recorded.documentProviders.has('crewforge-manifest')).toBe(true);
   });
 
+  it('runs the lifecycle commands on a live crew from the Crews view', async () => {
+    const crew = { name: 'lab-ops', namespace: 'team-a', ready: true, phase: 'Ready' };
+    await run('crewforge.followRollout', { kind: 'crew', crew });
+    expect(recorded.info[0]).toBe('lab-ops in team-a is not managed by a Flux HelmRelease.');
+    await run('crewforge.updateDeployment', { kind: 'crew', crew });
+    await run('crewforge.deployRevision', { kind: 'crew', crew });
+    await run('crewforge.runFitness', { kind: 'crew', crew });
+    expect(recorded.info.slice(1).every((m) => m.startsWith('CrewForge does not know the source of lab-ops in team-a'))).toBe(true);
+    expect(recorded.info).toHaveLength(4);
+    await run('crewforge.removeDeployment', { kind: 'crew', crew: { ...crew, labels: { 'helm.toolkit.fluxcd.io/name': 'lab' } } });
+    expect(recorded.info[4]).toContain('the HelmRelease lab manages lab-ops');
+    await run('crewforge.updateDeployment', { kind: 'message', text: 'x' });
+    expect(recorded.info).toHaveLength(5);
+  });
+
+  it('opens live YAML for a crew, its bundle, and a leaf with an object, and ignores anything else', async () => {
+    const crew = { name: 'lab-ops', namespace: 'team-a', ready: true, phase: 'Ready' };
+    expect(recorded.documentProviders.has('crewforge-live')).toBe(true);
+    await run('crewforge.showLiveYaml', { kind: 'crew', crew });
+    await run('crewforge.showCrewBundleYaml', { kind: 'crew', crew });
+    await run('crewforge.showLiveYaml', { kind: 'member', crew, view: { label: 'k8s', tooltip: '', icon: 'x', ref: { kind: 'Agent', name: 'k8s', namespace: 'team-a' } } });
+    await run('crewforge.showLiveYaml', { kind: 'member', crew, view: { label: 'tool', tooltip: '', icon: 'x' } });
+    await run('crewforge.showLiveYaml');
+    await run('crewforge.showCrewBundleYaml', { kind: 'message', text: 'x' });
+    expect(recorded.shownDocuments).toEqual([
+      'crewforge-live:/team-a/Crew/lab-ops.yaml (yaml)',
+      'crewforge-live:/team-a/lab-ops.bundle.yaml (yaml)',
+      'crewforge-live:/team-a/Agent/k8s.yaml (yaml)',
+    ]);
+  });
+
   it('refreshes Crew Sources on its command, and finds sources through the workspace', async () => {
     const view = recorded.treeViews[1];
     const provider = view.options.treeDataProvider as { onDidChangeTreeData: (l: () => void) => void; getChildren: () => Promise<{ kind: string }[]> };

@@ -203,6 +203,48 @@ describe('applyResource and removeDeployment', () => {
   });
 });
 
+describe('removeUnsourced', () => {
+  const live = (channel: Deployment['channel'], extra: Partial<Deployment> = {}): Deployment => ({
+    namespace: 'team-a',
+    crew: { name: 'demo', namespace: 'team-a', ready: true, phase: 'Ready' },
+    channel,
+    linked: false,
+    ...extra,
+  });
+
+  it('uninstalls a Helm crew after a confirmation that names the crew and the release', async () => {
+    recorded.warningAnswers.push('Remove');
+    await commands().removeUnsourced(live('helm', { release: 'lab' }), []);
+    expect(recorded.warnings[0]).toBe(
+      "Remove the crew demo from team-a? CrewForge runs helm uninstall lab, which deletes what the release installed. Its agents stop, and the Kubemoot operator's finalizers clean up what it made for them; the namespace stays.",
+    );
+    expect(tools('helm')[0].args.slice(2)).toEqual(['uninstall', 'lab', '--namespace', 'team-a']);
+    expect(changes).toBe(1);
+  });
+
+  it('deletes the listed Kubemoot objects of any other crew, through the API, after naming them', async () => {
+    cluster.add(obj('Agent', 'helper', 'team-a'), obj('Crew', 'demo', 'team-a'));
+    recorded.warningAnswers.push('Remove');
+    await commands().removeUnsourced(live('bundle'), [obj('Agent', 'helper', 'team-a'), obj('PromptModule', 'gone', 'team-a'), obj('Crew', 'demo', 'team-a')]);
+    expect(recorded.warnings[0]).toContain('CrewForge deletes these Kubemoot objects: Agent/helper, PromptModule/gone, Crew/demo.');
+    expect(cluster.calls.filter((c) => c.method === 'DELETE').map((c) => c.path)).toEqual([
+      '/apis/kubemoot.ai/v1alpha1/namespaces/team-a/agents/helper',
+      '/apis/kubemoot.ai/v1alpha1/namespaces/team-a/promptmodules/gone',
+      '/apis/kubemoot.ai/v1alpha1/namespaces/team-a/crews/demo',
+    ]);
+    expect(recorded.output).toEqual(['> Removing demo from team-a', 'deleted Agent/helper\nPromptModule/gone was already gone\ndeleted Crew/demo']);
+    expect(ran).toEqual([]);
+  });
+
+  it('does nothing without confirmation, and only points a Flux crew at git', async () => {
+    recorded.warningAnswers.push(undefined);
+    await commands().removeUnsourced(live('bundle'), [obj('Crew', 'demo', 'team-a')]);
+    await commands().removeUnsourced(live('flux'), []);
+    expect(cluster.calls).toEqual([]);
+    expect(recorded.info[0]).toContain('Flux manages demo');
+  });
+});
+
 describe('nameProblem', () => {
   it('accepts a DNS label and explains anything else', () => {
     expect(nameProblem('namespace', ' otters-demo ')).toBeUndefined();

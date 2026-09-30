@@ -1,9 +1,10 @@
 import { dump } from 'js-yaml';
 import { namespacedCrewsPath } from '../k8s/paths';
-import type { KubeTransport } from '../k8s/request';
+import { KubeError, type KubeTransport } from '../k8s/request';
 import { ANNOTATIONS, type Channel, type Deployment } from '../source/deployments';
 import type { SourceIdentity } from '../source/identity';
-import { crewOf, objectKey, type Manifest } from '../source/manifests';
+import { discoverKinds, objectPath } from '../source/live';
+import { crewOf, isKubemoot, objectKey, type Manifest } from '../source/manifests';
 import { render, type Exec, type ExecResult, type RenderDeps } from '../source/render';
 import type { SourceEntry } from '../source/service';
 
@@ -70,13 +71,48 @@ export class Deployer {
     }
   }
 
+  /**
+   * Removes a deployment through its channel: `helm uninstall` of the release, or deletes
+   * the Kubemoot objects the bundle renders. Only Kubemoot objects: a Namespace or any
+   * other kind the bundle holds stays, and the operator's finalizers clean up the rest.
+   */
   async remove(entry: SourceEntry, deployment: Deployment): Promise<string> {
     if (deployment.channel === 'flux') throw new Error(`Flux manages ${deployment.crew.name} in ${deployment.namespace}; remove it from your GitOps repository.`);
-    if (deployment.channel === 'helm') {
-      return succeeded(await this.tools.helm(['uninstall', deployment.release ?? deployment.crew.name, '--namespace', deployment.namespace]), 'helm uninstall');
-    }
-    const objects = (await render(entry.source, { namespace: deployment.namespace }, this.deps)).filter((m) => m.kind !== 'Namespace');
+    if (deployment.channel === 'helm') return this.uninstall(deployment);
+    const objects = (await render(entry.source, { namespace: deployment.namespace }, this.deps)).filter(isKubemoot);
     return succeeded(await this.tools.kubectl(['delete', '--ignore-not-found', '--wait=false', '-f', '-'], toDocuments(objects)), 'kubectl delete');
+  }
+
+  /** `helm uninstall` of the release that installed a crew; the release defaults to the crew's name. */
+  async uninstall(deployment: Deployment): Promise<string> {
+    return succeeded(await this.tools.helm(['uninstall', deployment.release ?? deployment.crew.name, '--namespace', deployment.namespace]), 'helm uninstall');
+  }
+
+  /**
+   * Deletes live Kubemoot objects through the API server, one by one; one already gone
+   * counts as deleted. Anything that is not a Kubemoot object is refused.
+   */
+  async deleteObjects(namespace: string, objects: Manifest[]): Promise<string> {
+    const foreign = objects.find((m) => !isKubemoot(m));
+    if (foreign) throw new Error(`CrewForge deletes only Kubemoot objects, not ${foreign.kind}/${foreign.metadata.name}.`);
+    const kinds = await discoverKinds(this.client);
+    const lines: string[] = [];
+    for (const m of objects) {
+      const kind = kinds.get(m.kind);
+      if (!kind) throw new Error(`The cluster does not serve ${m.kind}.`);
+      lines.push(await this.deleteOne(objectPath(kind, namespace, m.metadata.name), objectKey(m)));
+    }
+    return lines.join('\n');
+  }
+
+  private async deleteOne(path: string, key: string): Promise<string> {
+    try {
+      await this.client.request('DELETE', path);
+      return `deleted ${key}`;
+    } catch (err) {
+      if (err instanceof KubeError && err.status === 404) return `${key} was already gone`;
+      throw err;
+    }
   }
 
   private async deployHelm(request: DeployRequest): Promise<string> {
