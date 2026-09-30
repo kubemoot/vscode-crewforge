@@ -131,6 +131,9 @@ button.finding-agent:focus-visible { outline: 1px solid var(--color-accent); out
 .loading-text { color: var(--color-text-muted); font-size: 0.85rem; }
 
 /* Input */
+.input-note { margin: 0; padding: 0.4rem 1rem 0; border-top: 1px solid var(--color-border); color: var(--vscode-descriptionForeground); font-size: 0.85em; }
+.input-note + .input-area { border-top: none; }
+.send-btn[hidden] { display: none; }
 .input-area { display: flex; gap: 0.5rem; align-items: flex-end; padding: 0.75rem 1rem; border-top: 1px solid var(--color-border); }
 .input-area textarea { flex: 1; padding: 0.55rem 0.75rem; background: var(--vscode-input-background); border: 1px solid var(--vscode-input-border, var(--color-border)); border-radius: 8px; color: var(--vscode-input-foreground); font-family: inherit; font-size: inherit; resize: none; min-height: 38px; max-height: 150px; line-height: 1.4; }
 .input-area textarea:focus { outline: none; border-color: var(--color-accent); }

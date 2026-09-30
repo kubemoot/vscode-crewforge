@@ -20,6 +20,13 @@ export interface ReadyVerdict {
 /** Phases that end a wait: the operator gave up on the object until something changes. */
 const FAILED = new Set(['Error', 'Failed']);
 
+/** What failed in a crew, in a few words: an agent in a failed phase, or the Crew itself; undefined when nothing did. */
+export function failedReason(crew: CrewSummary, agents: AgentInfo[] = []): string | undefined {
+  const agent = agents.find((a) => FAILED.has(a.phase ?? ''));
+  if (agent) return `Agent ${agent.name} is ${agent.phase}`;
+  return FAILED.has(crew.phase) ? `Crew ${crew.name} is ${crew.phase}${crew.message ? `: ${crew.message}` : ''}` : undefined;
+}
+
 /**
  * Whether a freshly deployed crew is ready. It is once the operator has seen this
  * deploy (its revision record names the deployed-at time CrewForge stamped; operators
@@ -29,8 +36,8 @@ const FAILED = new Set(['Error', 'Failed']);
 export function readiness(r: CrewReadiness): ReadyVerdict {
   const { crew, agents = [] } = r;
   if (!crew) return { state: 'waiting', message: 'Waiting for the Crew to appear' };
-  const failed = agents.find((a) => FAILED.has(a.phase ?? ''));
-  if (FAILED.has(crew.phase) || failed) return { state: 'failed', message: failedText(crew, failed) };
+  const failed = failedReason(crew, agents);
+  if (failed) return { state: 'failed', message: failed };
   if (!observed(crew)) return { state: 'waiting', message: 'Waiting for the operator to see this deploy' };
   if (!r.agents) return crew.ready ? { state: 'ready', message: 'Crew ready' } : { state: 'waiting', message: `Crew ${crew.phase}` };
   return agentsVerdict(crew, agents);
@@ -53,10 +60,6 @@ function observed(crew: CrewSummary): boolean {
   return crew.revisions[0]?.deployedAt === stamped;
 }
 
-function failedText(crew: CrewSummary, agent?: AgentInfo): string {
-  if (agent) return `Agent ${agent.name} is ${agent.phase}`;
-  return `Crew ${crew.name} is ${crew.phase}${crew.message ? `: ${crew.message}` : ''}`;
-}
 
 export interface WaitDeps {
   read: () => Promise<CrewReadiness>;

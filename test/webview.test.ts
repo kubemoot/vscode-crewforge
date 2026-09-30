@@ -22,6 +22,7 @@ async function loadPage(): Promise<void> {
   sent = [];
   state = undefined;
   links = { agents: [], dashboard: false };
+  availability = undefined;
   (globalThis as unknown as { acquireVsCodeApi: () => unknown }).acquireVsCodeApi = () => ({
     postMessage: (m: WebviewMessage) => sent.push(m),
     getState: () => state,
@@ -31,8 +32,11 @@ async function loadPage(): Promise<void> {
   await import('../src/webview/main');
 }
 
+/** What the host says about the crew's availability; a test changes it before posting. */
+let availability: StateMessage['availability'];
+
 function stateMessage(conversation: Conversation, extra: Partial<StateMessage['view']> = {}, history: StateMessage['history'] = []): StateMessage {
-  return { type: 'state', view: { conversation, busy: false, ...extra }, history, about: '2 agents', links };
+  return { type: 'state', view: { conversation, busy: false, ...extra }, history, about: '2 agents', links, availability };
 }
 
 /** Delivers a message as VS Code's host frame does: with the page's own origin. */
@@ -110,6 +114,56 @@ describe('the chat page', () => {
     expect(sent.at(-1)).toEqual({ type: 'stop' });
   });
 
+  it('shows Send only with text to send, and Stop in its place while the crew answers; Enter never stops', () => {
+    const c = newConversation('ctx', 'team-a', 'lab-ops');
+    post(c);
+    const input = $('input') as HTMLTextAreaElement;
+    const send = $('send') as HTMLButtonElement;
+    const note = $('note');
+    expect([send.hidden, note.hidden]).toEqual([true, true]);
+    input.value = '  ';
+    input.dispatchEvent(new Event('input'));
+    expect(send.hidden).toBe(true);
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+    expect(sent.filter((m) => m.type === 'send')).toEqual([]);
+    input.value = 'Which nodes?';
+    input.dispatchEvent(new Event('input'));
+    expect([send.hidden, send.title]).toEqual([false, 'Send']);
+    post(c, { busy: true });
+    expect([send.hidden, send.title, note.hidden, note.textContent]).toEqual([false, 'Stop this turn', false, 'The crew is answering']);
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+    expect(sent.filter((m) => m.type === 'send' || m.type === 'stop')).toEqual([]);
+    $('form').dispatchEvent(new Event('submit'));
+    expect(sent.at(-1)).toEqual({ type: 'stop' });
+    post(c);
+    expect([send.hidden, note.hidden]).toEqual([false, true]);
+  });
+
+  it.each([
+    [{ state: 'not-ready', reason: 'The crew is not ready: phase Pending' }],
+    [{ state: 'error', reason: 'The crew is in an error state: Agent a is Failed' }],
+    [{ state: 'unreachable', reason: "Can't reach the cluster: connect ECONNREFUSED" }],
+    [{ state: 'unreachable', reason: "Can't reach the crew's discussion gateway" }],
+  ] as const)('blocks sending with the reason beside the input: %o', (blocked) => {
+    const c = newConversation('ctx', 'team-a', 'lab-ops');
+    availability = blocked;
+    post(c);
+    const input = $('input') as HTMLTextAreaElement;
+    input.value = 'Which nodes?';
+    input.dispatchEvent(new Event('input'));
+    expect(($('send') as HTMLButtonElement).hidden).toBe(true);
+    expect([$('note').hidden, $('note').textContent]).toEqual([false, blocked.reason]);
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+    $('form').dispatchEvent(new Event('submit'));
+    expect(sent.filter((m) => m.type === 'send')).toEqual([]);
+    availability = { state: 'ready' };
+    post(c);
+    expect([($('send') as HTMLButtonElement).hidden, $('note').hidden]).toEqual([false, true]);
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+    expect(sent.at(-1)).toEqual({ type: 'send', text: 'Which nodes?' });
+    expect(($('send') as HTMLButtonElement).hidden).toBe(true);
+  });
+
   it('lists saved conversations and opens one; the header buttons reach the host', () => {
     const c = newConversation('ctx', 'team-a', 'lab-ops');
     post(c, {}, [{ id: 'old-1', title: 'Earlier question', startedAt: new Date(Date.now() - 3_600_000).toISOString(), crewName: 'lab-ops', namespace: 'team-a', context: 'ctx' }]);
@@ -175,6 +229,7 @@ describe('the chat page', () => {
     const input = $('input') as HTMLTextAreaElement;
     expect(input.value).toBe('Which nodes\nhave a GPU?');
     expect(document.activeElement).toBe(input);
+    expect(($('send') as HTMLButtonElement).hidden).toBe(false);
     expect(sent).toHaveLength(1);
     input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
     expect(sent.at(-1)).toEqual({ type: 'send', text: 'Which nodes\nhave a GPU?' });
@@ -305,8 +360,10 @@ describe('the chat page', () => {
   it('puts text from the editor in the input after any draft, focused at the end', () => {
     const input = $('input') as HTMLTextAreaElement;
     const send = (data: unknown, origin = window.origin) => window.dispatchEvent(new MessageEvent('message', { data, origin }));
+    expect(($('send') as HTMLButtonElement).hidden).toBe(true);
     send({ type: 'prefill', text: 'From a.ts:\n\n```ts\nx\n```\n\n' });
     expect(input.value).toBe('From a.ts:\n\n```ts\nx\n```\n\n');
+    expect(($('send') as HTMLButtonElement).hidden).toBe(false);
     expect(document.activeElement).toBe(input);
     expect(input.selectionStart).toBe(input.value.length);
     input.value = 'my draft  ';

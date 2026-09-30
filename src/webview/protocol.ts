@@ -1,3 +1,4 @@
+import type { CrewAvailability } from '../discussion/availability';
 import type { SessionView } from '../discussion/session';
 import type { ConversationMeta } from '../store/conversation';
 
@@ -10,6 +11,8 @@ export type StateMessage = {
   about: string;
   /** Where the page may link to. */
   links: ChatLinkState;
+  /** Whether the crew can take a question now; absent until known, when the page lets the person send. */
+  availability?: CrewAvailability;
 };
 
 /** The agents whose source is open in the workspace, and whether a dashboard URL is set. */

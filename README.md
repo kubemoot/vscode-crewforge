@@ -21,7 +21,10 @@ crew needs a public address and no extra credential is involved.
    **Deployed Crews** view lists every crew your kubeconfig can read, grouped by namespace,
    with a green mark on the ready ones. **Crew Sources** below it lists the crew charts and
    bundles in your workspace.
-3. Click a crew. A chat opens beside the view. Type a question and press Enter.
+3. Click a crew. A chat opens beside the view. Type a question and press Enter. The send
+   button shows once there is text and the crew can take a question; while the crew
+   answers, Stop takes its place. When the crew is not ready, in an error state, or out of
+   reach, the reason shows above the input and sending waits.
 
 CrewForge reads the kubeconfig from the `crewforge.kubeconfig` setting, else every file
 in `KUBECONFIG` (merged as kubectl merges them), else `~/.kube/config`. To use a

@@ -44,6 +44,7 @@ generated from the conventional commits since the previous release.
   saved with the conversation, and included in the Markdown export. The export also gives
   each answer's duration, and its last section is now "Agent activity".
 - An agent's card says when the agent is starting up or ready.
+- The send button appears only when there is text to send and the crew can take it. While the crew answers, Stop takes its place; Enter never stops a turn. When the crew is not ready, in an error state, or out of reach (the cluster, or its discussion gateway), sending is blocked and the reason shows above the input, such as "The crew is not ready: phase Pending". The chat reads the crew's Crew, Agents, and gateway endpoints when it opens, every 15 seconds while visible, and after each turn.
 - Ask Crew about Selection, in the editor's context menu: pick a crew, and its chat opens
   with the selected text in the input, fenced with its file name and language.
 

@@ -40,6 +40,7 @@ const els = {
   form: $<HTMLFormElement>('form'),
   input: $<HTMLTextAreaElement>('input'),
   send: $<HTMLButtonElement>('send'),
+  note: $<HTMLParagraphElement>('note'),
   copy: $<HTMLButtonElement>('copy'),
   rename: $<HTMLButtonElement>('rename'),
   deleteBtn: $<HTMLButtonElement>('delete'),
@@ -64,15 +65,18 @@ globalThis.addEventListener('message', (event: MessageEvent<HostMessage>) => {
 
 els.form.addEventListener('submit', (e) => {
   e.preventDefault();
-  submit();
+  submit(true);
 });
 els.input.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault();
-    submit();
+    submit(false);
   }
 });
-els.input.addEventListener('input', autoGrow);
+els.input.addEventListener('input', () => {
+  autoGrow();
+  renderSend();
+});
 $('toggle').addEventListener('click', () => els.sidebar.classList.toggle('hidden'));
 $('new').addEventListener('click', () => vscode.postMessage({ type: 'new' }));
 els.copy.addEventListener('click', () => vscode.postMessage({ type: 'copy' }));
@@ -118,16 +122,41 @@ setupResizer();
 
 vscode.postMessage({ type: 'ready' });
 
-function submit(): void {
-  if (state?.view.busy) {
-    vscode.postMessage({ type: 'stop' });
+/**
+ * Sends the question, or stops the turn when the button (the Stop button while a turn
+ * runs) was pressed. Enter never stops a turn, and nothing is sent while the crew is
+ * answering or cannot take a question.
+ */
+function submit(fromButton: boolean): void {
+  const input = inputState();
+  if (input.stop) {
+    if (fromButton) vscode.postMessage({ type: 'stop' });
     return;
   }
-  const text = els.input.value.trim();
-  if (!text) return;
-  vscode.postMessage({ type: 'send', text });
+  if (!input.canSend) return;
+  vscode.postMessage({ type: 'send', text: els.input.value.trim() });
   els.input.value = '';
   autoGrow();
+  renderSend();
+}
+
+/** What the input offers now: Stop while a turn runs, Send once there is text and the crew can take it, and why not when it cannot. */
+function inputState(): { stop: boolean; canSend: boolean; note?: string } {
+  if (state?.view.busy) return { stop: true, canSend: false, note: 'The crew is answering' };
+  const availability = state?.availability;
+  if (availability && availability.state !== 'ready') return { stop: false, canSend: false, note: availability.reason };
+  return { stop: false, canSend: els.input.value.trim() !== '' };
+}
+
+/** Shows the Send or Stop button only when it can be used, with the reason beside the input when sending is blocked. */
+function renderSend(): void {
+  const input = inputState();
+  els.send.hidden = !input.stop && !input.canSend;
+  if (els.send.classList.contains('stop') !== input.stop || !els.send.innerHTML) els.send.innerHTML = input.stop ? icons.stop : icons.send;
+  els.send.title = input.stop ? 'Stop this turn' : 'Send';
+  els.send.classList.toggle('stop', input.stop);
+  els.note.hidden = !input.note;
+  els.note.textContent = input.note ?? '';
 }
 
 function autoGrow(): void {
@@ -148,9 +177,7 @@ function render(): void {
   els.deleteBtn.disabled = busy;
   els.history.innerHTML = renderHistory(state.history, conversation.id);
   renderMessages();
-  els.send.innerHTML = busy ? icons.stop : icons.send;
-  els.send.title = busy ? 'Stop this turn' : 'Send';
-  els.send.classList.toggle('stop', busy);
+  renderSend();
 }
 
 function renderHistory(history: ConversationMeta[], activeId: string): string {
@@ -258,6 +285,7 @@ function prefill(text: string): void {
   els.input.focus();
   els.input.setSelectionRange(els.input.value.length, els.input.value.length);
   autoGrow();
+  renderSend();
 }
 
 /** Puts a question back in the input, to change it and send it again. */
@@ -266,6 +294,7 @@ function editMessage(index: number): void {
   if (!message) return;
   els.input.value = message.content;
   autoGrow();
+  renderSend();
   els.input.focus();
 }
 

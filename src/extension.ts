@@ -13,6 +13,7 @@ import { followDeployment, followRolloutCommand } from './gitops/commands';
 import { LiveCrewActions, sourceForCrew } from './deploy/liveCrew';
 import { registerLoop } from './loop/register';
 import { agentSourceMap } from './source/declared';
+import { readAvailability } from './discussion/availability';
 import { LIVE_SCHEME, LiveDocuments } from './views/liveDocuments';
 import { execProgram, readText, readYamlFiles } from './source/nodeDeps';
 import { SourceService } from './source/service';
@@ -39,6 +40,10 @@ export function activate(context: vscode.ExtensionContext): void {
     agentSources: async (crew) => {
       const entry = sourceForCrew(crew, await sources.entries());
       return entry ? agentSourceMap(await service.located(entry)) : new Map();
+    },
+    availability: async (crew) => {
+      const { client } = tree.connection ?? connect();
+      return readAvailability(client, await service.kinds(client), crew.namespace, crew.name);
     },
   };
   const commands = new Commands(context.extensionUri, tree, view, store, links);

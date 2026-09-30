@@ -309,6 +309,7 @@ export class FakeWebview {
 export class FakePanel {
   webview = new FakeWebview();
   active = true;
+  visible = true;
   iconPath: unknown;
   revealed = 0;
   private viewState = new EventEmitter<void>();
@@ -324,6 +325,12 @@ export class FakePanel {
   }
   dispose(): void {
     this.disposed.fire();
+  }
+  /** Test side: the panel becomes hidden or shown. */
+  setVisible(visible: boolean): void {
+    this.visible = visible;
+    this.active = visible;
+    this.viewState.fire();
   }
 }
 

@@ -2,6 +2,7 @@ import * as crypto from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import * as vscode from 'vscode';
 import { dashboardUrl, streamTimeoutMs, type Connection } from '../connection';
+import { unreachable, type CrewAvailability } from '../discussion/availability';
 import { DEFAULT_TIMING } from '../discussion/client';
 import { ChatSession, type SessionView } from '../discussion/session';
 import type { CrewSummary } from '../k8s/crews';
@@ -21,7 +22,12 @@ export interface ChatLinks {
    * composes. Empty when no workspace source renders the crew.
    */
   agentSources(crew: CrewSummary): Promise<Map<string, Located[]>>;
+  /** Whether the crew can take a question now, read from the cluster; the page blocks sending when it cannot. */
+  availability?(crew: CrewSummary): Promise<CrewAvailability>;
 }
+
+/** How often an open, visible chat reads its crew's availability again. */
+export const AVAILABILITY_MS = 15_000;
 
 /** A chat with one crew. One panel per context, namespace and crew. */
 export class ChatPanel {
@@ -81,10 +87,36 @@ export class ChatPanel {
     this.panel.webview.onDidReceiveMessage((m: WebviewMessage) => this.onMessage(m));
     this.panel.onDidChangeViewState(() => {
       if (this.panel.active) ChatPanel.activePanel = this;
+      if (this.panel.visible) void this.readAvailability?.();
     });
     this.panel.onDidDispose(() => this.dispose());
     ChatPanel.activePanel = this;
     if (links) void this.loadSources(links);
+    if (links?.availability) this.followAvailability(links.availability.bind(links));
+  }
+
+  /**
+   * Reads the crew's availability now, then again while the panel is visible, when it
+   * becomes visible, and after each turn. A read already under way is not started again.
+   */
+  private followAvailability(read: (crew: CrewSummary) => Promise<CrewAvailability>): void {
+    let reading = false;
+    this.readAvailability = async () => {
+      if (reading) return;
+      reading = true;
+      try {
+        this.availability = await read(this.crew);
+      } catch (err) {
+        this.availability = unreachable(err);
+      } finally {
+        reading = false;
+      }
+      await this.post(this.session.view);
+    };
+    void this.readAvailability();
+    this.availabilityTimer = setInterval(() => {
+      if (this.panel.visible) void this.readAvailability?.();
+    }, AVAILABILITY_MS);
   }
 
   /** Where each agent is defined, read once when the panel opens; the page links the agents found. */
@@ -235,6 +267,12 @@ export class ChatPanel {
   }
 
   private history: ConversationMeta[] = [];
+  /** The crew's availability, once read; undefined when there is no way to read it. */
+  private availability?: CrewAvailability;
+  private readAvailability?: () => Promise<void>;
+  private availabilityTimer?: ReturnType<typeof setInterval>;
+  /** Whether the last posted view had a turn running, to read the availability again when it ends. */
+  private wasBusy = false;
   /** Where each agent is defined, once read; empty until then or when no source is open. */
   private agentSources = new Map<string, Located[]>();
   /** The page has said it is ready for messages. */
@@ -246,15 +284,19 @@ export class ChatPanel {
   /** Posts the session's current view; the history list is re-read only between turns. */
   private async post(view: SessionView): Promise<void> {
     if (this.disposed) return;
+    const turnEnded = this.wasBusy && !view.busy;
+    this.wasBusy = view.busy;
+    if (turnEnded) void this.readAvailability?.();
     if (!view.busy) this.history = await this.store.list(this.connection.context, this.crew.namespace, this.crew.name);
     if (this.disposed) return;
     const links = { agents: [...this.agentSources.keys()], dashboard: dashboardUrl() !== '' };
-    const message: HostMessage = { type: 'state', view: this.session.view, history: this.history, about: crewAbout(this.crew), links };
+    const message: HostMessage = { type: 'state', view: this.session.view, history: this.history, about: crewAbout(this.crew), links, availability: this.availability };
     await this.panel.webview.postMessage(message);
   }
 
   private dispose(): void {
     this.disposed = true;
+    if (this.availabilityTimer) clearInterval(this.availabilityTimer);
     this.session.stop();
     ChatPanel.panels.delete(this.key);
     if (ChatPanel.activePanel === this) ChatPanel.activePanel = undefined;
@@ -297,9 +339,10 @@ export class ChatPanel {
       </div>
     </header>
     <div class="messages" id="messages"></div>
+    <p class="input-note" id="note" role="status" hidden></p>
     <form class="input-area" id="form">
       <textarea id="input" rows="1" placeholder="Ask the crew a question..."></textarea>
-      <button type="submit" class="send-btn" id="send" title="Send"></button>
+      <button type="submit" class="send-btn" id="send" title="Send" hidden></button>
     </form>
   </div>
 </div>
