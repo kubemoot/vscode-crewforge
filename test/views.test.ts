@@ -18,10 +18,44 @@ describe('tree model', () => {
     expect(crewDescription(c)).toBe('Ready, 2 agents');
     expect(crewDescription(crew('x', 'n', { agents: 1 }))).toBe('Ready, 1 agent');
     expect(crewDescription(crew('x', 'n'))).toBe('Ready');
-    expect(crewTooltip(c)).toBe('team-1/lab-ops\nPhase: Ready (ready)\nCoordinator: coord\nCrew operational');
+    expect(crewTooltip(c)).toBe('team-1/lab-ops\nPhase: Ready (ready)\nCoordinator: coord\nCrew operational\nNamespace: team-1');
     expect(crewAbout(c)).toBe('2 agents, coordinator coord');
     expect(crewAbout(crew('x', 'n', { ready: false, phase: 'Pending' }))).toBe('phase Pending: it may not answer yet');
     expect(crewAbout(crew('x', 'n', { agents: 1 }))).toBe('1 agent');
+  });
+
+  it('adds the chart version to the line, from helm.sh/chart or the crew-version label', () => {
+    expect(crewDescription(crew('x', 'n', { agents: 22, labels: { 'helm.sh/chart': 'homelab-pilot-crew-0.45.1-rc.0' } }))).toBe('Ready, 22 agents, v0.45.1-rc.0');
+    expect(crewDescription(crew('x', 'n', { labels: { 'kubemoot.ai/crew-version': 'v1.2.3' } }))).toBe('Ready, v1.2.3');
+    expect(crewDescription(crew('x', 'n', { labels: { 'helm.sh/chart': 'no-version' } }))).toBe('Ready');
+  });
+
+  it('shows the metadata in the tooltip: description, creation, archetype, labels, and conditions', () => {
+    const c = crew('lab-ops', 'team-1', {
+      ready: false,
+      phase: 'Deploying',
+      description: 'Answers lab questions',
+      created: '2026-09-01T10:00:00Z',
+      labels: { 'z-last': '1', 'app.kubernetes.io/name': 'lab' },
+      conditions: [
+        { type: 'Ready', status: 'False', reason: 'GatewayStarting', message: 'Discussion gateway starting' },
+        { type: 'Scheduled', status: 'True' },
+      ],
+    });
+    expect(crewTooltip(c, 'consent-3').split('\n')).toEqual([
+      'team-1/lab-ops',
+      'Phase: Deploying',
+      'Description: Answers lab questions',
+      'Namespace: team-1',
+      'Created: 2026-09-01T10:00:00Z',
+      'Archetype: consent-3',
+      'Labels:',
+      '  app.kubernetes.io/name=lab',
+      '  z-last=1',
+      'Conditions:',
+      '  Ready=False (GatewayStarting): Discussion gateway starting',
+      '  Scheduled=True',
+    ]);
   });
 
   it('counts agents, singular only for one', () => {

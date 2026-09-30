@@ -10,10 +10,13 @@ export const KINDS: Record<string, string> = {
   Model: 'models',
   CrewFitness: 'crewfitnesses',
   CrewFitnessSuite: 'crewfitnesssuites',
+  Skill: 'skills',
+  MCPServer: 'mcpservers',
+  CrewSchedulingPolicy: 'crewschedulingpolicies',
 };
 
 /**
- * An in-memory API server for the Kubemoot group: discovery, list and get per
+ * An in-memory API server for the Kubemoot group: discovery, list, get, and delete per
  * namespace, and cluster-wide Crew lists. Records every call.
  */
 export class FakeCluster implements KubeTransport {
@@ -35,6 +38,7 @@ export class FakeCluster implements KubeTransport {
     if (failure) throw failure;
     if (method === 'GET') return JSON.stringify(this.get(path));
     if (method === 'PATCH') return '{}';
+    if (method === 'DELETE') return JSON.stringify(this.remove(path));
     if (method === 'POST') {
       const created = body as Manifest;
       this.objects.push({ ...created, kind: created.kind });
@@ -45,6 +49,12 @@ export class FakeCluster implements KubeTransport {
 
   stream(): Promise<void> {
     return Promise.reject(new Error('FakeCluster does not stream'));
+  }
+
+  private remove(path: string): Manifest {
+    const found = this.get(path) as Manifest;
+    this.objects = this.objects.filter((o) => o !== found);
+    return found;
   }
 
   private get(path: string): unknown {
@@ -62,7 +72,7 @@ export class FakeCluster implements KubeTransport {
     const items = this.objects.filter((o) => KINDS[o.kind] === plural && o.metadata.namespace === ns);
     if (name === undefined) return { items: items.map(({ kind: _kind, apiVersion: _api, ...rest }) => rest) };
     const found = items.find((o) => o.metadata.name === decodeURIComponent(name));
-    if (!found) throw Object.assign(new Error(`${plural} "${name}" not found`), { status: 404 });
+    if (!found) throw new KubeError(`${plural} "${name}" not found`, 404);
     return found;
   }
 }
@@ -77,4 +87,43 @@ function discovery() {
 /** A Kubemoot object for tests. */
 export function obj(kind: string, name: string, namespace: string, spec: Record<string, unknown> = {}, labels: Record<string, string> = {}): Manifest {
   return { apiVersion: 'kubemoot.ai/v1alpha1', kind, metadata: { name, namespace, labels }, spec };
+}
+
+const ADL = 'DEFINE COMPONENT triage\nWHEN a question arrives\nTHEN answer it';
+const PROSE = 'You are a helpful coordinator. When a question arrives, answer it.';
+
+/**
+ * A crew as a chart installs it: a Crew of release "lab" with a coordinator and a
+ * tooler, their PromptModules (one ADL, one prose, one shared with another crew, one
+ * missing), a Skill, MCPServers (one named, one from the release, one unrelated), a
+ * CrewSchedulingPolicy, and an agent of another crew.
+ */
+export function seedCrew(cluster: FakeCluster, namespace = 'team-a'): FakeCluster {
+  const release = { 'app.kubernetes.io/instance': 'lab', 'app.kubernetes.io/managed-by': 'Helm', 'helm.sh/chart': 'lab-crew-0.4.0' };
+  const member = { 'kubemoot.ai/crew': 'lab-ops' };
+  const crew = obj('Crew', 'lab-ops', namespace, { description: 'Answers lab questions' }, release);
+  crew.metadata.annotations = { 'meta.helm.sh/release-name': 'lab', 'meta.helm.sh/release-namespace': namespace };
+  crew.metadata.managedFields = [{ manager: 'helm' }];
+  crew.status = { ready: true, phase: 'Ready', agentCount: 2 };
+  const coordinator = obj('Agent', 'coordinator', namespace, { discussRole: 'coordinator', capabilities: ['reasoning'], promptRefs: ['rules', 'style'] }, member);
+  coordinator.status = { ready: true, phase: 'Running' };
+  const tooler = obj('Agent', 'k8s', namespace, { discussRole: 'tooler', capabilities: ['tool-calling', 'kubernetes'], promptRefs: ['rules', 'shared', 'gone'], enabledTools: ['pods_list', 'helm_list'], mcpServers: [{ name: 'kubernetes' }] }, member);
+  tooler.status = { phase: 'Pending' };
+  const other = obj('Agent', 'elsewhere', namespace, { promptRefs: ['shared'], enabledTools: ['nope'] }, { 'kubemoot.ai/crew': 'other' });
+  const kube = obj('MCPServer', 'kubernetes', namespace, {});
+  kube.status = { ready: true, tools: [{ name: 'pods_list' }, { name: 'helm_list' }] };
+  return cluster.add(
+    crew,
+    coordinator,
+    tooler,
+    other,
+    obj('PromptModule', 'rules', namespace, { order: 5, content: ADL }),
+    obj('PromptModule', 'style', namespace, { content: PROSE }),
+    obj('PromptModule', 'shared', namespace, { order: 50, content: PROSE }),
+    obj('Skill', 'runbook', namespace, { description: 'Restart a pod', content: ADL, order: 10 }, member),
+    kube,
+    obj('MCPServer', 'web', namespace, {}, release),
+    obj('MCPServer', 'unrelated', namespace, {}),
+    obj('CrewSchedulingPolicy', 'lab-ops', namespace, { crewRef: 'lab-ops', archetypeRef: 'consent-3' }),
+  );
 }

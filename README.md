@@ -36,7 +36,36 @@ stops a turn.
 download buttons in a chat's header copy or save it as Markdown. **CrewForge: Open
 Conversations Folder** shows where they are kept.
 
-## Develop crews
+## Explore a live crew
+
+Expand a crew in the **Crews** view to see what it is made of, read from the cluster:
+
+- **Agents**, each with its discussion role, the capabilities it asks the scheduler for
+  (never a model name), and whether it is ready.
+- **PromptModules** its agents compose, in composition order, each marked ADL or prose,
+  with the agents that use it. A module an agent names but the cluster lacks shows as
+  missing.
+- **Skills**, in order.
+- **MCP Servers** its agents or skills name or its release installed, and the **Tools**
+  its agents may call, when it has any.
+- **Deployment**: the channel (Helm, Flux, or a kubectl bundle), the Helm chart and
+  version, the Helm release, the Flux HelmRelease or Kustomization, and what a CrewForge
+  deploy recorded (source, revision, who, when).
+
+The line under a crew shows its phase, agent count, and chart version; hover it for its
+namespace, labels, creation time, archetype, and status conditions. Click any leaf for
+its live YAML in a read-only editor; **Show YAML** and **Show Crew Bundle YAML** (the
+Crew with its Agents, PromptModules, and Skills in one document) are on a crew's menu.
+
+A crew's menu also carries the lifecycle commands of Crew Sources: **Update Deployment
+from Source**, **Deploy a Revision**, **Run Fitness**, **Follow GitOps Rollout** (Flux),
+and **Remove Deployment**. CrewForge finds the crew's source among the workspace's crew
+charts and bundles: the one the Crew names, else the one that renders a crew of its
+name. When no source is open it says so. Remove Deployment works without a source: it
+confirms with the crew's name, then uninstalls a Helm crew's release, or deletes the
+crew's Crew, Agents, Skills, and the PromptModules only it uses. A Flux-managed crew
+changes only through git. **Create Crew** is on the Crews view's title bar too.
+
 
 The **Crew Sources** view finds crew Helm charts and plain-manifest bundles in the
 workspace and, under each, every namespace its crew is deployed to.
@@ -81,6 +110,10 @@ and context.
 
 - `list` on `crews.kubemoot.ai`, cluster-wide or in each namespace of `crewforge.namespaces`.
 - `get` and `create` on `services/proxy` in the crew's namespace, to ask and to stream.
+- To explore a crew: `get` and `list` on `agents`, `promptmodules`, `skills`,
+  `mcpservers`, and `crewschedulingpolicies`; a kind it may not read shows as a warning
+  under the crew. `delete` on those kinds and `crews` to remove a crew whose source is not
+  open.
 - To develop crews: `get` and `list` on the Kubemoot kinds a source renders, `patch` on
   `crews` (its annotations), `create` on `crewfitnesses` and `crewfitnesssuites`, and what
   `helm` or `kubectl` need to deploy. Reading `helmreleases.helm.toolkit.fluxcd.io` adds
@@ -89,8 +122,9 @@ and context.
 ## Architecture boundaries
 
 CrewForge's own writes to the API server are Kubemoot custom resources only: the
-annotations on a Crew and the fitness runs it starts. Deploying and removing run your
-own `helm` and `kubectl`.
+annotations on a Crew, the fitness runs it starts, and deleting a crew's Kubemoot objects
+when you remove it. Deploying and removing otherwise run your own `helm` and `kubectl`;
+removing a bundle deletes only the Kubemoot objects it renders.
 
 - **CrewForge never** deletes namespaces, manages Jobs, touches non-CRD cluster resources,
   or implements cleanup or lifecycle logic.

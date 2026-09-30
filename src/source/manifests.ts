@@ -54,8 +54,18 @@ export function toYaml(m: Manifest): string {
 const SERVER_METADATA = ['managedFields', 'resourceVersion', 'uid', 'generation', 'creationTimestamp'];
 
 function presentable(m: Manifest): Manifest {
+  return stripMetadata(m, SERVER_METADATA);
+}
+
+/** YAML of a live object as the API server holds it, less managedFields and kubectl's last-applied copy of the object. */
+export function toLiveYaml(m: Manifest): string {
+  return dump(stripMetadata(m, ['managedFields']), { lineWidth: 120, noRefs: true });
+}
+
+/** A copy of the object without the named metadata fields and kubectl's last-applied annotation; an emptied annotation map goes too. */
+function stripMetadata(m: Manifest, fields: string[]): Manifest {
   const metadata = { ...m.metadata };
-  for (const field of SERVER_METADATA) delete metadata[field];
+  for (const field of fields) delete metadata[field];
   const annotations = { ...metadata.annotations };
   delete annotations['kubectl.kubernetes.io/last-applied-configuration'];
   if (Object.keys(annotations).length) metadata.annotations = annotations;

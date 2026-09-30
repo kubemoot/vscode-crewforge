@@ -41,12 +41,14 @@ export async function liveObjects(client: KubeTransport, kinds: Map<string, Kube
   return lists.flat().filter((m) => names.has(objectKey(m)) || (m.metadata.labels?.['kubemoot.ai/crew'] === crew && !isOwned(m)));
 }
 
-function isOwned(m: Manifest): boolean {
+/** True when a controller owns the object (it has ownerReferences), so its owner, not a source, makes it. */
+export function isOwned(m: Manifest): boolean {
   const owners = m.metadata.ownerReferences;
   return Array.isArray(owners) && owners.length > 0;
 }
 
-async function listKind(client: KubeTransport, kind: KubemootKind, namespace: string): Promise<Manifest[]> {
+/** Every object of one Kubemoot kind in a namespace, with its kind and apiVersion filled in. */
+export async function listKind(client: KubeTransport, kind: KubemootKind, namespace: string): Promise<Manifest[]> {
   const body = JSON.parse(await client.request('GET', objectPath(kind, namespace))) as { items?: Manifest[] };
   return (body.items ?? []).map((m) => ({ ...m, apiVersion: m.apiVersion ?? `${KUBEMOOT_GROUP}/v1alpha1`, kind: kind.kind }));
 }

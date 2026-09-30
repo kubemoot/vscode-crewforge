@@ -58,6 +58,10 @@ export const languages = {
     recorded.codeLensProviders.push(provider);
     return { dispose: () => undefined };
   },
+  setTextDocumentLanguage<T extends { languageId?: string }>(document: T, languageId: string) {
+    document.languageId = languageId;
+    return Promise.resolve(document);
+  },
 };
 
 export class ThemeIcon {
@@ -254,7 +258,11 @@ export const window = {
       dispose: () => undefined,
     };
   },
-  showTextDocument(target: Uri | { content: string }) {
+  showTextDocument(target: Uri | { content: string } | { uri: Uri; languageId: string }) {
+    if ('uri' in target) {
+      recorded.shownDocuments.push(`${target.uri.toString()} (${target.languageId})`);
+      return Promise.resolve(undefined);
+    }
     recorded.shownDocuments.push(target instanceof Uri ? target.fsPath : target.content);
     return Promise.resolve(undefined);
   },
@@ -277,7 +285,8 @@ export const workspace = {
   get textDocuments() {
     return recorded.textDocuments;
   },
-  openTextDocument(options: { content: string; language: string }) {
+  openTextDocument(options: { content: string; language: string } | Uri) {
+    if (options instanceof Uri) return Promise.resolve({ uri: options, languageId: 'plaintext' });
     return Promise.resolve({ content: options.content, language: options.language });
   },
   get workspaceFolders() {

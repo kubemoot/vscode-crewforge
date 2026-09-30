@@ -8,7 +8,9 @@ import { ChatPanel } from './panels/chatPanel';
 import { createCrewCommand } from './create/createCrew';
 import { DeployCommands } from './deploy/commands';
 import { FitnessCommands } from './fitness/commands';
-import { followRolloutCommand } from './gitops/commands';
+import { followDeployment, followRolloutCommand } from './gitops/commands';
+import { LiveCrewActions } from './deploy/liveCrew';
+import { LIVE_SCHEME, LiveDocuments } from './views/liveDocuments';
 import { execProgram, readText, readYamlFiles } from './source/nodeDeps';
 import { SourceService } from './source/service';
 import { ConversationStore } from './store/conversations';
@@ -36,6 +38,17 @@ export function activate(context: vscode.ExtensionContext): void {
     sources.refresh();
     tree.refresh();
   });
+  const liveDocuments = new LiveDocuments(() => tree.connection ?? connect());
+  const live = new LiveCrewActions({
+    sources: async () => (sources.known.length ? sources.known : service.load()),
+    deploy,
+    fitness,
+    details: (crew) => tree.detailsOf(crew),
+    follow: (deployment) => followDeployment(deployment, () => tree.refresh()),
+  });
+  /** A lifecycle command from either view: a live crew goes through the adapter, a Crew Sources node straight on. */
+  const either = (onCrew: (crew: CrewSummary) => Promise<void>, onSource: (node?: SourceNode) => Promise<void>) => (node?: SourceNode | CrewNode) =>
+    guard(() => (node?.kind === 'crew' ? onCrew(node.crew) : onSource(node as SourceNode | undefined)));
 
   let timer: ReturnType<typeof setInterval> | undefined;
   const followVisibility = () => {
@@ -62,13 +75,16 @@ export function activate(context: vscode.ExtensionContext): void {
     output,
     vscode.commands.registerCommand('crewforge.createCrew', () => guard(() => createCrewCommand(execProgram, currentConnection(tree), () => sources.refresh()))),
     vscode.commands.registerCommand('crewforge.deploySource', (node?: SourceNode) => guard(() => deploy.deploySource(node))),
-    vscode.commands.registerCommand('crewforge.updateDeployment', (node?: SourceNode) => guard(() => deploy.updateDeployment(node))),
+    vscode.commands.registerCommand('crewforge.updateDeployment', either((crew) => live.update(crew), (node) => deploy.updateDeployment(node))),
     vscode.commands.registerCommand('crewforge.applyResource', (node?: SourceNode) => guard(() => deploy.applyResource(node))),
-    vscode.commands.registerCommand('crewforge.deployRevision', (node?: SourceNode) => guard(() => deploy.deployRevision(node))),
-    vscode.commands.registerCommand('crewforge.runFitness', (node?: SourceNode) => guard(() => fitness.runFitness(node))),
+    vscode.commands.registerCommand('crewforge.deployRevision', either((crew) => live.deployRevision(crew), (node) => deploy.deployRevision(node))),
+    vscode.commands.registerCommand('crewforge.runFitness', either((crew) => live.runFitness(crew), (node) => fitness.runFitness(node))),
     vscode.commands.registerCommand('crewforge.showRun', (node?: SourceNode) => guard(() => fitness.showRun(node))),
-    vscode.commands.registerCommand('crewforge.followRollout', (node?: SourceNode) => guard(() => followRolloutCommand(node, () => sources.refresh()))),
-    vscode.commands.registerCommand('crewforge.removeDeployment', (node?: SourceNode) => guard(() => deploy.removeDeployment(node))),
+    vscode.commands.registerCommand('crewforge.followRollout', either((crew) => live.followRollout(crew), (node) => followRolloutCommand(node, () => sources.refresh()))),
+    vscode.commands.registerCommand('crewforge.removeDeployment', either((crew) => live.remove(crew), (node) => deploy.removeDeployment(node))),
+    vscode.workspace.registerTextDocumentContentProvider(LIVE_SCHEME, liveDocuments),
+    vscode.commands.registerCommand('crewforge.showLiveYaml', (node?: CrewNode) => guard(() => showLiveYaml(liveDocuments, node))),
+    vscode.commands.registerCommand('crewforge.showCrewBundleYaml', (node?: CrewNode) => guard(() => showCrewBundleYaml(liveDocuments, node))),
     vscode.commands.registerCommand('crewforge.refreshCrews', () => tree.refresh()),
     vscode.commands.registerCommand('crewforge.askCrew', (node?: CrewNode) => commands.askCrew(node)),
     vscode.commands.registerCommand('crewforge.continueConversation', () => commands.continueConversation()),
@@ -182,6 +198,16 @@ async function listWorkspaceFiles(): Promise<{ charts: string[]; yamls: string[]
     vscode.workspace.findFiles('**/*.{yaml,yml}', IGNORED_FOLDERS),
   ]);
   return { charts: charts.map((u) => u.fsPath), yamls: yamls.map((u) => u.fsPath).filter((p) => !p.endsWith('Chart.yaml')) };
+}
+
+/** The live YAML of a crew, or of the object behind one of its leaves. */
+async function showLiveYaml(documents: LiveDocuments, node?: CrewNode): Promise<void> {
+  if (node?.kind === 'crew') return documents.show({ kind: 'object', ref: { kind: 'Crew', name: node.crew.name, namespace: node.crew.namespace } });
+  if (node?.kind === 'member' && node.view.ref) return documents.show({ kind: 'object', ref: node.view.ref });
+}
+
+async function showCrewBundleYaml(documents: LiveDocuments, node?: CrewNode): Promise<void> {
+  if (node?.kind === 'crew') return documents.show({ kind: 'bundle', namespace: node.crew.namespace, crew: node.crew.name });
 }
 
 async function showDrift(documents: ManifestDocuments, node?: SourceNode): Promise<void> {

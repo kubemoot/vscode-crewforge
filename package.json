@@ -162,6 +162,18 @@
         "title": "Follow GitOps Rollout",
         "category": "CrewForge",
         "icon": "$(eye)"
+      },
+      {
+        "command": "crewforge.showLiveYaml",
+        "title": "Show YAML",
+        "category": "CrewForge",
+        "icon": "$(file-code)"
+      },
+      {
+        "command": "crewforge.showCrewBundleYaml",
+        "title": "Show Crew Bundle YAML",
+        "category": "CrewForge",
+        "icon": "$(files)"
       }
     ],
     "menus": {
@@ -197,6 +209,11 @@
         {
           "command": "crewforge.createCrew",
           "when": "view == crewforge.sources",
+          "group": "navigation@0"
+        },
+        {
+          "command": "crewforge.createCrew",
+          "when": "view == crewforge.crews",
           "group": "navigation@0"
         }
       ],
@@ -250,6 +267,51 @@
           "command": "crewforge.followRollout",
           "when": "view == crewforge.sources && viewItem == deployment-flux",
           "group": "inline@2"
+        },
+        {
+          "command": "crewforge.askCrew",
+          "when": "view == crewforge.crews && viewItem == crew-flux",
+          "group": "inline"
+        },
+        {
+          "command": "crewforge.showLiveYaml",
+          "when": "view == crewforge.crews && viewItem == liveObject",
+          "group": "inline"
+        },
+        {
+          "command": "crewforge.showLiveYaml",
+          "when": "view == crewforge.crews && viewItem =~ /^crew(-flux)?$/",
+          "group": "yaml@1"
+        },
+        {
+          "command": "crewforge.showCrewBundleYaml",
+          "when": "view == crewforge.crews && viewItem =~ /^crew(-flux)?$/",
+          "group": "yaml@2"
+        },
+        {
+          "command": "crewforge.updateDeployment",
+          "when": "view == crewforge.crews && viewItem =~ /^crew(-flux)?$/",
+          "group": "lifecycle@1"
+        },
+        {
+          "command": "crewforge.deployRevision",
+          "when": "view == crewforge.crews && viewItem =~ /^crew(-flux)?$/",
+          "group": "lifecycle@2"
+        },
+        {
+          "command": "crewforge.runFitness",
+          "when": "view == crewforge.crews && viewItem =~ /^crew(-flux)?$/",
+          "group": "lifecycle@3"
+        },
+        {
+          "command": "crewforge.followRollout",
+          "when": "view == crewforge.crews && viewItem == crew-flux",
+          "group": "lifecycle@4"
+        },
+        {
+          "command": "crewforge.removeDeployment",
+          "when": "view == crewforge.crews && viewItem == crew",
+          "group": "lifecycle@9"
         }
       ],
       "commandPalette": [
@@ -287,6 +349,14 @@
         },
         {
           "command": "crewforge.followRollout",
+          "when": "false"
+        },
+        {
+          "command": "crewforge.showLiveYaml",
+          "when": "false"
+        },
+        {
+          "command": "crewforge.showCrewBundleYaml",
           "when": "false"
         }
       ]

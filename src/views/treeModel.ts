@@ -1,4 +1,5 @@
-import type { CrewSummary } from '../k8s/crews';
+import type { CrewCondition, CrewSummary } from '../k8s/crews';
+import { provenanceOf } from '../source/provenance';
 
 export interface NamespaceGroup {
   namespace: string;
@@ -18,10 +19,13 @@ export function groupByNamespace(crews: CrewSummary[]): NamespaceGroup[] {
     .map(([namespace, list]) => ({ namespace, crews: [...list].sort((a, b) => a.name.localeCompare(b.name)) }));
 }
 
-/** The one line under a crew's name in the tree. */
+/** The one line under a crew's name in the tree: phase, agents, and chart version. */
 export function crewDescription(crew: CrewSummary): string {
-  const agents = crew.agents === undefined ? '' : `, ${agentCount(crew.agents)}`;
-  return `${crew.phase}${agents}`;
+  const version = provenanceOf(crew).chartVersion;
+  const parts = [crew.phase];
+  if (crew.agents !== undefined) parts.push(agentCount(crew.agents));
+  if (version) parts.push(version.startsWith('v') ? version : `v${version}`);
+  return parts.join(', ');
 }
 
 /** "1 agent", "3 agents". */
@@ -29,12 +33,27 @@ export function agentCount(n: number): string {
   return n === 1 ? '1 agent' : `${n} agents`;
 }
 
-/** The hover text of a crew. */
-export function crewTooltip(crew: CrewSummary): string {
+/** The hover text of a crew: its state, then its metadata; the archetype comes from its CrewSchedulingPolicy once known. */
+export function crewTooltip(crew: CrewSummary, archetype?: string): string {
   const lines = [`${crew.namespace}/${crew.name}`, `Phase: ${crew.phase}${crew.ready ? ' (ready)' : ''}`];
   if (crew.coordinator) lines.push(`Coordinator: ${crew.coordinator}`);
   if (crew.message) lines.push(crew.message);
-  return lines.join('\n');
+  if (crew.description) lines.push(`Description: ${crew.description}`);
+  lines.push(`Namespace: ${crew.namespace}`);
+  if (crew.created) lines.push(`Created: ${crew.created}`);
+  if (archetype) lines.push(`Archetype: ${archetype}`);
+  return [...lines, ...mapLines('Labels', crew.labels), ...conditionLines(crew.conditions)].join('\n');
+}
+
+function mapLines(title: string, map: Record<string, string> = {}): string[] {
+  const entries = Object.entries(map).sort(([a], [b]) => a.localeCompare(b));
+  return entries.length ? [`${title}:`, ...entries.map(([k, v]) => `  ${k}=${v}`)] : [];
+}
+
+function conditionLines(conditions: CrewCondition[] = []): string[] {
+  if (conditions.length === 0) return [];
+  const line = (c: CrewCondition) => `  ${c.type}=${c.status}${c.reason ? ` (${c.reason})` : ''}${c.message ? `: ${c.message}` : ''}`;
+  return ['Conditions:', ...conditions.map(line)];
 }
 
 /** The empty state's line about a crew. */
