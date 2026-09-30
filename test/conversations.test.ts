@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { newConversation, titleFrom } from '../src/store/conversation';
+import { newConversation, questionFor, titleFrom, type ChatMessage } from '../src/store/conversation';
 import { ConversationStore, safeSegment } from '../src/store/conversations';
 
 const store = () => new ConversationStore(fs.mkdtempSync(path.join(os.tmpdir(), 'crewforge-store-')));
@@ -64,5 +64,31 @@ describe('titleFrom', () => {
     expect(titleFrom('  Which nodes\nhave a GPU?  ')).toBe('Which nodes have a GPU?');
     expect(titleFrom('x'.repeat(100))).toHaveLength(82);
     expect(titleFrom('   ')).toBe('Untitled');
+  });
+});
+
+describe('questionFor', () => {
+  const at = '2026-09-27T00:00:00Z';
+  const messages: ChatMessage[] = [
+    { role: 'system', content: 'note', timestamp: at },
+    { role: 'user', content: 'first?', timestamp: at },
+    { role: 'assistant', content: 'one', timestamp: at },
+    { role: 'user', content: 'second?', timestamp: at },
+    { role: 'system', content: 'Stopped.', timestamp: at },
+    { role: 'assistant', content: 'two', timestamp: at },
+  ];
+
+  it('is the question itself, or the nearest question before an answer or notice', () => {
+    expect(questionFor(messages, 1)).toBe('first?');
+    expect(questionFor(messages, 2)).toBe('first?');
+    expect(questionFor(messages, 3)).toBe('second?');
+    expect(questionFor(messages, 5)).toBe('second?');
+  });
+
+  it('is undefined with no question before, and clamps an index past the end', () => {
+    expect(questionFor(messages, 0)).toBeUndefined();
+    expect(questionFor(messages, -1)).toBeUndefined();
+    expect(questionFor([], 3)).toBeUndefined();
+    expect(questionFor(messages, 99)).toBe('second?');
   });
 });

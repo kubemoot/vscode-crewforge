@@ -28,9 +28,15 @@ different file, run **CrewForge: Select Kubeconfig File** from the Command Palet
 change cluster, **CrewForge: Select Kubernetes Context** (the server icon on the view).
 
 While a turn runs, each agent has a card: queued, analyzing (with the GPU it landed on),
-then its finding or "stood aside". The crew's answer follows, rendered as Markdown. Ask
-again in the same panel and the crew keeps the conversation's context. The square button
-stops a turn.
+then its finding or "stood aside". The crew's answer follows, rendered as Markdown, with
+its time and how long the crew took, for example `03:36 PM` and `42 s`. Ask again in the same
+panel and the crew keeps the conversation's context. The square button stops a turn.
+
+Messages use the panel's full width, so the chat stays readable in a narrow side bar; there
+the conversations list opens over the chat from the menu button. Under each message, a row
+of buttons appears on hover or keyboard focus: for your question **Copy**, **Ask again**
+(sends it as a new turn), and **Edit and resend** (puts it back in the input); for the
+crew's answer **Copy** (its Markdown) and **Ask the question again**.
 
 **CrewForge: Continue a Conversation** reopens any saved conversation. The copy and
 download buttons in a chat's header copy or save it as Markdown. **CrewForge: Open

@@ -5,6 +5,7 @@ import { ChatPanel } from '../src/panels/chatPanel';
 import { newConversation, type Conversation } from '../src/store/conversation';
 import { ConversationStore } from '../src/store/conversations';
 import type { HostMessage, WebviewMessage } from '../src/webview/protocol';
+import { META_SEPARATOR } from '../src/webview/render';
 import { recorded, resetFake, Uri } from './vscodeFake';
 
 let sent: WebviewMessage[];
@@ -70,7 +71,8 @@ describe('the chat page', () => {
     expect(links).toEqual(['https://kubemoot.org']);
     expect(messages.textContent).toContain('bad');
     expect(messages.querySelector('.message.user .message-text')?.textContent).toBe('hi <b>there</b>');
-    expect(messages.querySelector('.notice')?.textContent).toBe('Stopped.');
+    expect(messages.querySelector('.notice-text')?.textContent).toBe('Stopped.');
+    expect(messages.querySelector('.notice .message-time')).not.toBeNull();
     expect(($('copy') as HTMLButtonElement).hidden).toBe(false);
   });
 
@@ -121,12 +123,91 @@ describe('the chat page', () => {
     expect($('history').textContent).toContain('No saved conversations yet');
   });
 
-  it('copies one message from its button', () => {
+  it('puts the time and the response duration under each message, and handles saved ones without a duration', () => {
     const c = newConversation('ctx', 'team-a', 'lab-ops');
-    c.messages.push({ role: 'assistant', content: 'answer', timestamp: c.startedAt });
+    c.messages.push(
+      { role: 'user', content: 'q', timestamp: '2026-09-27T15:36:00Z' },
+      { role: 'assistant', content: 'a', timestamp: '2026-09-27T15:36:42Z', durationMs: 42_000 },
+      { role: 'assistant', content: 'old', timestamp: '2026-09-27T15:40:00Z' },
+    );
     post(c);
-    ($('messages').querySelector('[data-copy]') as HTMLElement).click();
-    expect(sent.at(-1)).toEqual({ type: 'copyMessage', index: 0 });
+    const times = [...$('messages').querySelectorAll('.message-time')].map((el) => el.textContent ?? '');
+    expect(times[0]).not.toContain(META_SEPARATOR);
+    expect(times[1].endsWith(`${META_SEPARATOR}42 s`)).toBe(true);
+    expect(times[1].length).toBeGreaterThan(`${META_SEPARATOR}42 s`.length);
+    expect(times[2]).not.toContain(META_SEPARATOR);
+    expect($('messages').querySelector('.message-time')?.getAttribute('title')).toBe('2026-09-27T15:36:00Z');
+    expect($('messages').querySelectorAll('.message-avatar')).toHaveLength(3);
+    expect($('messages').querySelector('.message-avatar')?.closest('.message-meta')).not.toBeNull();
+  });
+
+  it('gives each message a row of labelled actions that reach the host', () => {
+    const c = newConversation('ctx', 'team-a', 'lab-ops');
+    c.messages.push({ role: 'user', content: 'q', timestamp: c.startedAt }, { role: 'assistant', content: 'answer', timestamp: c.startedAt });
+    post(c);
+    const rows = [...$('messages').querySelectorAll('.message-actions')];
+    expect(rows.map((r) => r.getAttribute('role'))).toEqual(['toolbar', 'toolbar']);
+    const labels = rows.map((r) => [...r.querySelectorAll('button')].map((b) => b.getAttribute('aria-label')));
+    expect(labels).toEqual([
+      ['Copy', 'Ask again', 'Edit and resend'],
+      ['Copy answer as Markdown', 'Ask the question again'],
+    ]);
+    for (const b of $('messages').querySelectorAll('.action-btn')) expect(b.getAttribute('title')).toBe(b.getAttribute('aria-label'));
+    const click = (index: number, action: string) => ($('messages').querySelector(`[data-index="${index}"][data-action="${action}"]`) as HTMLElement).click();
+    click(1, 'copy');
+    click(1, 'reask');
+    click(0, 'reask');
+    expect(sent.slice(1)).toEqual([
+      { type: 'copyMessage', index: 1 },
+      { type: 'reask', index: 1 },
+      { type: 'reask', index: 0 },
+    ]);
+  });
+
+  it('puts a question back in the input to edit and resend it', () => {
+    const c = newConversation('ctx', 'team-a', 'lab-ops');
+    c.messages.push({ role: 'user', content: 'Which nodes\nhave a GPU?', timestamp: c.startedAt });
+    post(c);
+    ($('messages').querySelector('[data-action="edit"]') as HTMLElement).click();
+    const input = $('input') as HTMLTextAreaElement;
+    expect(input.value).toBe('Which nodes\nhave a GPU?');
+    expect(document.activeElement).toBe(input);
+    expect(sent).toHaveLength(1);
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+    expect(sent.at(-1)).toEqual({ type: 'send', text: 'Which nodes\nhave a GPU?' });
+  });
+
+  it('disables asking again while a turn runs, and ignores a click on a disabled or stale button', () => {
+    const c = newConversation('ctx', 'team-a', 'lab-ops');
+    c.messages.push({ role: 'user', content: 'q', timestamp: c.startedAt });
+    post(c, { busy: true });
+    const reask = $('messages').querySelector('[data-action="reask"]') as HTMLButtonElement;
+    expect(reask.disabled).toBe(true);
+    expect(($('messages').querySelector('[data-action="edit"]') as HTMLButtonElement).disabled).toBe(false);
+    reask.click();
+    reask.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(sent).toHaveLength(1);
+    const stale = document.createElement('button');
+    stale.dataset.action = 'edit';
+    stale.dataset.index = '5';
+    $('messages').appendChild(stale);
+    stale.click();
+    stale.dataset.action = 'unknown';
+    stale.click();
+    expect(($('input') as HTMLTextAreaElement).value).toBe('');
+    expect(sent).toHaveLength(1);
+  });
+
+  it('keeps keyboard focus on a message button when the page re-renders', () => {
+    const c = newConversation('ctx', 'team-a', 'lab-ops');
+    c.messages.push({ role: 'user', content: 'q', timestamp: c.startedAt });
+    post(c);
+    ($('messages').querySelector('[data-action="copy"]') as HTMLElement).focus();
+    post(c, { busy: true });
+    expect((document.activeElement as HTMLElement).dataset.action).toBe('copy');
+    $('input').focus();
+    post(c);
+    expect(document.activeElement).toBe($('input'));
   });
 
   it('hides the conversations pane, and remembers a dragged width', () => {
@@ -139,6 +220,34 @@ describe('the chat page', () => {
     expect($('sidebar').style.width).toBe('480px');
     handle.dispatchEvent(new MouseEvent('pointerup'));
     expect(state).toHaveProperty('sidebarWidth');
+  });
+
+  it('starts with the conversations pane closed in a narrow panel, and closes it after a pick', async () => {
+    const listeners: ((e: { matches: boolean }) => void)[] = [];
+    const query = { matches: true, addEventListener: (_: string, l: (e: { matches: boolean }) => void) => listeners.push(l) };
+    globalThis.matchMedia = (() => query) as unknown as typeof globalThis.matchMedia;
+    try {
+      for (const p of recorded.panels) p.dispose();
+      await loadPage();
+      expect($('sidebar').classList.contains('hidden')).toBe(true);
+      $('toggle').click();
+      post(newConversation('ctx', 'team-a', 'lab-ops'), {}, [{ id: 'old-1', title: 'Earlier', startedAt: new Date().toISOString(), crewName: 'lab-ops', namespace: 'team-a', context: 'ctx' }]);
+      ($('history').querySelector('[data-id="old-1"]') as HTMLElement).click();
+      expect($('sidebar').classList.contains('hidden')).toBe(true);
+      $('toggle').click();
+      listeners.forEach((l) => l({ matches: false }));
+      expect($('sidebar').classList.contains('hidden')).toBe(false);
+      listeners.forEach((l) => l({ matches: true }));
+      expect($('sidebar').classList.contains('hidden')).toBe(true);
+    } finally {
+      delete (globalThis as { matchMedia?: unknown }).matchMedia;
+    }
+  });
+
+  it('ignores a click in the conversations list that is not on a conversation', () => {
+    post(newConversation('ctx', 'team-a', 'lab-ops'));
+    ($('history').querySelector('.no-discussions') as HTMLElement).click();
+    expect(sent).toHaveLength(1);
   });
 
   it('ignores messages that are not state', () => {

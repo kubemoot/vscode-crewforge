@@ -18,6 +18,27 @@ export function formatTime(iso: string): string {
   return Number.isNaN(d.getTime()) ? '' : d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
+/**
+ * How long a turn took: "42 s", "3 min 05 s". Empty when there is no valid duration, as
+ * in conversations saved before durations were kept.
+ */
+export function formatDuration(ms: unknown): string {
+  if (typeof ms !== 'number' || !Number.isFinite(ms) || ms < 0) return '';
+  const total = Math.round(ms / 1000);
+  if (total < 1) return 'under 1 s';
+  const minutes = Math.floor(total / 60);
+  const seconds = total % 60;
+  return minutes > 0 ? `${minutes} min ${String(seconds).padStart(2, '0')} s` : `${seconds} s`;
+}
+
+/** What separates the parts of a meta line: a middle dot with a space either side. */
+export const META_SEPARATOR = ' \u00b7 ';
+
+/** A message's time, then how long its turn took when known, for example "03:36 PM" and "42 s". */
+export function metaLine(timestamp: string, durationMs?: unknown): string {
+  return [formatTime(timestamp), formatDuration(durationMs)].filter(Boolean).join(META_SEPARATOR);
+}
+
 /** "Just now", "5m ago", "3h ago", "2d ago", then the date. */
 export function formatAgo(iso: string, now = Date.now()): string {
   const then = new Date(iso).getTime();
@@ -36,6 +57,8 @@ export const icons = {
   crewLarge: '<svg width="56" height="56" viewBox="0 0 200 200" fill="currentColor"><circle cx="100" cy="100" r="40"/><path d="M0 0 C 11 -14, 11 -34, 0 -34 C -11 -34, -11 -14, 0 0 Z" transform="rotate(0.000 100 100) translate(100 54)"/><path d="M0 0 C 11 -14, 11 -34, 0 -34 C -11 -34, -11 -14, 0 0 Z" transform="rotate(51.429 100 100) translate(100 54)"/><path d="M0 0 C 11 -14, 11 -34, 0 -34 C -11 -34, -11 -14, 0 0 Z" transform="rotate(102.857 100 100) translate(100 54)"/><path d="M0 0 C 11 -14, 11 -34, 0 -34 C -11 -34, -11 -14, 0 0 Z" transform="rotate(154.286 100 100) translate(100 54)"/><path d="M0 0 C 11 -14, 11 -34, 0 -34 C -11 -34, -11 -14, 0 0 Z" transform="rotate(205.714 100 100) translate(100 54)"/><path d="M0 0 C 11 -14, 11 -34, 0 -34 C -11 -34, -11 -14, 0 0 Z" transform="rotate(257.143 100 100) translate(100 54)"/><path d="M0 0 C 11 -14, 11 -34, 0 -34 C -11 -34, -11 -14, 0 0 Z" transform="rotate(308.571 100 100) translate(100 54)"/></svg>',
   user: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="1.5"/><path d="M4 20c0-3.3 3.6-6 8-6s8 2.7 8 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>',
   copy: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="5" y="5" width="9" height="9" rx="1" stroke="currentColor" stroke-width="1.2"/><path d="M3 11V3a1 1 0 011-1h8" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>',
+  reask: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M13 8a5 5 0 11-1.5-3.55" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><path d="M12 1.8v3h-3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  edit: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M10.5 2.5l3 3L6 13H3v-3z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>',
   send: '<svg class="send-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg>',
   stop: '<svg class="send-icon" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>',
 };

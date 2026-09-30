@@ -5,7 +5,7 @@ import { dashboardUrl, streamTimeoutMs, type Connection } from '../connection';
 import { DEFAULT_TIMING } from '../discussion/client';
 import { ChatSession, type SessionView } from '../discussion/session';
 import type { CrewSummary } from '../k8s/crews';
-import { newConversation, type Conversation, type ConversationMeta } from '../store/conversation';
+import { newConversation, questionFor, type Conversation, type ConversationMeta } from '../store/conversation';
 import type { ConversationStore } from '../store/conversations';
 import { exportAsMarkdown, exportFileName } from '../store/export';
 import { crewAbout } from '../views/treeModel';
@@ -88,28 +88,25 @@ export class ChatPanel {
     }
   }
 
-  private async handle(m: WebviewMessage): Promise<unknown> {
-    switch (m.type) {
-      case 'ready':
-        return this.post(this.session.view);
-      case 'send':
-        return this.session.send(m.text);
-      case 'stop':
-        return this.session.stop();
-      case 'new':
-        return this.session.load(newConversation(this.connection.context, this.crew.namespace, this.crew.name));
-      case 'open':
-        return this.open(m.id);
-      case 'copy':
-        return vscode.env.clipboard.writeText(exportAsMarkdown(this.session.view.conversation));
-      case 'copyMessage':
-        return this.copyMessage(m.index);
-      case 'export':
-        return this.export();
-      case 'openDashboard':
-        return openDashboard();
-    }
+  private handle(m: WebviewMessage): Promise<unknown> {
+    // The page is not trusted: a message of a type this panel does not know is ignored.
+    const handler = this.handlers[m.type] as ((message: WebviewMessage) => unknown) | undefined;
+    return Promise.resolve(handler?.(m));
   }
+
+  /** What each message from the page does, by type. */
+  private readonly handlers: { [K in WebviewMessage['type']]: (m: Extract<WebviewMessage, { type: K }>) => unknown } = {
+    ready: () => this.post(this.session.view),
+    send: (m) => this.session.send(m.text),
+    stop: () => this.session.stop(),
+    new: () => this.session.load(newConversation(this.connection.context, this.crew.namespace, this.crew.name)),
+    open: (m) => this.open(m.id),
+    copy: () => vscode.env.clipboard.writeText(exportAsMarkdown(this.session.view.conversation)),
+    copyMessage: (m) => this.copyMessage(m.index),
+    reask: (m) => this.reask(m.index),
+    export: () => this.export(),
+    openDashboard: () => openDashboard(),
+  };
 
   private async open(id: string): Promise<void> {
     const c = await this.store.load({ context: this.connection.context, namespace: this.crew.namespace, crewName: this.crew.name, id });
@@ -119,6 +116,11 @@ export class ChatPanel {
   private async copyMessage(index: number): Promise<void> {
     const message = this.session.view.conversation.messages[index];
     if (message) await vscode.env.clipboard.writeText(message.content);
+  }
+
+  private async reask(index: number): Promise<void> {
+    const question = questionFor(this.session.view.conversation.messages, index);
+    if (question) await this.session.send(question);
   }
 
   private history: ConversationMeta[] = [];

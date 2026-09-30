@@ -100,6 +100,51 @@ describe('ChatPanel', () => {
     expect(recorded.info.some((m) => m.includes(target))).toBe(true);
   });
 
+  it('asks the question behind a message again, as a new turn', async () => {
+    const c = newConversation('ctx', 'team-a', 'lab-ops');
+    c.messages.push(
+      { role: 'user', content: 'Which nodes have a GPU?', timestamp: c.startedAt },
+      { role: 'assistant', content: 'rig0', timestamp: c.startedAt, durationMs: 42_000 },
+    );
+    const panel = open(c);
+    transport.responses.push('{"conversationId":"conv-1"}', '{"conversationId":"conv-1"}');
+    transport.streams.push(fixture('turn1.sse'), fixture('turn1.sse'));
+    await panel.webview.receive({ type: 'reask', index: 1 });
+    await panel.webview.receive({ type: 'reask', index: 0 });
+    const posts = transport.calls.filter((call) => call.method === 'POST').map((call) => (call.body as { message: string }).message);
+    expect(posts).toEqual(['Which nodes have a GPU?', 'Which nodes have a GPU?']);
+    expect(c.messages.filter((m) => m.role === 'user')).toHaveLength(3);
+  });
+
+  it('does not ask when there is no question behind the message', async () => {
+    const c = newConversation('ctx', 'team-a', 'lab-ops');
+    c.messages.push({ role: 'system', content: 'note', timestamp: c.startedAt });
+    const panel = open(c);
+    await panel.webview.receive({ type: 'reask', index: 0 });
+    await panel.webview.receive({ type: 'reask', index: 7 });
+    expect(transport.calls).toEqual([]);
+  });
+
+  it('does not ask again while a turn runs', async () => {
+    const c = newConversation('ctx', 'team-a', 'lab-ops');
+    const panel = open(c);
+    transport.holdOpen = true;
+    transport.responses.push('{"conversationId":"conv-1"}');
+    transport.streams.push('data: {"type":"connected"}\n\n');
+    const turn = panel.webview.receive({ type: 'send', text: 'first' });
+    await settle();
+    await panel.webview.receive({ type: 'reask', index: 0 });
+    await panel.webview.receive({ type: 'stop' });
+    await turn;
+    expect(transport.calls.filter((call) => call.method === 'POST')).toHaveLength(1);
+  });
+
+  it('ignores a message of a type it does not know', async () => {
+    const panel = open();
+    await panel.webview.receive({ type: 'launch-missiles' });
+    expect(recorded.errors).toEqual([]);
+  });
+
   it('does nothing when the export dialog is cancelled', async () => {
     const panel = open();
     await panel.webview.receive({ type: 'export' });

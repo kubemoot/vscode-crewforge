@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { TurnTiming } from '../src/discussion/client';
 import { ChatSession, noticeFor, type SessionView } from '../src/discussion/session';
 import { newConversation, type Conversation } from '../src/store/conversation';
@@ -35,6 +35,9 @@ describe('ChatSession', () => {
     expect(c.signals.some((s) => s.type === 'agree' && s.agentName === 'node-watcher')).toBe(true);
     expect(saved).toHaveLength(2);
     expect(saved[1].messages).toHaveLength(4);
+    for (const answer of [c.messages[1], c.messages[3]]) expect(answer.durationMs).toBeGreaterThanOrEqual(0);
+    expect(c.messages[0].durationMs).toBeUndefined();
+    expect(saved[1].messages[3].durationMs).toBe(c.messages[3].durationMs);
     expect(views.some((v) => v.busy && v.turn && v.turn.cards.length > 0)).toBe(true);
     expect(session.view).toMatchObject({ busy: false, turn: undefined });
   });
@@ -80,8 +83,21 @@ describe('ChatSession', () => {
     const c = session.view.conversation;
     expect(c.messages.map((m) => m.role)).toEqual(['user', 'system']);
     expect(c.messages[1].content).toMatch(/no ready pod/);
+    expect(typeof c.messages[1].durationMs).toBe('number');
     expect(saved).toHaveLength(1);
     expect(session.busy).toBe(false);
+  });
+
+  it('records how long the turn took, from the question to the message that ends it', async () => {
+    const { t, session } = setup();
+    t.responses.push(new Error('offline'));
+    const clock = vi.spyOn(Date, 'now').mockReturnValueOnce(1_000).mockReturnValueOnce(43_000);
+    try {
+      await session.send('hello');
+    } finally {
+      clock.mockRestore();
+    }
+    expect(session.view.conversation.messages.map((m) => m.durationMs)).toEqual([undefined, 42_000]);
   });
 
   it('ignores blank questions and a second question while a turn runs', async () => {

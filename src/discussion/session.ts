@@ -53,7 +53,8 @@ export class ChatSession {
     const c = this.conversation;
     if (c.messages.length === 0) c.title = titleFrom(question);
     c.messages.push({ role: 'user', content: question, timestamp: now() });
-    this.turn = initialTurn();
+    const startedAt = Date.now();
+    this.turn = initialTurn(startedAt);
     this.controller = new AbortController();
     this.emit();
 
@@ -66,7 +67,7 @@ export class ChatSession {
     } catch (err) {
       end = signal.aborted ? { kind: 'aborted' } : { kind: 'error', message: err instanceof Error ? err.message : String(err) };
     }
-    await this.finish(end);
+    await this.finish(end, startedAt);
   }
 
   private onEvent(e: DiscussionEvent): void {
@@ -78,12 +79,13 @@ export class ChatSession {
     this.emit();
   }
 
-  private async finish(end: TurnEnd): Promise<void> {
+  private async finish(end: TurnEnd, startedAt: number): Promise<void> {
     const c = this.conversation;
     const synthesis = this.turn?.synthesis;
-    if (synthesis) c.messages.push({ role: 'assistant', content: synthesis, timestamp: now(), agentName: 'Crew' });
+    const ended = { timestamp: now(), durationMs: Date.now() - startedAt };
+    if (synthesis) c.messages.push({ role: 'assistant', content: synthesis, agentName: 'Crew', ...ended });
     const notice = noticeFor(end, synthesis !== undefined);
-    if (notice) c.messages.push({ role: 'system', content: notice, timestamp: now() });
+    if (notice) c.messages.push({ role: 'system', content: notice, ...ended });
     // Saved before the turn ends on screen, so the refreshed conversation list includes it.
     try {
       await this.save(c);

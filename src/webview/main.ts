@@ -4,7 +4,7 @@ import { turnStatus } from '../discussion/turnStatus';
 import type { TurnState } from '../discussion/reducer';
 import type { ChatMessage, ConversationMeta } from '../store/conversation';
 import type { HostMessage, WebviewMessage } from './protocol';
-import { escapeHtml, formatAgo, formatTime, htmlAttribute, icons, isWebLink } from './render';
+import { escapeHtml, formatAgo, htmlAttribute, icons, isWebLink, metaLine } from './render';
 
 interface VsCodeApi {
   postMessage(message: WebviewMessage): void;
@@ -76,11 +76,22 @@ $('dashboard').addEventListener('click', (e) => {
 });
 els.history.addEventListener('click', (e) => {
   const item = (e.target as HTMLElement).closest<HTMLElement>('[data-id]');
-  if (item?.dataset.id) vscode.postMessage({ type: 'open', id: item.dataset.id });
+  if (!item?.dataset.id) return;
+  vscode.postMessage({ type: 'open', id: item.dataset.id });
+  if (narrow?.matches) els.sidebar.classList.add('hidden');
+});
+// In a narrow panel the conversations pane floats over the chat, so it starts closed and
+// closes again once a conversation is picked.
+const narrow = globalThis.matchMedia?.('(max-width: 480px)');
+if (narrow?.matches) els.sidebar.classList.add('hidden');
+narrow?.addEventListener('change', (e) => {
+  if (e.matches) els.sidebar.classList.add('hidden');
 });
 els.messages.addEventListener('click', (e) => {
-  const button = (e.target as HTMLElement).closest<HTMLElement>('[data-copy]');
-  if (button?.dataset.copy) vscode.postMessage({ type: 'copyMessage', index: Number(button.dataset.copy) });
+  const button = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-action]');
+  if (!button || button.disabled) return;
+  const run = MESSAGE_ACTIONS[button.dataset.action as MessageActionId] as ((index: number) => void) | undefined;
+  run?.(Number(button.dataset.index));
 });
 // The status line's clock advances between stream events.
 setInterval(() => {
@@ -140,16 +151,30 @@ function renderHistory(history: ConversationMeta[], activeId: string): string {
 
 function renderMessages(): void {
   if (!state) return;
-  const { conversation, turn } = state.view;
+  const { conversation, turn, busy } = state.view;
   const atBottom = els.messages.scrollHeight - els.messages.scrollTop - els.messages.clientHeight < 40;
   if (conversation.messages.length === 0 && !turn) {
     els.messages.innerHTML = emptyState(conversation.crewName, state.about);
     return;
   }
-  const parts = conversation.messages.map((m, index) => renderMessage(m, index));
+  const parts = conversation.messages.map((m, index) => renderMessage(m, index, busy));
   if (turn) parts.push(renderTurn(turn));
+  const focused = focusedAction();
   els.messages.innerHTML = parts.join('');
+  if (focused) refocus(focused);
   if (atBottom || turn) els.messages.scrollTop = els.messages.scrollHeight;
+}
+
+/** The message button that has keyboard focus, as its action and index, so a re-render can give focus back. */
+function focusedAction(): { action?: string; index?: string } | undefined {
+  const el = document.activeElement;
+  if (!(el instanceof HTMLButtonElement) || !els.messages.contains(el)) return undefined;
+  return { action: el.dataset.action, index: el.dataset.index };
+}
+
+function refocus(focused: { action?: string; index?: string }): void {
+  const buttons = els.messages.querySelectorAll<HTMLButtonElement>('button[data-action]');
+  [...buttons].find((b) => b.dataset.action === focused.action && b.dataset.index === focused.index)?.focus();
 }
 
 function emptyState(crew: string, about: string): string {
@@ -159,18 +184,80 @@ function emptyState(crew: string, about: string): string {
     <p>Ask a question and its agents will discuss it.</p>${list}</div>`;
 }
 
-function renderMessage(m: ChatMessage, index: number): string {
-  if (m.role === 'system') return `<div class="notice">${escapeHtml(m.content)}</div>`;
-  const user = m.role === 'user';
-  const body = user ? `<div class="message-text">${escapeHtml(m.content)}</div>` : `<div class="message-text markdown-content">${marked.parse(m.content, { async: false })}</div>`;
-  return `<div class="message${user ? ' user' : ''}">
-    <div class="message-avatar">${user ? icons.user : icons.crew}</div>
-    <div class="message-content">${body}
-      <div class="message-meta${user ? ' meta-right' : ''}">
-        <div class="message-actions"><button class="action-btn" data-copy="${index}" title="Copy">${icons.copy}</button></div>
-        <span class="message-time" title="${escapeHtml(m.timestamp)}">${escapeHtml(formatTime(m.timestamp))}</span>
-      </div>
+type MessageActionId = 'copy' | 'reask' | 'edit';
+
+/** One button under a message: what it does, its tooltip, and its icon. */
+interface MessageAction {
+  action: MessageActionId;
+  label: string;
+  icon: string;
+  /** Sends a question, so it waits while a turn runs. */
+  asks?: boolean;
+}
+
+/** What each message button does, by its data-action, given the message's index. */
+const MESSAGE_ACTIONS: Record<MessageActionId, (index: number) => void> = {
+  copy: (index) => vscode.postMessage({ type: 'copyMessage', index }),
+  reask: (index) => vscode.postMessage({ type: 'reask', index }),
+  edit: editMessage,
+};
+
+/** How a question and a crew answer are shown: their class, avatar, body, and buttons. */
+const ROLES = {
+  user: {
+    cls: 'user',
+    icon: icons.user,
+    body: (m: ChatMessage) => `<div class="message-text">${escapeHtml(m.content)}</div>`,
+    actions: [
+      { action: 'copy', label: 'Copy', icon: icons.copy },
+      { action: 'reask', label: 'Ask again', icon: icons.reask, asks: true },
+      { action: 'edit', label: 'Edit and resend', icon: icons.edit },
+    ] as MessageAction[],
+  },
+  assistant: {
+    cls: 'crew',
+    icon: icons.crew,
+    body: (m: ChatMessage) => `<div class="message-text markdown-content">${marked.parse(m.content, { async: false })}</div>`,
+    actions: [
+      { action: 'copy', label: 'Copy answer as Markdown', icon: icons.copy },
+      { action: 'reask', label: 'Ask the question again', icon: icons.reask, asks: true },
+    ] as MessageAction[],
+  },
+};
+
+/** Puts a question back in the input, to change it and send it again. */
+function editMessage(index: number): void {
+  const message = state?.view.conversation.messages[index];
+  if (!message) return;
+  els.input.value = message.content;
+  autoGrow();
+  els.input.focus();
+}
+
+function renderMessage(m: ChatMessage, index: number, busy: boolean): string {
+  const meta = `<span class="message-time"${htmlAttribute('title', m.timestamp)}>${escapeHtml(metaLine(m.timestamp, m.durationMs))}</span>`;
+  if (m.role === 'system') return `<div class="notice"><div class="notice-text">${escapeHtml(m.content)}</div><div class="message-meta">${meta}</div></div>`;
+  const role = ROLES[m.role];
+  return `<div class="message ${role.cls}">${role.body(m)}
+    <div class="message-meta">
+      <span class="message-avatar" aria-hidden="true">${role.icon}</span>
+      ${meta}
+      ${actionRow(role.actions, index, busy)}
     </div></div>`;
+}
+
+/** The buttons under a message; ones that ask are disabled while a turn runs. */
+function actionRow(actions: MessageAction[], index: number, busy: boolean): string {
+  const buttons = actions.map((a) => {
+    const attributes = [
+      htmlAttribute('data-action', a.action),
+      htmlAttribute('data-index', String(index)),
+      htmlAttribute('title', a.label),
+      htmlAttribute('aria-label', a.label),
+    ].join('');
+    return `<button type="button" class="action-btn"${attributes}${a.asks && busy ? ' disabled' : ''}>${a.icon}</button>`;
+  });
+  return `<div class="message-actions" role="toolbar" aria-label="Message actions">${buttons.join('')}</div>`;
 }
 
 /** The extra class of a card whose agent is still at work, by status. */
@@ -192,7 +279,7 @@ function renderTurn(turn: TurnState): string {
   const answer = turn.synthesis
     ? `<div class="message-text markdown-content">${marked.parse(turn.synthesis, { async: false })}</div>`
     : `<div class="loading-indicator"><div class="loading-spinner"></div><span class="loading-text">${escapeHtml(turnStatus(turn))}</span></div>`;
-  return `<div class="message"><div class="message-avatar">${icons.crew}</div><div class="message-content turn">${feed}${answer}</div></div>`;
+  return `<div class="message crew turn">${feed}${answer}</div>`;
 }
 
 /** Lets the conversations pane be resized by dragging its edge; the width is remembered. */

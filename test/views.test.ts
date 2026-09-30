@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { cardText } from '../src/discussion/cardText';
 import type { CrewSummary } from '../src/k8s/crews';
 import { agentCount, crewAbout, crewDescription, crewTooltip, groupByNamespace } from '../src/views/treeModel';
-import { escapeHtml, formatAgo, htmlAttribute, isWebLink } from '../src/webview/render';
+import { escapeHtml, formatAgo, formatDuration, htmlAttribute, isWebLink, META_SEPARATOR, metaLine } from '../src/webview/render';
 
 const crew = (name: string, namespace: string, extra: Partial<CrewSummary> = {}): CrewSummary => ({ name, namespace, ready: true, phase: 'Ready', ...extra });
 
@@ -82,5 +82,25 @@ describe('render helpers', () => {
     expect(formatAgo('2026-09-27T09:00:00Z', now)).toBe('3h ago');
     expect(formatAgo('2026-09-25T12:00:00Z', now)).toBe('2d ago');
     expect(formatAgo('not a date', now)).toBe('');
+  });
+
+  it('formats how long a turn took, and nothing for a missing or invalid duration', () => {
+    expect(formatDuration(42_000)).toBe('42 s');
+    expect(formatDuration(41_600)).toBe('42 s');
+    expect(formatDuration(185_000)).toBe('3 min 05 s');
+    expect(formatDuration(60_000)).toBe('1 min 00 s');
+    expect(formatDuration(300)).toBe('under 1 s');
+    expect(formatDuration(0)).toBe('under 1 s');
+    for (const bad of [undefined, null, -5, Number.NaN, Number.POSITIVE_INFINITY, '42000', {}]) expect(formatDuration(bad)).toBe('');
+  });
+
+  it('writes the meta line as time then duration, leaving out what is unknown', () => {
+    const at = '2026-09-27T15:36:00Z';
+    const time = new Date(at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    expect(metaLine(at, 42_000)).toBe(`${time}${META_SEPARATOR}42 s`);
+    expect(META_SEPARATOR).toBe(' \u00b7 ');
+    expect(metaLine(at)).toBe(time);
+    expect(metaLine('not a date', 42_000)).toBe('42 s');
+    expect(metaLine('not a date')).toBe('');
   });
 });

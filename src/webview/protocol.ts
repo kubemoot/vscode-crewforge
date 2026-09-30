@@ -19,5 +19,7 @@ export type WebviewMessage =
   | { type: 'open'; id: string }
   | { type: 'copy' }
   | { type: 'copyMessage'; index: number }
+  /** Asks the question behind message `index` again, as a new turn. */
+  | { type: 'reask'; index: number }
   | { type: 'export' }
   | { type: 'openDashboard' };
