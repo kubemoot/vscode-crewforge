@@ -5,6 +5,7 @@ import { deploymentDescription, historyLines, type Deployment } from '../source/
 import { summarize, type ResourceDrift } from '../source/drift';
 import { isRunning, runSummary, type FitnessRun } from '../fitness/fitness';
 import { fluxSummary, type FluxState } from '../gitops/flux';
+import type { DeclaredItem, DeclaredSection } from '../source/declared';
 import type { SourceEntry, SourceService } from '../source/service';
 import { errorLabel, errorText } from './errors';
 
@@ -14,20 +15,35 @@ export type SourceNode =
   | { kind: 'resource'; entry: SourceEntry; deployment: Deployment; drift: ResourceDrift }
   | { kind: 'fitness'; entry: SourceEntry; deployment: Deployment }
   | { kind: 'run'; entry: SourceEntry; deployment: Deployment; run: FitnessRun }
+  | { kind: 'declSection'; entry: SourceEntry; section: DeclaredSection; items: DeclaredItem[] }
+  | { kind: 'declared'; entry: SourceEntry; item: DeclaredItem }
   | { kind: 'message'; text: string; detail?: string; icon?: string };
 
 export type DeploymentNode = Extract<SourceNode, { kind: 'deployment' }>;
+
+/** A source's state as its line shows it: a few words, and whether it changed since its deploy. */
+export interface SourceState {
+  text: string;
+  changed: boolean;
+}
 
 /** The Crew Sources view: crew charts and bundles in the workspace, where each is deployed, and how each deployment differs from its source. */
 export class SourceTreeProvider implements vscode.TreeDataProvider<SourceNode> {
   private readonly changed = new vscode.EventEmitter<SourceNode | undefined>();
   readonly onDidChangeTreeData = this.changed.event;
-  private entries: SourceEntry[] = [];
+  private loadedEntries: SourceEntry[] = [];
   private readonly loaded = new Map<string, DeploymentNode[]>();
   private readonly loadedChanged = new vscode.EventEmitter<void>();
   /** Fires when a source's deployments and drift have been (re)loaded. */
   readonly onDidLoadDeployments = this.loadedChanged.event;
+  private readonly sourcesLoaded = new vscode.EventEmitter<void>();
+  /** Fires when the workspace's sources have been (re)loaded. */
+  readonly onDidLoadSources = this.sourcesLoaded.event;
   connection?: Connection;
+  /** The source nodes of the last load, so one source's line can be redrawn alone. */
+  private roots: SourceNode[] = [];
+  /** Where each source stands, by folder, shown on its line; set by the inner loop. */
+  stateOf: (root: string) => SourceState | undefined = () => undefined;
 
   constructor(
     private readonly service: SourceService,
@@ -38,6 +54,25 @@ export class SourceTreeProvider implements vscode.TreeDataProvider<SourceNode> {
     this.changed.fire(undefined);
   }
 
+  /** Redraws one source's line, as when its state changes, without loading the workspace again. */
+  refreshSource(root: string): void {
+    const node = this.roots.find((n) => n.kind === 'source' && n.entry.source.root === root);
+    if (node) this.changed.fire(node);
+  }
+
+  /** The workspace's sources: those last loaded, or a fresh load when there are none. */
+  async entries(): Promise<SourceEntry[]> {
+    if (this.loadedEntries.length === 0) await this.loadRoot();
+    return this.loadedEntries;
+  }
+
+  /** Loads the sources again and redraws the view; resolves to the new source nodes, for revealing one. */
+  async reload(): Promise<SourceNode[]> {
+    const nodes = await this.loadRoot();
+    this.refresh();
+    return nodes;
+  }
+
   /** The deployments of a source, with their drift, from the last time it was expanded. */
   deploymentsOf(root: string): DeploymentNode[] {
     return this.loaded.get(root) ?? [];
@@ -45,21 +80,27 @@ export class SourceTreeProvider implements vscode.TreeDataProvider<SourceNode> {
 
   /** The sources from the last load, for pickers. */
   get known(): SourceEntry[] {
-    return this.entries;
+    return this.loadedEntries;
   }
 
   async getChildren(node?: SourceNode): Promise<SourceNode[]> {
     if (!node) return this.loadRoot();
-    if (node.kind === 'source') return this.loadDeployments(node.entry);
+    if (node.kind === 'source') return this.loadSource(node.entry);
     if (node.kind === 'deployment') return deploymentChildren(node);
     if (node.kind === 'fitness') return this.loadRuns(node);
+    if (node.kind === 'declSection') return node.items.map((item) => ({ kind: 'declared', entry: node.entry, item }));
     return [];
+  }
+
+  /** A node's source, so a source can be revealed; sources are the roots. */
+  getParent(node: SourceNode): SourceNode | undefined {
+    return node.kind === 'source' || node.kind === 'message' ? undefined : { kind: 'source', entry: node.entry };
   }
 
   getTreeItem(node: SourceNode): vscode.TreeItem {
     switch (node.kind) {
       case 'source':
-        return sourceItem(node.entry);
+        return sourceItem(node.entry, this.stateOf(node.entry.source.root));
       case 'deployment':
         return deploymentItem(node);
       case 'resource':
@@ -68,6 +109,10 @@ export class SourceTreeProvider implements vscode.TreeDataProvider<SourceNode> {
         return fitnessItem();
       case 'run':
         return runItem(node);
+      case 'declSection':
+        return declSectionItem(node);
+      case 'declared':
+        return declaredItem(node.item);
       default:
         return messageItem(node);
     }
@@ -75,17 +120,36 @@ export class SourceTreeProvider implements vscode.TreeDataProvider<SourceNode> {
 
   private async loadRoot(): Promise<SourceNode[]> {
     try {
-      this.entries = await this.service.load();
+      this.loadedEntries = await this.service.load();
     } catch (err) {
-      this.entries = [];
+      this.loadedEntries = [];
       return [errorMessage(err)];
     }
-    if (this.entries.length === 0) return [{ kind: 'message', text: 'No crew charts or bundles in this workspace', icon: 'info' }];
-    return this.entries.map((entry) => ({ kind: 'source', entry }));
+    this.roots = this.loadedEntries.map((entry) => ({ kind: 'source', entry }));
+    this.sourcesLoaded.fire();
+    return this.roots.length ? this.roots : [{ kind: 'message', text: 'No crew charts or bundles in this workspace', icon: 'info' }];
   }
 
-  private async loadDeployments(entry: SourceEntry): Promise<SourceNode[]> {
+  /** What a source declares, then where it is deployed. */
+  private async loadSource(entry: SourceEntry): Promise<SourceNode[]> {
     if (entry.error) return [{ kind: 'message', text: entry.error }];
+    const [declared, deployments] = await Promise.all([this.loadDeclarations(entry), this.loadDeployments(entry)]);
+    return [...declared, ...deployments];
+  }
+
+  private async loadDeclarations(entry: SourceEntry): Promise<SourceNode[]> {
+    try {
+      const { crew, sections } = await this.service.declarations(entry);
+      const shown = sections.filter((s) => s.items.length > 0 || s.section !== 'mcp');
+      const crewNode: SourceNode[] = crew ? [{ kind: 'declared', entry, item: crew }] : [];
+      return [...crewNode, ...shown.map((s): SourceNode => ({ kind: 'declSection', entry, ...s }))];
+    } catch (err) {
+      return [errorMessage(err)];
+    }
+  }
+
+  /** Loads a source's deployments and their drift, for the tree and for the status bar. */
+  async loadDeployments(entry: SourceEntry): Promise<SourceNode[]> {
     try {
       this.connection = this.connectTo();
       const connection = this.connection;
@@ -165,12 +229,49 @@ function runItem(node: Extract<SourceNode, { kind: 'run' }>): vscode.TreeItem {
   return item;
 }
 
-function sourceItem(entry: SourceEntry): vscode.TreeItem {
+const SECTIONS: Record<DeclaredSection, [string, string]> = {
+  agents: ['Agents', 'organization'],
+  prompts: ['PromptModules', 'note'],
+  skills: ['Skills', 'mortar-board'],
+  mcp: ['MCP Servers', 'server-process'],
+  fitness: ['Fitness Scenarios', 'beaker'],
+};
+
+function declSectionItem(node: Extract<SourceNode, { kind: 'declSection' }>): vscode.TreeItem {
+  const [title, icon] = SECTIONS[node.section];
+  const empty = node.items.length === 0;
+  const item = new vscode.TreeItem(title, empty ? vscode.TreeItemCollapsibleState.None : vscode.TreeItemCollapsibleState.Collapsed);
+  item.description = empty ? 'none' : String(node.items.length);
+  item.iconPath = new vscode.ThemeIcon(icon);
+  item.contextValue = `declSection-${node.section}`;
+  return item;
+}
+
+/** One declared object; clicking it opens its file at the object. */
+function declaredItem(declared: DeclaredItem): vscode.TreeItem {
+  const item = new vscode.TreeItem(declared.label, vscode.TreeItemCollapsibleState.None);
+  item.description = declared.description;
+  item.tooltip = declared.file ? `${declared.tooltip}\n${declared.file}:${declared.line + 1}` : declared.tooltip;
+  item.iconPath = new vscode.ThemeIcon(declared.icon, declared.warn ? new vscode.ThemeColor('list.warningForeground') : undefined);
+  item.contextValue = 'declared';
+  if (declared.file) item.command = openAt(declared.file, declared.line);
+  return item;
+}
+
+/** The command that opens a file with the cursor at the start of a line. */
+export function openAt(file: string, line: number): vscode.Command {
+  const at = new vscode.Range(line, 0, line, 0);
+  return { command: 'vscode.open', title: 'Open', arguments: [vscode.Uri.file(file), { selection: at }] };
+}
+
+function sourceItem(entry: SourceEntry, state?: SourceState): vscode.TreeItem {
   const item = new vscode.TreeItem(entry.source.label, vscode.TreeItemCollapsibleState.Collapsed);
-  item.description = entry.crewName ? `crew ${entry.crewName} · ${entry.source.kind}` : entry.source.kind;
+  item.id = `source:${entry.source.root}`;
+  const what = entry.crewName ? `crew ${entry.crewName} · ${entry.source.kind}` : entry.source.kind;
+  item.description = state ? `${what} · ${state.text}` : what;
   item.tooltip = [entry.source.root, entry.identity.id, entry.identity.revision ? `revision ${entry.identity.revision}` : ''].filter(Boolean).join('\n');
   item.iconPath = new vscode.ThemeIcon(entry.source.kind === 'helm' ? 'package' : 'files');
-  item.contextValue = `source-${entry.source.kind}`;
+  item.contextValue = `source-${entry.source.kind}${state?.changed ? '-changed' : ''}`;
   return item;
 }
 

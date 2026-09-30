@@ -129,16 +129,25 @@ export class DeployCommands {
   }
 
   private async run(connection: Connection, request: DeployRequest): Promise<void> {
-    const what = `${request.only ? 'Applying changes to' : 'Deploying'} ${request.entry.crewName} in ${request.namespace} via ${request.channel}`;
-    await this.withLog(what, () => this.deployer(connection).deploy(request));
+    await this.apply(connection, request, true);
   }
 
-  private async withLog(title: string, action: () => Promise<string>): Promise<void> {
+  /**
+   * Deploys through helm or kubectl with progress and a log in the output channel. With
+   * `announce` it says when the tool is done; the inner loop, which waits for the crew to
+   * be ready, says so itself.
+   */
+  async apply(connection: Connection, request: DeployRequest, announce: boolean): Promise<void> {
+    const what = `${request.only ? 'Applying changes to' : 'Deploying'} ${request.entry.crewName} in ${request.namespace} via ${request.channel}`;
+    await this.withLog(what, () => this.deployer(connection).deploy(request), announce);
+  }
+
+  private async withLog(title: string, action: () => Promise<string>, announce = true): Promise<void> {
     this.output.appendLine(`> ${title}`);
     try {
       const text = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title }, action);
       if (text) this.output.appendLine(text);
-      void vscode.window.showInformationMessage(`${title}: done. The operator reconciles it now.`);
+      if (announce) void vscode.window.showInformationMessage(`${title}: done. The operator reconciles it now.`);
     } catch (err) {
       this.output.appendLine(errorText(err));
       this.output.show(true);

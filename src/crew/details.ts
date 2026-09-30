@@ -1,4 +1,5 @@
 import type { KubeTransport } from '../k8s/request';
+import { byName, text } from './describe';
 import { isOwned, listKind, objectPath, type KubemootKind } from '../source/live';
 import { KUBEMOOT_GROUP, type Manifest } from '../source/manifests';
 import { errorText } from '../views/errors';
@@ -87,13 +88,11 @@ export function promptForm(content: string): PromptForm {
 }
 
 const strings = (value: unknown): string[] => (Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : []);
-const text = (value: unknown): string | undefined => (typeof value === 'string' && value !== '' ? value : undefined);
 const order = (o: Obj): number => (typeof o.spec?.order === 'number' ? o.spec.order : DEFAULT_ORDER);
-const byName = <T extends { name: string }>(a: T, b: T) => a.name.localeCompare(b.name);
 const byOrder = <T extends { name: string; order: number }>(a: T, b: T) => a.order - b.order || byName(a, b);
 
 /** The names in spec.mcpServers[] of an Agent or Skill. */
-function serverRefs(o: Obj): string[] {
+export function serverRefs(o: Obj): string[] {
   const refs = o.spec?.mcpServers;
   return Array.isArray(refs) ? refs.map((r: { name?: unknown }) => r?.name).filter((n): n is string => typeof n === 'string') : [];
 }
@@ -127,14 +126,14 @@ export function promptModulesOf(agents: AgentInfo[], modules: Obj[], sharedRefs:
   const users = new Map<string, string[]>();
   for (const agent of agents) for (const ref of agent.promptRefs) users.set(ref, [...(users.get(ref) ?? []), agent.name]);
   const found = new Map(modules.map((m) => [m.metadata.name, m]));
-  return [...users.entries()]
-    .map(([name, usedBy]): PromptModuleInfo => {
-      const object = found.get(name);
-      const content = text(object?.spec?.content);
-      const form = content === undefined ? undefined : promptForm(content);
-      return { name, order: object ? order(object) : DEFAULT_ORDER, form, usedBy: usedBy.sort(), object, shared: sharedRefs.has(name) };
-    })
-    .sort(byOrder);
+  return [...users.entries()].map(([name, usedBy]) => toPromptModule(name, usedBy.sort(), found.get(name), sharedRefs.has(name))).sort(byOrder);
+}
+
+/** One PromptModule as the trees show it; `object` is absent when the module does not exist. */
+export function toPromptModule(name: string, usedBy: string[], object: Obj | undefined, shared = false): PromptModuleInfo {
+  const content = text(object?.spec?.content);
+  const form = content === undefined ? undefined : promptForm(content);
+  return { name, order: object ? order(object) : DEFAULT_ORDER, form, usedBy, object, shared };
 }
 
 /**

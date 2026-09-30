@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { CrewDetails } from '../src/crew/details';
-import { liveDeployment, LiveCrewActions, noSource, type LiveCrewDeps } from '../src/deploy/liveCrew';
+import { liveDeployment, LiveCrewActions, noSource, sourceForCrew, type LiveCrewDeps } from '../src/deploy/liveCrew';
 import type { CrewSummary } from '../src/k8s/crews';
 import { ANNOTATIONS, type Deployment } from '../src/source/deployments';
 import type { SourceEntry } from '../src/source/service';
@@ -46,7 +46,7 @@ function actions(): LiveCrewActions {
         removed.push({ deployment, objects: objects.map((o) => `${o.kind}/${o.metadata.name}`) });
       },
     },
-    fitness: { runFitness: record('fitness') },
+    fitness: { runFitness: async (node) => void (await record('fitness')(node)) },
     details: async () => DETAILS,
     follow: async (deployment) => {
       followed.push(deployment);
@@ -70,6 +70,15 @@ describe('liveDeployment', () => {
     expect(d).toMatchObject({ namespace: 'team-a', channel: 'helm', release: 'lab', linked: true });
     expect(liveDeployment(crew()).linked).toBe(false);
     expect(liveDeployment(crew(FLUX)).channel).toBe('flux');
+  });
+});
+
+describe('sourceForCrew', () => {
+  it('finds the source a crew names, else the only one of its name, without asking', () => {
+    expect(sourceForCrew(crew({}, { [ANNOTATIONS.source]: 'b' }), [entry('a'), entry('b')])?.identity.id).toBe('b');
+    expect(sourceForCrew(crew(), [entry('a'), entry('x', 'other')])?.identity.id).toBe('a');
+    expect(sourceForCrew(crew(), [entry('a'), entry('b')])).toBeUndefined();
+    expect(sourceForCrew(crew(), [])).toBeUndefined();
   });
 });
 

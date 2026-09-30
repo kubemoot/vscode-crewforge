@@ -55,7 +55,7 @@
       },
       {
         "view": "crewforge.sources",
-        "contents": "No crew charts or bundles found in this workspace.\n[Create Crew](command:crewforge.createCrew)\nOr open a folder that holds a crew's Helm chart or manifests."
+        "contents": "No crew charts or bundles found in this workspace.\n[Create Crew](command:crewforge.createCrew)\nOr right-click a folder in the Explorer and choose New Crew Here, or open a folder that holds a crew's Helm chart or manifests."
       }
     ],
     "commands": [
@@ -146,6 +146,41 @@
         "icon": "$(add)"
       },
       {
+        "command": "crewforge.newCrewHere",
+        "title": "New Crew Here",
+        "category": "CrewForge",
+        "icon": "$(add)"
+      },
+      {
+        "command": "crewforge.lintCrew",
+        "title": "Lint Crew",
+        "category": "CrewForge",
+        "icon": "$(checklist)"
+      },
+      {
+        "command": "crewforge.deployDev",
+        "title": "Deploy (dev)",
+        "category": "CrewForge",
+        "icon": "$(rocket)"
+      },
+      {
+        "command": "crewforge.redeployDev",
+        "title": "Redeploy (dev)",
+        "category": "CrewForge",
+        "icon": "$(sync)"
+      },
+      {
+        "command": "crewforge.askSource",
+        "title": "Ask",
+        "category": "CrewForge",
+        "icon": "$(comment-discussion)"
+      },
+      {
+        "command": "crewforge.crewActions",
+        "title": "Crew Actions",
+        "category": "CrewForge"
+      },
+      {
         "command": "crewforge.deployRevision",
         "title": "Deploy a Revision (Roll Back or Forward)",
         "category": "CrewForge",
@@ -224,6 +259,41 @@
       ],
       "view/item/context": [
         {
+          "command": "crewforge.deployDev",
+          "when": "view == crewforge.sources && viewItem =~ /^source-(helm|bundle)$/",
+          "group": "inline@1"
+        },
+        {
+          "command": "crewforge.redeployDev",
+          "when": "view == crewforge.sources && viewItem =~ /^source-.*-changed$/",
+          "group": "inline@1"
+        },
+        {
+          "command": "crewforge.askSource",
+          "when": "view == crewforge.sources && viewItem =~ /^source-/",
+          "group": "inline@2"
+        },
+        {
+          "command": "crewforge.deployDev",
+          "when": "view == crewforge.sources && viewItem =~ /^source-/",
+          "group": "loop@1"
+        },
+        {
+          "command": "crewforge.askSource",
+          "when": "view == crewforge.sources && viewItem =~ /^source-/",
+          "group": "loop@2"
+        },
+        {
+          "command": "crewforge.runFitness",
+          "when": "view == crewforge.sources && viewItem =~ /^source-/",
+          "group": "loop@3"
+        },
+        {
+          "command": "crewforge.lintCrew",
+          "when": "view == crewforge.sources && viewItem =~ /^source-/",
+          "group": "loop@4"
+        },
+        {
           "command": "crewforge.askCrew",
           "when": "view == crewforge.crews && viewItem == crew",
           "group": "inline"
@@ -236,7 +306,7 @@
         {
           "command": "crewforge.deploySource",
           "when": "view == crewforge.sources && viewItem =~ /^source-/",
-          "group": "inline"
+          "group": "deploy@1"
         },
         {
           "command": "crewforge.updateDeployment",
@@ -374,6 +444,17 @@
         {
           "command": "crewforge.showCrewBundleYaml",
           "when": "false"
+        },
+        {
+          "command": "crewforge.newCrewHere",
+          "when": "false"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "crewforge.newCrewHere",
+          "when": "explorerResourceIsFolder",
+          "group": "crewforge@1"
         }
       ]
     },
@@ -407,7 +488,7 @@
         "crewforge.dashboardUrl": {
           "type": "string",
           "default": "",
-          "markdownDescription": "URL of the Kubemoot dashboard for this cluster, opened from **Powered by Kubemoot** in a chat. With a `kubectl port-forward` to the dashboard service, use its local address, for example `http://localhost:8080/dashboard`."
+          "markdownDescription": "URL of the Kubemoot dashboard for this cluster, opened from **Powered by Kubemoot** in a chat and from **Open this turn in the Kubemoot dashboard** under a crew's answer (shown only when this is set). With a `kubectl port-forward` to the dashboard service, use its local address, for example `http://localhost:8080/dashboard`."
         }
       }
     }
@@ -424,6 +505,7 @@
   },
   "dependencies": {
     "@kubernetes/client-node": "^2.0.0",
+    "ajv": "^8.20.0",
     "js-yaml": "^4.3.2",
     "marked": "^18.0.14"
   },
@@ -434,7 +516,6 @@
     "@types/vscode": "^1.95.0",
     "@vitest/coverage-v8": "^5.0.2",
     "@vscode/vsce": "^4.0.0",
-    "ajv": "^8.20.0",
     "esbuild": "^0.28.2",
     "eslint": "^10.11.0",
     "jsdom": "^30.1.1",

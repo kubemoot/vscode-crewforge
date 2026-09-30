@@ -33,31 +33,85 @@ export interface RenderOptions {
   values?: Record<string, unknown>;
 }
 
-/** The manifests a source produces for one namespace. */
-export async function render(source: CrewSource, options: RenderOptions, deps: RenderDeps): Promise<Manifest[]> {
-  return source.kind === 'helm' ? renderChart(source, options, deps.exec) : renderBundle(source, options.namespace, deps);
+/** A rendered object and the source file it came from, when the render says. */
+export interface Rendered {
+  manifest: Manifest;
+  file?: string;
 }
 
-async function renderChart(source: CrewSource, options: RenderOptions, exec: Exec): Promise<Manifest[]> {
+/** A render that failed, with the source file and line (0-based) it points at when known. */
+export class RenderError extends Error {
+  constructor(
+    message: string,
+    readonly file?: string,
+    readonly line?: number,
+  ) {
+    super(message);
+    this.name = 'RenderError';
+  }
+}
+
+/** The manifests a source produces for one namespace. */
+export async function render(source: CrewSource, options: RenderOptions, deps: RenderDeps): Promise<Manifest[]> {
+  return (await renderWithOrigins(source, options, deps)).map((r) => r.manifest);
+}
+
+/** The manifests a source produces for one namespace, each with the file it came from. */
+export async function renderWithOrigins(source: CrewSource, options: RenderOptions, deps: RenderDeps): Promise<Rendered[]> {
+  const rendered = source.kind === 'helm' ? await renderChart(source, options, deps.exec) : await renderBundle(source, deps);
+  return rendered.map((r) => ({ ...r, manifest: inNamespace(r.manifest, options.namespace) }));
+}
+
+async function renderChart(source: CrewSource, options: RenderOptions, exec: Exec): Promise<Rendered[]> {
   const release = options.release ?? source.label;
   const overrides = Object.entries(options.values ?? {}).flatMap(([key, value]) => ['--set-json', `${key}=${JSON.stringify(value)}`]);
   const result = await exec('helm', ['template', release, source.root, '--namespace', options.namespace, ...overrides], { cwd: path.dirname(source.root) });
   if (result.code !== 0) {
     const detail = result.stderr.trim() || `exit ${result.code}`;
-    throw new Error(`helm template failed for ${source.label}: ${detail}`);
+    const at = helmErrorLocation(source.root, detail);
+    throw new RenderError(`helm template failed for ${source.label}: ${detail}`, at?.file, at?.line);
   }
-  return parseManifests(result.stdout).map((m) => inNamespace(m, options.namespace));
+  return chartDocuments(source.root, result.stdout);
 }
 
-async function renderBundle(source: CrewSource, namespace: string, deps: RenderDeps): Promise<Manifest[]> {
+/**
+ * Splits `helm template` output into its objects, each with the template file named by
+ * the `# Source:` comment Helm writes above it.
+ */
+export function chartDocuments(root: string, stdout: string): Rendered[] {
+  return stdout.split(/^---\s*$/m).flatMap((doc) => {
+    const origin = /^# Source: (.+)$/m.exec(doc)?.[1];
+    const file = origin ? chartFile(root, origin.trim()) : undefined;
+    return parseManifests(doc).map((manifest) => ({ manifest, file }));
+  });
+}
+
+/** A path Helm prints (`<chart name>/templates/x.yaml`) as a file under the chart folder. */
+export function chartFile(root: string, printed: string): string {
+  return path.join(root, ...printed.split('/').slice(1));
+}
+
+const HELM_AT = [/\(([^()\s:]+\.ya?ml):(\d+)/, /on ([^\s:]+\.ya?ml):.*?line (\d+)/];
+
+/** Where a helm error points, from `(chart/templates/x.yaml:12)` or `on chart/templates/x.yaml: ... line 12`. */
+export function helmErrorLocation(root: string, text: string): { file: string; line: number } | undefined {
+  for (const pattern of HELM_AT) {
+    const m = pattern.exec(text);
+    if (m) return { file: chartFile(root, m[1]), line: Math.max(0, Number(m[2]) - 1) };
+  }
+  return undefined;
+}
+
+async function renderBundle(source: CrewSource, deps: RenderDeps): Promise<Rendered[]> {
   const files = await deps.readYamlFiles(source.root);
   return files.flatMap(({ file, text }) => {
     try {
-      return parseManifests(text);
+      return parseManifests(text).map((manifest) => ({ manifest, file }));
     } catch (err) {
-      throw new Error(`${path.basename(file)}: ${err instanceof Error ? err.message : String(err)}`, { cause: err });
+      const line = (err as { mark?: { line?: number } }).mark?.line;
+      throw new RenderError(`${path.basename(file)}: ${err instanceof Error ? err.message : String(err)}`, file, line);
     }
-  }).map((m) => inNamespace(m, namespace));
+  });
 }
 
 /** Places an object in the target namespace; a bundle's own Namespace object is renamed to it. */

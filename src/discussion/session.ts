@@ -1,6 +1,6 @@
 import type { KubeTransport } from '../k8s/request';
-import { titleFrom, type ChatSignal, type Conversation } from '../store/conversation';
-import { agentProblems } from './cardText';
+import { titleFrom, type ChatMessage, type ChatSignal, type Conversation } from '../store/conversation';
+import { agentProblems, cardText } from './cardText';
 import { ask, DEFAULT_TIMING, streamTurn, type TurnEnd, type TurnTiming } from './client';
 import { initialTurn, reduce, type TurnState } from './reducer';
 import type { DiscussionEvent } from './types';
@@ -116,7 +116,7 @@ export class ChatSession {
     const synthesis = this.turn?.synthesis;
     const answered = Boolean(synthesis);
     const problems = [...agentProblems(this.turn?.cards ?? []), ...endProblems(end, answered)];
-    const ended = { timestamp: now(), durationMs: Date.now() - startedAt, ...(problems.length > 0 ? { problems } : {}) };
+    const ended = { timestamp: now(), durationMs: Date.now() - startedAt, ...(problems.length > 0 ? { problems } : {}), ...turnRecord(this.turn) };
     if (synthesis) c.messages.push({ role: 'assistant', content: synthesis, agentName: 'Crew', ...ended });
     const notice = noticeFor(end, answered);
     if (notice) c.messages.push({ role: 'system', content: notice, ...ended });
@@ -155,6 +155,15 @@ export function noticeFor(end: TurnEnd, answered: boolean): string | undefined {
 export function endProblems(end: TurnEnd, answered: boolean): string[] {
   if (!answered || end.kind === 'done') return [];
   return [end.kind === 'aborted' ? 'You stopped the turn, so the answer may be incomplete.' : end.message];
+}
+
+/** What the message ending a turn keeps of it: its thread, and each agent's last card. */
+export function turnRecord(turn?: TurnState): Pick<ChatMessage, 'threadId' | 'agents'> {
+  const agents = (turn?.cards ?? []).map((card) => {
+    const { text, problem } = cardText(card);
+    return { agent: card.agent, text, problem };
+  });
+  return { ...(turn?.threadId ? { threadId: turn.threadId } : {}), ...(agents.length ? { agents } : {}) };
 }
 
 function toSignal(e: DiscussionEvent): ChatSignal | undefined {

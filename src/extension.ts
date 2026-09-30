@@ -4,13 +4,15 @@ import * as vscode from 'vscode';
 import { connect, type Connection } from './connection';
 import { loadKubeconfig } from './k8s/kubeconfig';
 import type { CrewSummary } from './k8s/crews';
-import { ChatPanel } from './panels/chatPanel';
+import { ChatPanel, type ChatLinks } from './panels/chatPanel';
 import { selectionPrompt } from './panels/selectionPrompt';
-import { createCrewCommand } from './create/createCrew';
+import { createCrewCommand, showCreatedCrew } from './create/createCrew';
 import { DeployCommands } from './deploy/commands';
 import { FitnessCommands } from './fitness/commands';
 import { followDeployment, followRolloutCommand } from './gitops/commands';
-import { LiveCrewActions } from './deploy/liveCrew';
+import { LiveCrewActions, sourceForCrew } from './deploy/liveCrew';
+import { registerLoop } from './loop/register';
+import { agentSourceMap } from './source/declared';
 import { LIVE_SCHEME, LiveDocuments } from './views/liveDocuments';
 import { execProgram, readText, readYamlFiles } from './source/nodeDeps';
 import { SourceService } from './source/service';
@@ -27,14 +29,21 @@ export function activate(context: vscode.ExtensionContext): void {
   const store = new ConversationStore(path.join(context.globalStorageUri.fsPath, 'conversations'));
   const tree = new CrewTreeProvider();
   const view = vscode.window.createTreeView('crewforge.crews', { treeDataProvider: tree, showCollapseAll: true });
-  const commands = new Commands(context.extensionUri, tree, view, store);
   const service = new SourceService({ exec: execProgram, readText, readYamlFiles, listFiles: listWorkspaceFiles });
   const sources = new SourceTreeProvider(service);
+  const links: ChatLinks = {
+    agentSources: async (crew) => {
+      const entry = sourceForCrew(crew, await sources.entries());
+      return entry ? agentSourceMap(await service.located(entry)) : new Map();
+    },
+  };
+  const commands = new Commands(context.extensionUri, tree, view, store, links);
   const fitness = new FitnessCommands(service, () => sources.refresh());
   const sourcesView = vscode.window.createTreeView('crewforge.sources', { treeDataProvider: sources, showCollapseAll: true });
   const documents = new ManifestDocuments();
   const output = vscode.window.createOutputChannel('CrewForge');
-  void new SchemaProvider(() => currentConnection(tree)?.client).register();
+  const schemas = new SchemaProvider(() => currentConnection(tree)?.client);
+  void schemas.register();
   const deploy = new DeployCommands(sources, { exec: execProgram, readYamlFiles }, output, () => {
     sources.refresh();
     tree.refresh();
@@ -47,6 +56,20 @@ export function activate(context: vscode.ExtensionContext): void {
     details: (crew) => tree.detailsOf(crew),
     follow: (deployment) => followDeployment(deployment, () => tree.refresh()),
   });
+  const loop = registerLoop(context, {
+    sources,
+    service,
+    deploy,
+    fitness,
+    chat: { ask: (crew) => commands.askCrew({ kind: 'crew', crew }), reaskLast: (crew) => commands.reaskLast(crew) },
+    revealLive: (crew) => commands.revealLive(crew),
+    deps: { exec: execProgram, readText, readYamlFiles },
+    schema: () => schemas.schemaText(),
+    output,
+    guard,
+  });
+  const created = (root: string) =>
+    showCreatedCrew(root, { reload: () => sources.reload(), reveal: (node) => sourcesView.reveal(node, { select: true, focus: true, expand: true }) });
   /** A lifecycle command from either view: a live crew goes through the adapter, a Crew Sources node straight on. */
   const either = (onCrew: (crew: CrewSummary) => Promise<void>, onSource: (node?: SourceNode) => Promise<void>) => (node?: SourceNode | CrewNode) =>
     guard(() => (node?.kind === 'crew' ? onCrew(node.crew) : onSource(node as SourceNode | undefined)));
@@ -74,12 +97,19 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('crewforge.refreshSources', () => sources.refresh()),
     vscode.commands.registerCommand('crewforge.showDrift', (node?: SourceNode) => showDrift(documents, node)),
     output,
-    vscode.commands.registerCommand('crewforge.createCrew', () => guard(() => createCrewCommand(execProgram, currentConnection(tree), () => sources.refresh()))),
+    vscode.commands.registerCommand('crewforge.createCrew', () => guard(() => createCrewCommand(execProgram, currentConnection(tree), created))),
+    vscode.commands.registerCommand('crewforge.newCrewHere', (folder?: vscode.Uri) => guard(() => createCrewCommand(execProgram, currentConnection(tree), created, folder?.fsPath))),
     vscode.commands.registerCommand('crewforge.deploySource', (node?: SourceNode) => guard(() => deploy.deploySource(node))),
     vscode.commands.registerCommand('crewforge.updateDeployment', either((crew) => live.update(crew), (node) => deploy.updateDeployment(node))),
     vscode.commands.registerCommand('crewforge.applyResource', (node?: SourceNode) => guard(() => deploy.applyResource(node))),
     vscode.commands.registerCommand('crewforge.deployRevision', either((crew) => live.deployRevision(crew), (node) => deploy.deployRevision(node))),
-    vscode.commands.registerCommand('crewforge.runFitness', either((crew) => live.runFitness(crew), (node) => fitness.runFitness(node))),
+    vscode.commands.registerCommand(
+      'crewforge.runFitness',
+      either(
+        (crew) => live.runFitness(crew),
+        async (node) => void (node?.kind === 'source' ? await loop.runFitness(node) : await fitness.runFitness(node)),
+      ),
+    ),
     vscode.commands.registerCommand('crewforge.showRun', (node?: SourceNode) => guard(() => fitness.showRun(node))),
     vscode.commands.registerCommand('crewforge.followRollout', either((crew) => live.followRollout(crew), (node) => followRolloutCommand(node, () => sources.refresh()))),
     vscode.commands.registerCommand('crewforge.removeDeployment', either((crew) => live.remove(crew), (node) => deploy.removeDeployment(node))),
@@ -101,12 +131,13 @@ export function deactivate(): void {
   // Panels dispose with the window; nothing else holds resources.
 }
 
-class Commands {
+export class Commands {
   constructor(
     private readonly extensionUri: vscode.Uri,
     private readonly tree: CrewTreeProvider,
     private readonly view: vscode.TreeView<CrewNode>,
     private readonly store: ConversationStore,
+    private readonly links?: ChatLinks,
   ) {}
 
   async askCrew(node?: CrewNode): Promise<void> {
@@ -131,7 +162,30 @@ class Commands {
   private async openChat(node?: CrewNode): Promise<ChatPanel | undefined> {
     const crew = node?.kind === 'crew' ? node.crew : await this.pickCrew();
     if (!crew) return undefined;
-    return ChatPanel.show(this.extensionUri, this.tree.connection ?? connect(), crew, this.store);
+    return ChatPanel.show(this.extensionUri, this.tree.connection ?? connect(), crew, this.store, undefined, this.links);
+  }
+
+  /**
+   * Asks a crew its last question again, after a redeploy: from its open chat, else from
+   * its newest saved conversation, which opens.
+   */
+  async reaskLast(crew: CrewSummary): Promise<void> {
+    const connection = this.tree.connection ?? connect();
+    let panel = ChatPanel.find(connection.context, crew);
+    if (!panel) {
+      const [latest] = await this.store.list(connection.context, crew.namespace, crew.name);
+      const conversation = latest && (await this.store.load(latest));
+      panel = ChatPanel.show(this.extensionUri, connection, crew, this.store, conversation, this.links);
+    }
+    if (!(await panel.reaskLast())) void vscode.window.showInformationMessage(`There is no earlier question for ${crew.name} to ask again. Ask it one in the chat.`);
+  }
+
+  /** Selects a live crew in the Crews view, reading the crews again first. */
+  async revealLive(crew: CrewSummary): Promise<void> {
+    this.tree.refresh();
+    const node = await this.tree.nodeFor(crew.namespace, crew.name);
+    if (node) await this.view.reveal(node, { select: true, focus: false, expand: true });
+    else void vscode.window.showInformationMessage(`The Crews view does not list ${crew.namespace}; add it to the crewforge.namespaces setting to see ${crew.name} there.`);
   }
 
   async continueConversation(): Promise<void> {

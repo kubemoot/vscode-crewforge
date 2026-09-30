@@ -5,6 +5,18 @@ generated from the conventional commits since the previous release.
 
 ## Unreleased
 
+### Inner loop
+
+- Develop a crew from the editor without GitOps: create, understand, edit, lint, deploy to a dev namespace, test, debug, redeploy, and retest. The README's "Develop a crew" walks through it.
+- New Crew Here on an Explorer folder; the + on Crew Sources asks for the folder, starting with the active file's folder, instead of using the first workspace folder. After scaffolding, the crew is selected in Crew Sources, `templates/crew.yaml` opens beside the README, and a notification offers Deploy to a dev namespace.
+- A crew source expands to what it declares, read from its render: the Crew, Agents (role, capabilities), PromptModules (ADL or prose), Skills, MCP servers, and fitness scenarios. Each opens its file at the object.
+- A status bar item names the crew of the active file and its state: not deployed, deployed and in sync, or changed since deploy. Clicking it offers the next steps.
+- Lint Crew runs `helm lint`, renders the chart, and checks every Kubemoot object against the cluster's schemas, with findings in the Problems panel on the right file and line. Saving a crew file lints its crew again. A missing helm is named with where to get it.
+- Deploy (dev) is one click after the first: `helm upgrade --install` to `crew-<name>` (asked once, remembered per source), then it waits until the operator has seen the deploy and the Crew and its agents are ready, and selects the crew in the Crews view.
+- Ask and Run Fitness from a source and from the status bar, as well as from the live crew.
+- Saving a file of a deployed crew marks it changed since deploy; Redeploy (dev) upgrades it and waits for readiness, then offers Re-ask last question and Rerun fitness.
+- In the chat, each answer keeps the agents that took part; an agent's name links to its Agent and PromptModules when the crew's source is open. With `crewforge.dashboardUrl` set, a turn opens in the Kubemoot dashboard.
+
 ### Chat
 
 - Messages take the panel's full width; the avatars are small marks beside the time, and a

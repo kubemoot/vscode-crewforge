@@ -46,6 +46,20 @@ export class CrewTreeProvider implements vscode.TreeDataProvider<CrewNode> {
     return [];
   }
 
+  /** A crew's namespace, so a crew can be revealed; namespaces and messages are roots. */
+  getParent(node: CrewNode): CrewNode | undefined {
+    if (node.kind !== 'crew') return undefined;
+    const group = groupByNamespace(this.crews).find((g) => g.namespace === node.crew.namespace);
+    return group && { kind: 'namespace', group };
+  }
+
+  /** The crew's node after reading the crews again; undefined when the view does not list it, as with a namespace filter. */
+  async nodeFor(namespace: string, name: string): Promise<LiveCrewNode | undefined> {
+    await this.loadRoot();
+    const crew = this.crews.find((c) => c.namespace === namespace && c.name === name);
+    return crew && { kind: 'crew', crew };
+  }
+
   getTreeItem(node: CrewNode): vscode.TreeItem {
     switch (node.kind) {
       case 'namespace':
@@ -112,6 +126,7 @@ export class CrewTreeProvider implements vscode.TreeDataProvider<CrewNode> {
 
 function namespaceItem(group: NamespaceGroup): vscode.TreeItem {
   const item = new vscode.TreeItem(group.namespace, vscode.TreeItemCollapsibleState.Expanded);
+  item.id = `namespace:${group.namespace}`;
   item.iconPath = new vscode.ThemeIcon('symbol-namespace');
   item.contextValue = 'namespace';
   return item;
@@ -131,6 +146,7 @@ export function crewContext(crew: CrewSummary): string {
 
 function crewItem(crew: CrewSummary, archetype?: string): vscode.TreeItem {
   const item = new vscode.TreeItem(crew.name, vscode.TreeItemCollapsibleState.Collapsed);
+  item.id = `crew:${crew.namespace}/${crew.name}`;
   item.description = crewDescription(crew);
   item.tooltip = crewTooltip(crew, archetype);
   item.contextValue = crewContext(crew);

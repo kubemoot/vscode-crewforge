@@ -52,6 +52,62 @@ it from this computer (after asking; the crew is not changed), and copy or save 
 conversation as Markdown. **CrewForge: Open
 Conversations Folder** shows where they are kept.
 
+## Develop a crew
+
+CrewForge's inner loop runs from the editor, without GitOps: create a crew, understand
+what it declares, edit it, lint it, deploy it to a dev namespace with Helm, test it, debug
+a turn, change it, redeploy, and test again. It never commits or pushes; Flux rollouts
+stay the outer loop.
+
+1. **Create.** Right-click a folder in the Explorer and choose **New Crew Here**, or click
+   the + on Crew Sources and pick the folder (the active file's folder comes first). Give
+   the crew a name, a number of specialists, and a model family; `kmctl create --chart`
+   writes the chart into a subfolder named after the crew. CrewForge selects the new crew
+   in Crew Sources, opens `templates/crew.yaml` beside its README, and offers **Deploy to a
+   dev namespace**.
+2. **Understand.** Expand the crew in **Crew Sources**. It lists what the chart declares,
+   read from its render: the Crew, its **Agents** (role and capabilities), the
+   **PromptModules** they compose (ADL or prose, in composition order), **Skills**, **MCP
+   Servers**, and **Fitness Scenarios** (from `fitness/`). Click any of them to open its
+   file at that object. Its deployments follow.
+3. **Edit.** While a file of the crew is open, the status bar names the crew and where it
+   stands: *not deployed*, *deployed, in sync*, or *changed since deploy* (the same drift
+   check as Compare with Live). Click it for the next steps in that state.
+4. **Lint.** **Lint Crew** (on the source's menu, and in the status bar menu) runs `helm
+   lint` on the chart, renders it, and checks every Kubemoot object against the schemas the
+   cluster serves. Findings land in the Problems panel on the file and line they concern,
+   such as a field the CRD does not define. Saving a file of the crew lints it again once
+   the saves settle. A chart needs `helm` on your PATH; without it Lint Crew says where to
+   get it.
+5. **Deploy.** **Deploy (dev)** (the rocket on a source) runs `helm upgrade --install` into
+   `crew-<name>` on the current context. It asks for the namespace the first time and
+   remembers it for that source; after that it is one click. A bundle deploys with `kubectl
+   apply --server-side` instead. CrewForge then follows the crew until the operator has seen
+   the deploy and the Crew and all its agents report ready (cancel the progress
+   notification to stop following), and selects the crew in the Crews view. A crew or agent
+   that fails says so.
+6. **Test.** **Ask** opens the chat with the deployed crew; **Run Fitness** runs one of its
+   fitness definitions against it. Both are on the source, in the status bar menu, and on
+   the live crew in the Crews view.
+7. **Debug.** Under each crew answer, *N agents took part* lists each agent's last word in
+   the turn. When the crew's source is open in the workspace, an agent's name links to where
+   it is defined: its Agent, then the PromptModules it composes. With `crewforge.dashboardUrl`
+   set, **Open this turn in the Kubemoot dashboard** appears among the answer's buttons; it
+  opens the dashboard's Discussions page with the turn's thread, namespace, and crew in the
+  address.
+8. **Change and redeploy.** Saving a file of a deployed crew marks it *changed since
+   deploy* in the status bar and on its source; the lint and drift check that follow have
+   the last word. **Redeploy (dev)** (the sync icon on a changed source, or the status bar)
+   upgrades the release and waits for the agents again.
+9. **Retest.** The redeploy's notification offers **Re-ask last question** (in the open
+   chat, else the newest saved conversation with the crew) and **Rerun fitness** (the
+   definition you ran last, without asking).
+
+To deploy somewhere else, choose **Change the dev namespace** from the status bar menu, or
+use **Deploy Crew to a Namespace** for any namespace and channel. A namespace where Flux or
+a bundle already owns the crew is refused, since two channels must not fight over the same
+objects.
+
 ## Explore a live crew
 
 Expand a crew in the **Crews** view to see what it is made of, read from the cluster:
@@ -86,9 +142,13 @@ changes only through git. **Create Crew** is on the Crews view's title bar too.
 The **Crew Sources** view finds crew Helm charts and plain-manifest bundles in the
 workspace and, under each, every namespace its crew is deployed to.
 
-- **Create Crew** (the + on the view) scaffolds a working crew as a Helm chart with
-  `kmctl create --chart`. It needs [kmctl](https://github.com/kubemoot/kmctl/releases)
-  0.12.0 or later on your PATH, and checks the version before asking anything.
+- **Create Crew** (the + on the view, or **New Crew Here** on a folder in the Explorer)
+  scaffolds a working crew as a Helm chart with `kmctl create --chart`, in the folder you
+  pick. It needs [kmctl](https://github.com/kubemoot/kmctl/releases) 0.12.0 or later on
+  your PATH, and checks the version before asking anything.
+- Each source expands to what it declares (see [Develop a crew](#develop-a-crew)), then to
+  its deployments. Its menu has **Deploy (dev)**, **Ask**, **Run Fitness**, and **Lint
+  Crew**.
 - **Deploy Crew to a Namespace** (the upload icon on a source) deploys into any namespace
   you name, through Helm (`helm upgrade --install`), as a bundle (`kubectl apply
   --server-side`), or, for a crew Flux manages, by commit and push. A crew keeps the
@@ -110,7 +170,9 @@ workspace and, under each, every namespace its crew is deployed to.
   cluster's own schema, including fields the CRD does not define.
 
 `helm`, `kubectl`, and `git` come from your PATH; CrewForge runs them with its kubeconfig
-and context.
+and context. Lint Crew reads the Kubemoot schemas from the cluster's OpenAPI; without a
+reachable cluster it lints with `helm lint` and the render alone, and says the schema
+check was skipped.
 
 ## Settings
 
@@ -120,7 +182,7 @@ and context.
 | `crewforge.context` | empty | Context to use. Empty uses the kubeconfig's current context. |
 | `crewforge.namespaces` | `[]` | Show crews only in these namespaces. Set it when your account may read only some namespaces. |
 | `crewforge.streamTimeoutSeconds` | `600` | Longest a single turn may stream. |
-| `crewforge.dashboardUrl` | empty | The Kubemoot dashboard, opened from **Powered by Kubemoot** in a chat. Empty opens this setting. |
+| `crewforge.dashboardUrl` | empty | The Kubemoot dashboard, opened from **Powered by Kubemoot** in a chat, and from **Open this turn in the Kubemoot dashboard** under an answer (shown only when set). Empty makes Powered by Kubemoot open this setting. |
 
 ## What your account needs
 

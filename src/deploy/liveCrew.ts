@@ -71,8 +71,7 @@ export class LiveCrewActions {
   /** The crew as a Crew Sources deployment, or undefined when no workspace source renders it (or the developer cancelled the pick). */
   async resolve(crew: CrewSummary): Promise<{ node?: DeploymentNode; cancelled?: boolean }> {
     const candidates = (await this.deps.sources()).filter((e) => e.crewName === crew.name);
-    const named = crew.annotations?.[ANNOTATIONS.source];
-    const entry = candidates.find((e) => e.identity.id === named) ?? (await pickEntry(crew, candidates));
+    const entry = namedSource(crew, candidates) ?? (await pickEntry(crew, candidates));
     if (!entry) return { cancelled: candidates.length > 1 };
     const [deployment] = deploymentsOf(entry.identity.id, crew.name, [crew]);
     return { node: { kind: 'deployment', entry, deployment } };
@@ -83,6 +82,18 @@ export class LiveCrewActions {
     if (!node && !cancelled) void vscode.window.showInformationMessage(noSource(crew, purpose));
     return node;
   }
+}
+
+/** The source a live crew's Crew names, among those that render a crew of its name. */
+function namedSource(crew: CrewSummary, candidates: SourceEntry[]): SourceEntry | undefined {
+  const named = crew.annotations?.[ANNOTATIONS.source];
+  return candidates.find((e) => e.identity.id === named);
+}
+
+/** The workspace source of a live crew without asking: the one its Crew names, else the only one that renders it. */
+export function sourceForCrew(crew: CrewSummary, entries: SourceEntry[]): SourceEntry | undefined {
+  const candidates = entries.filter((e) => e.crewName === crew.name);
+  return namedSource(crew, candidates) ?? (candidates.length === 1 ? candidates[0] : undefined);
 }
 
 async function pickEntry(crew: CrewSummary, candidates: SourceEntry[]): Promise<SourceEntry | undefined> {

@@ -9,7 +9,9 @@ import { discoverKinds, liveObjects, type KubemootKind } from './live';
 import { isFitness, listRuns, type FitnessRun } from '../fitness/fitness';
 import { helmReleaseRef, readHelmRelease, type FluxState } from '../gitops/flux';
 import { crewOf, objectKey, parseManifests, type Manifest } from './manifests';
-import { render, type RenderDeps } from './render';
+import { declarationsOf, type Declarations } from './declared';
+import { locate, type Located } from './locate';
+import { render, renderWithOrigins, type Rendered, type RenderDeps } from './render';
 
 export interface SourceDeps extends RenderDeps {
   readText: ReadText;
@@ -24,6 +26,14 @@ export interface SourceEntry {
   /** The name of the Crew it renders; absent when rendering failed. */
   crewName?: string;
   error?: string;
+  /** What the source rendered when it was loaded, with the file of each object. */
+  rendered?: Rendered[];
+}
+
+/** The crew source a file belongs to: the innermost source folder that holds it. */
+export function sourceOf(entries: SourceEntry[], file: string): SourceEntry | undefined {
+  const holding = entries.filter((e) => file.startsWith(e.source.root + path.sep));
+  return holding.sort((a, b) => b.source.root.length - a.source.root.length)[0];
 }
 
 /** The namespace a source is rendered into only to learn its crew's name. */
@@ -75,16 +85,33 @@ export class SourceService {
    * fitness/ folder inside it (a kmctl chart) or beside it (a workshop bundle).
    */
   async fitnessDefinitions(entry: SourceEntry, namespace: string): Promise<Manifest[]> {
-    const rendered = await render(entry.source, { namespace }, this.deps);
+    return (await this.fitnessLocated(entry, await this.located(entry, namespace))).map((l) => l.manifest);
+  }
+
+  /** What a source declares, each item with the file and line it starts at. */
+  async declarations(entry: SourceEntry): Promise<Declarations> {
+    const located = await this.located(entry);
+    return declarationsOf(located, await this.fitnessLocated(entry, located), this.deps.readText);
+  }
+
+  /** The source's objects, where each starts in its files; the render from loading serves the probe namespace. */
+  async located(entry: SourceEntry, namespace = PROBE_NAMESPACE): Promise<Located[]> {
+    const rendered = namespace === PROBE_NAMESPACE && entry.rendered ? entry.rendered : await renderWithOrigins(entry.source, { namespace }, this.deps);
+    return locate(rendered, this.deps.readText);
+  }
+
+  private async fitnessLocated(entry: SourceEntry, located: Located[]): Promise<Located[]> {
     const folders = [path.join(entry.source.root, 'fitness'), path.join(path.dirname(entry.source.root), 'fitness')];
     const loose = (await Promise.all(folders.map((f) => this.yamlIn(f)))).flat();
-    const unique = new Map([...rendered, ...loose].filter(isFitness).map((m) => [objectKey(m), m]));
+    const unique = new Map([...located, ...loose].filter((l) => isFitness(l.manifest)).map((l) => [objectKey(l.manifest), l]));
     return [...unique.values()];
   }
 
-  private async yamlIn(folder: string): Promise<Manifest[]> {
+  private async yamlIn(folder: string): Promise<Located[]> {
     try {
-      return (await this.deps.readYamlFiles(folder)).flatMap(({ text }) => parseManifests(text));
+      const files = await this.deps.readYamlFiles(folder);
+      const located = await Promise.all(files.map(({ file, text }) => locate(parseManifests(text).map((manifest) => ({ manifest, file })), async () => text)));
+      return located.flat();
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code === 'ENOENT') return [];
       throw err;
@@ -94,8 +121,9 @@ export class SourceService {
   private async describe(source: CrewSource): Promise<SourceEntry> {
     const identity = await identify(source, this.deps.exec);
     try {
-      const crew = crewOf(await render(source, { namespace: PROBE_NAMESPACE }, this.deps));
-      return crew ? { source, identity, crewName: crew.metadata.name } : { source, identity, error: 'renders no Crew' };
+      const rendered = await renderWithOrigins(source, { namespace: PROBE_NAMESPACE }, this.deps);
+      const crew = crewOf(rendered.map((r) => r.manifest));
+      return crew ? { source, identity, crewName: crew.metadata.name, rendered } : { source, identity, error: 'renders no Crew' };
     } catch (err) {
       return { source, identity, error: err instanceof Error ? err.message : String(err) };
     }

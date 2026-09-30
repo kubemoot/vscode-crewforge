@@ -9,6 +9,8 @@ import { META_SEPARATOR } from '../src/webview/render';
 import { recorded, resetFake, Uri } from './vscodeFake';
 
 let sent: WebviewMessage[];
+/** What the host says the page may link to; a test changes it before posting. */
+let links: StateMessage['links'];
 let state: unknown;
 
 /** Loads the page ChatPanel generates, then runs the webview script against it. */
@@ -19,6 +21,7 @@ async function loadPage(): Promise<void> {
   document.body.innerHTML = /<body>([\s\S]*)<\/body>/.exec(html)![1].replace(/<script[\s\S]*<\/script>/, '');
   sent = [];
   state = undefined;
+  links = { agents: [], dashboard: false };
   (globalThis as unknown as { acquireVsCodeApi: () => unknown }).acquireVsCodeApi = () => ({
     postMessage: (m: WebviewMessage) => sent.push(m),
     getState: () => state,
@@ -29,7 +32,7 @@ async function loadPage(): Promise<void> {
 }
 
 function stateMessage(conversation: Conversation, extra: Partial<StateMessage['view']> = {}, history: StateMessage['history'] = []): StateMessage {
-  return { type: 'state', view: { conversation, busy: false, ...extra }, history, about: '2 agents' };
+  return { type: 'state', view: { conversation, busy: false, ...extra }, history, about: '2 agents', links };
 }
 
 /** Delivers a message as VS Code's host frame does: with the page's own origin. */
@@ -354,5 +357,54 @@ describe('the chat page', () => {
     expect(classes).toEqual(['finding-card finding-triaging', 'finding-card finding-evaluating', 'finding-card']);
     expect($('messages').querySelector('.turn strong')?.textContent).toBe('all good');
     expect($('messages').querySelector('.loading-text')).toBeNull();
+  });
+
+  it('links an agent to its source when the host says it can, on the live card and under the answer', () => {
+    links = { agents: ['node-watcher'], dashboard: false };
+    const c = newConversation('ctx', 'team-a', 'lab-ops');
+    c.messages.push({ role: 'user', content: 'q', timestamp: c.startedAt });
+    post(c, { busy: true, turn: { startedAt: Date.now(), connected: true, done: false, cards: [{ agent: 'node-watcher', status: 'evaluating', stoodAside: false }, { agent: 'other', status: 'evaluating', stoodAside: false }] } });
+    const live = $('messages').querySelectorAll('.finding-agent');
+    expect([...live].map((el) => el.tagName)).toEqual(['BUTTON', 'SPAN']);
+    (live[0] as HTMLElement).click();
+    expect(sent.at(-1)).toEqual({ type: 'openAgentSource', agent: 'node-watcher' });
+    c.messages.push({
+      role: 'assistant',
+      content: 'answer',
+      timestamp: c.startedAt,
+      threadId: 'th-1',
+      agents: [{ agent: 'node-watcher', text: 'agrees: rig0', problem: false }, { agent: '<b>x</b>', text: 'failed: boom', problem: true }, { bad: true } as never],
+    });
+    post(c);
+    const details = $('messages').querySelector('details.turn-agents')!;
+    expect(details.querySelector('summary')?.textContent).toBe('2 agents took part');
+    expect(details.querySelectorAll('.finding-card.finding-problem')).toHaveLength(1);
+    expect(details.textContent).toContain('<b>x</b>');
+    (details.querySelector('button.finding-agent') as HTMLElement).click();
+    expect(sent.at(-1)).toEqual({ type: 'openAgentSource', agent: 'node-watcher' });
+    c.messages[1].agents = [{ agent: 'solo', text: 'agrees', problem: false }];
+    post(c);
+    expect($('messages').querySelector('details.turn-agents summary')?.textContent).toBe('1 agent took part');
+  });
+
+  it('offers Open in Dashboard on a turn with a thread, only when the dashboard is set', () => {
+    const c = newConversation('ctx', 'team-a', 'lab-ops');
+    c.messages.push(
+      { role: 'user', content: 'q', timestamp: c.startedAt },
+      { role: 'assistant', content: 'answer', timestamp: c.startedAt, threadId: 'th-1' },
+      { role: 'user', content: 'q2', timestamp: c.startedAt },
+      { role: 'system', content: 'The crew finished without an answer.', timestamp: c.startedAt, threadId: 'th-2' },
+      { role: 'assistant', content: 'no thread', timestamp: c.startedAt },
+    );
+    post(c);
+    expect($('messages').querySelectorAll('[data-action="dashboard"]')).toHaveLength(0);
+    expect($('messages').querySelector('.notice .message-actions')).toBeNull();
+    links = { agents: [], dashboard: true };
+    post(c);
+    const buttons = [...$('messages').querySelectorAll<HTMLElement>('[data-action="dashboard"]')];
+    expect(buttons.map((b) => b.dataset.index)).toEqual(['1', '3']);
+    expect(buttons[0].getAttribute('aria-label')).toBe('Open this turn in the Kubemoot dashboard');
+    buttons[1].click();
+    expect(sent.at(-1)).toEqual({ type: 'openTurnInDashboard', index: 3 });
   });
 });

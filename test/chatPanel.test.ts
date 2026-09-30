@@ -4,7 +4,9 @@ import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Connection } from '../src/connection';
 import type { KubeClient } from '../src/k8s/request';
-import { ChatPanel } from '../src/panels/chatPanel';
+import { ChatPanel, dashboardThreadUrl, type ChatLinks } from '../src/panels/chatPanel';
+import type { Located } from '../src/source/locate';
+import { obj } from './fakeCluster';
 import { newConversation } from '../src/store/conversation';
 import { ConversationStore } from '../src/store/conversations';
 import type { StateMessage } from '../src/webview/protocol';
@@ -268,5 +270,94 @@ describe('ChatPanel', () => {
     expect(ChatPanel.active).toBeDefined();
     panel.dispose();
     expect(ChatPanel.active).toBeUndefined();
+  });
+});
+
+describe('ChatPanel links into the workspace and the dashboard', () => {
+  const place = (kind: string, name: string, file?: string, line = 0): Located => ({ manifest: obj(kind, name, 'team-a'), file, line });
+  const sources = new Map([
+    ['lab-ops-coordinator', [place('Agent', 'lab-ops-coordinator', '/w/lab/templates/agents.yaml', 3), place('PromptModule', 'rules', '/w/lab/templates/prompts.yaml', 9)]],
+    ['k8s', [place('Agent', 'k8s', '/w/lab/templates/agents.yaml', 20)]],
+    ['ghost', [place('Agent', 'ghost')]],
+  ]);
+  const links: ChatLinks = { agentSources: async () => sources };
+  const withLinks = (l: ChatLinks = links, conversation?: Parameters<typeof ChatPanel.show>[4]) => {
+    ChatPanel.show(Uri.file('/ext') as never, connection, crew, store, conversation, l);
+    return recorded.panels.at(-1)!;
+  };
+
+  it('tells the page which agents link to their source, and whether the dashboard is set', async () => {
+    const panel = withLinks();
+    await settle();
+    expect(lastState(panel).links).toEqual({ agents: ['lab-ops-coordinator', 'k8s', 'ghost'], dashboard: false });
+    recorded.settings.set('crewforge.dashboardUrl', 'http://localhost:8080/dashboard/');
+    await panel.webview.receive({ type: 'ready' });
+    expect(lastState(panel).links.dashboard).toBe(true);
+    const failing = withLinks({ agentSources: async () => Promise.reject(new Error('no workspace')) }, undefined);
+    expect(failing).toBe(panel);
+    for (const p of recorded.panels) p.dispose();
+    const fresh = withLinks({ agentSources: async () => Promise.reject(new Error('no workspace')) });
+    await settle();
+    expect(lastState(fresh).links.agents).toEqual([]);
+  });
+
+  it("opens an agent's only definition, or the part the developer picks, at its line", async () => {
+    const panel = withLinks();
+    await settle();
+    await panel.webview.receive({ type: 'openAgentSource', agent: 'k8s' });
+    expect(recorded.executed.at(-1)).toMatchObject({ id: 'vscode.open', args: [{ fsPath: '/w/lab/templates/agents.yaml' }, { selection: { startLine: 20 } }] });
+    let offered: { label: string; description?: string }[] = [];
+    recorded.quickPicks.push((items: typeof offered) => ((offered = items), items[1]));
+    await panel.webview.receive({ type: 'openAgentSource', agent: 'lab-ops-coordinator' });
+    expect(offered.map((i) => [i.label, i.description])).toEqual([
+      ['Agent lab-ops-coordinator', '/w/lab/templates/agents.yaml:4'],
+      ['PromptModule rules', '/w/lab/templates/prompts.yaml:10'],
+    ]);
+    expect(recorded.executed.at(-1)).toMatchObject({ args: [{ fsPath: '/w/lab/templates/prompts.yaml' }, { selection: { startLine: 9 } }] });
+    recorded.quickPicks.push(undefined);
+    await panel.webview.receive({ type: 'openAgentSource', agent: 'lab-ops-coordinator' });
+    await panel.webview.receive({ type: 'openAgentSource', agent: 'ghost' });
+    await panel.webview.receive({ type: 'openAgentSource', agent: 'nobody' });
+    await panel.webview.receive({ type: 'openAgentSource', agent: 42 });
+    expect(recorded.executed).toHaveLength(2);
+  });
+
+  it('opens a turn in the dashboard by its thread, only when a dashboard is set and the thread is known', async () => {
+    const c = newConversation('ctx', 'team-a', 'lab-ops');
+    c.messages.push({ role: 'user', content: 'q', timestamp: c.startedAt }, { role: 'assistant', content: 'a', timestamp: c.startedAt, threadId: 'th-1' });
+    const panel = withLinks(links, c);
+    await panel.webview.receive({ type: 'openTurnInDashboard', index: 1 });
+    expect(recorded.opened).toEqual([]);
+    recorded.settings.set('crewforge.dashboardUrl', 'http://localhost:8080/dashboard/');
+    await panel.webview.receive({ type: 'openTurnInDashboard', index: 1 });
+    await panel.webview.receive({ type: 'openTurnInDashboard', index: 0 });
+    await panel.webview.receive({ type: 'openTurnInDashboard', index: '1' });
+    expect(recorded.opened).toEqual(['http://localhost:8080/dashboard/discussions?thread=th-1&namespace=team-a&crew=lab-ops']);
+    expect(dashboardThreadUrl('https://d.example', { namespace: 'n s', name: 'c' }, 'a&b')).toBe('https://d.example/discussions?thread=a%26b&namespace=n+s&crew=c');
+  });
+
+  it('asks the last question again after a redeploy, unless there is none or a turn runs', async () => {
+    const c = newConversation('ctx', 'team-a', 'lab-ops');
+    c.messages.push({ role: 'user', content: 'Which nodes have a GPU?', timestamp: c.startedAt }, { role: 'assistant', content: 'rig0', timestamp: c.startedAt });
+    const panel = withLinks(links, c);
+    expect(ChatPanel.find('ctx', crew)).toBeDefined();
+    expect(ChatPanel.find('other', crew)).toBeUndefined();
+    transport.responses.push('{"conversationId":"conv-1"}');
+    transport.streams.push(fixture('turn1.sse'));
+    expect(await ChatPanel.find('ctx', crew)!.reaskLast()).toBe(true);
+    expect(panel.revealed).toBe(1);
+    expect(transport.calls.filter((call) => call.method === 'POST').map((call) => (call.body as { message: string }).message)).toEqual(['Which nodes have a GPU?']);
+    transport.holdOpen = true;
+    transport.responses.push('{"conversationId":"conv-1"}');
+    transport.streams.push('data: {"type":"connected"}\n\n');
+    const turn = ChatPanel.find('ctx', crew)!.reaskLast();
+    await settle();
+    expect(await ChatPanel.find('ctx', crew)!.reaskLast()).toBe(false);
+    await panel.webview.receive({ type: 'stop' });
+    await turn;
+    panel.dispose();
+    const empty = withLinks(links);
+    expect(await ChatPanel.find('ctx', crew)!.reaskLast()).toBe(false);
+    empty.dispose();
   });
 });

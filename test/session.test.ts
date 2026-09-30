@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { TurnTiming } from '../src/discussion/client';
-import { ChatSession, endProblems, noticeFor, type SessionView } from '../src/discussion/session';
+import { ChatSession, endProblems, noticeFor, type SessionView, turnRecord } from '../src/discussion/session';
 import { newConversation, type Conversation } from '../src/store/conversation';
 import { FakeTransport, fixture } from './fakes';
 
@@ -40,6 +40,18 @@ describe('ChatSession', () => {
     expect(saved[1].messages[3].durationMs).toBe(c.messages[3].durationMs);
     expect(views.some((v) => v.busy && v.turn && v.turn.cards.length > 0)).toBe(true);
     expect(session.view).toMatchObject({ busy: false, turn: undefined });
+    expect(c.messages[1].threadId).toBe('0f643dce-5d20-429d-9316-1e0d79e2e91f');
+    expect(c.messages[1].agents?.length).toBeGreaterThan(0);
+    expect(c.messages[1].agents?.every((a) => typeof a.agent === 'string' && typeof a.text === 'string' && typeof a.problem === 'boolean')).toBe(true);
+  });
+
+  it('keeps no thread or agents on a turn that had none', () => {
+    expect(turnRecord()).toEqual({});
+    expect(turnRecord({ startedAt: 0, connected: true, cards: [], done: true })).toEqual({});
+    expect(turnRecord({ startedAt: 0, connected: true, threadId: 't', done: true, cards: [{ agent: 'a', status: 'finding', signal: 'failure', summary: 'boom', stoodAside: false }] })).toEqual({
+      threadId: 't',
+      agents: [{ agent: 'a', text: 'failed: boom', problem: true }],
+    });
   });
 
   it('answers from the thread a restarted coordinator finished, after a dropped stream', async () => {

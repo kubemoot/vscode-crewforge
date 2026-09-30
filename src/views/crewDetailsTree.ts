@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { agentLine, agentTooltip, lines, missingPromptTooltip, promptLine, promptTooltip, usersText } from '../crew/describe';
 import type { AgentInfo, CrewDetails, McpServerInfo, PromptModuleInfo, SkillInfo, ToolInfo } from '../crew/details';
 import type { CrewSummary } from '../k8s/crews';
 import { provenanceFacts, provenanceOf, type ProvenanceFact } from '../source/provenance';
@@ -102,36 +103,27 @@ const ref = (crew: CrewSummary, kind: string, name: string): ObjectRef => ({ kin
 /** The mark of a ready thing, and of one that is not ready yet: crews, agents, MCP servers. */
 export const readyIcon = (ready?: boolean): Pick<MemberView, 'icon' | 'color'> =>
   ready ? { icon: 'pass-filled', color: 'testing.iconPassed' } : { icon: 'circle-large-outline', color: 'list.warningForeground' };
-const lines = (...parts: (string | false | undefined)[]) => parts.filter(Boolean).join('\n');
 
 export function agentView(crew: CrewSummary, a: AgentInfo): MemberView {
-  const capabilities = a.capabilities.length ? a.capabilities.join(', ') : 'no capabilities declared';
   const state = a.ready ? 'ready' : (a.phase ?? 'not ready');
   return {
     label: a.name,
-    description: `${a.role ?? 'no role'} · ${capabilities}${a.ready ? '' : ` · ${state}`}`,
-    tooltip: lines(
-      `Agent ${a.name}`,
-      `Role: ${a.role ?? 'not set'}`,
-      `Capabilities: ${capabilities}`,
-      `State: ${state}`,
-      a.description,
-      a.promptRefs.length > 0 && `PromptModules: ${a.promptRefs.join(', ')}`,
-    ),
+    description: `${agentLine(a)}${a.ready ? '' : ` · ${state}`}`,
+    tooltip: agentTooltip(a, state),
     ...readyIcon(a.ready),
     ref: ref(crew, 'Agent', a.name),
   };
 }
 
 export function promptView(crew: CrewSummary, m: PromptModuleInfo): MemberView {
-  const users = m.usedBy.length === 1 ? '1 agent' : `${m.usedBy.length} agents`;
+  const users = usersText(m);
   if (!m.object) {
-    return { label: m.name, description: `missing · ${users}`, tooltip: `PromptModule ${m.name} is named by ${m.usedBy.join(', ')} but does not exist.`, icon: 'warning', color: 'list.warningForeground' };
+    return { label: m.name, description: `missing · ${users}`, tooltip: missingPromptTooltip(m, 'does not exist'), icon: 'warning', color: 'list.warningForeground' };
   }
   return {
     label: m.name,
-    description: `order ${m.order} · ${m.form} · ${users}`,
-    tooltip: lines(`PromptModule ${m.name}`, `Order: ${m.order}`, `Form: ${m.form}`, `Used by: ${m.usedBy.join(', ')}`, m.shared && 'Agents outside this crew compose it too.'),
+    description: promptLine(m),
+    tooltip: promptTooltip(m, m.shared && 'Agents outside this crew compose it too.'),
     icon: m.form === 'ADL' ? 'symbol-structure' : 'symbol-text',
     ref: ref(crew, 'PromptModule', m.name),
   };

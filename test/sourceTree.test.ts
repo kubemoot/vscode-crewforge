@@ -6,7 +6,7 @@ import { objectKey, type Manifest } from '../src/source/manifests';
 import type { Exec } from '../src/source/render';
 import { SourceService, type SourceDeps } from '../src/source/service';
 import { ManifestDocuments, MANIFEST_SCHEME } from '../src/views/manifestDocuments';
-import { SourceTreeProvider } from '../src/views/sourceTree';
+import { SourceTreeProvider, type SourceNode } from '../src/views/sourceTree';
 import { FakeCluster, obj } from './fakeCluster';
 import { recorded, resetFake, Uri } from './vscodeFake';
 
@@ -107,6 +107,9 @@ describe('SourceTreeProvider', () => {
     cluster = new FakeCluster();
   });
 
+  /** A source's children below what it declares: its deployments, or why there are none. */
+  const live = async (tree: SourceTreeProvider, source: SourceNode) => (await tree.getChildren(source)).filter((n) => n.kind !== 'declared' && n.kind !== 'declSection');
+
   /** A provider whose connection is the fake cluster instead of a kubeconfig. */
   function provider(d: SourceDeps = deps()): SourceTreeProvider {
     return new SourceTreeProvider(new SourceService(d), () => ({ source: 'fake', context: 'lab', client: cluster as unknown as KubeClient }));
@@ -122,7 +125,7 @@ describe('SourceTreeProvider', () => {
     const [source] = await tree.getChildren();
     expect(tree.getTreeItem(source)).toMatchObject({ label: 'demo-crew', description: 'crew demo · helm', contextValue: 'source-helm' });
     expect(tree.known).toHaveLength(1);
-    const deployments = await tree.getChildren(source);
+    const deployments = await live(tree, source);
     const items = deployments.map((d) => tree.getTreeItem(d));
     expect(items.map((i) => [i.label, i.description])).toEqual([
       ['team-a', 'bundle · Unknown · in sync'],
@@ -146,13 +149,13 @@ describe('SourceTreeProvider', () => {
   it('says when a source is not deployed, cannot render, or the cluster cannot be read', async () => {
     const tree = provider();
     const [source] = await tree.getChildren();
-    const [none] = await tree.getChildren(source);
+    const [none] = await live(tree, source);
     expect(tree.getTreeItem(none).label).toBe('Not deployed in lab');
     const broken = (await provider(deps(async (cmd) => ({ code: cmd === 'helm' ? 1 : 128, stdout: '', stderr: 'bad chart' }))).getChildren())[0];
     const [why] = await tree.getChildren(broken);
     expect(tree.getTreeItem(why).label).toContain('bad chart');
     cluster.failures.set('/apis/kubemoot.ai/v1alpha1/crews', new Error('Forbidden: crews\nmore detail'));
-    const [denied] = await tree.getChildren(source);
+    const [denied] = await live(tree, source);
     expect(tree.getTreeItem(denied)).toMatchObject({ label: 'Forbidden: crews', tooltip: 'Forbidden: crews\nmore detail' });
   });
 
@@ -161,7 +164,7 @@ describe('SourceTreeProvider', () => {
     cluster.failures.set('/apis/kubemoot.ai/v1alpha1', new Error('no discovery'));
     const tree = provider();
     const [source] = await tree.getChildren();
-    const [deployment] = await tree.getChildren(source);
+    const [deployment] = await live(tree, source);
     expect(tree.getTreeItem(deployment).description).toContain('cannot compare');
     const [reason, fitness] = await tree.getChildren(deployment);
     expect(tree.getTreeItem(reason).label).toBe('no discovery');
@@ -184,7 +187,7 @@ describe('SourceTreeProvider', () => {
     recorded.settings.set('crewforge.kubeconfig', '/no/such/kubeconfig');
     const tree = new SourceTreeProvider(new SourceService(deps()));
     const [source] = await tree.getChildren();
-    const [message] = await tree.getChildren(source);
+    const [message] = await live(tree, source);
     expect(message.kind).toBe('message');
   });
 });

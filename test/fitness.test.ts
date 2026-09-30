@@ -205,6 +205,15 @@ describe('fitness in the tree and commands', () => {
     expect(started).toBe(1);
   });
 
+  it('reruns a remembered definition without asking, and asks when the source no longer has it', async () => {
+    expect(await commands().runFitness(fitnessNode, 'rendered-suite')).toBe('rendered-suite');
+    expect(recorded.quickPicks).toEqual([]);
+    recorded.quickPicks.push((items: { label: string }[]) => items[0]);
+    recorded.warningAnswers.push('Start anyway');
+    expect(await commands().runFitness(fitnessNode, 'gone')).toBe('rendered-suite');
+    expect(started).toBe(2);
+  });
+
   it('opens a run as a Markdown report', async () => {
     const run = toRun('CrewFitness', fitnessObj('CrewFitness', 'f', 'ns', 'demo', { phase: 'Passed', assertions: [assertion(true)] }) as never);
     await commands().showRun({ kind: 'run', entry, deployment, run });

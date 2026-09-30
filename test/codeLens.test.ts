@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { KubeClient } from '../src/k8s/request';
 import { SourceService } from '../src/source/service';
-import { CrewCodeLens, kubemootObjects } from '../src/views/codeLens';
+import { CrewCodeLens } from '../src/views/codeLens';
+import { kubemootObjects } from '../src/source/positions';
 import { SourceTreeProvider } from '../src/views/sourceTree';
 import { FakeCluster, obj } from './fakeCluster';
 import { resetFake, Uri, type CodeLens } from './vscodeFake';

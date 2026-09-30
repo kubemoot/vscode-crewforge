@@ -2,11 +2,12 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { activate, deactivate } from '../src/extension';
+import { activate, Commands, deactivate } from '../src/extension';
 import { newConversation } from '../src/store/conversation';
 import { ConversationStore } from '../src/store/conversations';
 import { startFakeApi, type FakeApi } from './fakeApiServer';
-import { recorded, resetFake, Uri } from './vscodeFake';
+import { CrewTreeProvider } from '../src/views/crewTree';
+import { recorded, resetFake, Uri, workspaceState, type FakeTreeView } from './vscodeFake';
 
 const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8')) as {
   contributes: { commands: { command: string }[] };
@@ -24,7 +25,7 @@ beforeEach(() => {
   recorded.settings.set('crewforge.kubeconfig', api.kubeconfig);
   storage = fs.mkdtempSync(path.join(os.tmpdir(), 'crewforge-ext-'));
   subscriptions = [];
-  activate({ globalStorageUri: Uri.file(storage), extensionUri: Uri.file('/ext'), subscriptions } as never);
+  activate({ globalStorageUri: Uri.file(storage), extensionUri: Uri.file('/ext'), subscriptions, workspaceState } as never);
 });
 
 afterEach(() => {
@@ -85,7 +86,7 @@ describe('commands', () => {
     expect(panel.title).toMatch(/^Ask /);
     await panel.webview.receive({ type: 'ready' });
     await new Promise((r) => setTimeout(r, 30));
-    expect(panel.webview.posted.at(-1)).toEqual({ type: 'prefill', text: 'From src/app.ts:\n\n```typescript\nconst a = 1;\n```\n\n' });
+    expect(panel.webview.posted.find((m) => (m as { type: string }).type === 'prefill')).toEqual({ type: 'prefill', text: 'From src/app.ts:\n\n```typescript\nconst a = 1;\n```\n\n' });
   });
 
   it('askAboutSelection needs a selection, and does nothing when no crew is picked', async () => {
@@ -201,5 +202,103 @@ describe('commands', () => {
     recorded.files.set('**/*.{yaml,yml}', [path.join(__dirname, 'fixtures', 'sources', 'bundles', 'demo', 'crew', '02-crew.yaml'), '/w/Chart.yaml']);
     const roots = await provider.getChildren();
     expect(roots.map((r) => r.kind)).toEqual(['source']);
+  });
+});
+
+describe('the inner loop in the extension', () => {
+  const BUNDLE = path.join(__dirname, 'fixtures', 'sources', 'bundles', 'demo', 'crew');
+  const loadBundle = async () => {
+    recorded.files.set('**/*.{yaml,yml}', [path.join(BUNDLE, '02-crew.yaml')]);
+    const provider = recorded.treeViews[1].options.treeDataProvider as { getChildren: () => Promise<{ kind: string; entry: unknown }[]> };
+    return (await provider.getChildren())[0];
+  };
+  const tick = () => new Promise((r) => setTimeout(r, 30));
+
+  it('adds a status bar item and the Problems collection, and follows the active editor and saves', async () => {
+    expect(recorded.statusBarItems).toHaveLength(1);
+    expect(recorded.diagnostics.map((d) => d.name)).toEqual(['crewforge']);
+    await loadBundle();
+    const source = await loadBundle();
+    const provider = recorded.treeViews[1].options.treeDataProvider as { getTreeItem: (n: unknown) => { description?: string; contextValue?: string }; onDidChangeTreeData: (l: (n: unknown) => void) => void };
+    const redrawn: unknown[] = [];
+    provider.onDidChangeTreeData((n) => redrawn.push(n));
+    recorded.editorListeners.forEach((l) => l({ document: { uri: Uri.file(path.join(BUNDLE, '02-crew.yaml')) } }));
+    expect(recorded.statusBarItems[0]).toMatchObject({ visible: true, text: expect.stringContaining('demo: ') });
+    await tick();
+    expect(recorded.statusBarItems[0].text).toBe('$(organization) demo: not deployed');
+    expect(provider.getTreeItem(source)).toMatchObject({ description: 'crew demo · bundle · not deployed', contextValue: 'source-bundle' });
+    expect(redrawn).toContain(source);
+    recorded.editorListeners.forEach((l) => l(undefined));
+    expect(recorded.statusBarItems[0].visible).toBe(false);
+    recorded.saveListeners.forEach((l) => l({ uri: Uri.file('/nowhere/x.yaml') }));
+    await tick();
+  });
+
+  it('lints a bundle source from its node, without helm', async () => {
+    const source = await loadBundle();
+    await run('crewforge.lintCrew', source);
+    expect(recorded.info.at(-1)).toMatch(/^Lint Crew: crew has /);
+  });
+
+  it('asks for the dev namespace on the first deploy, and says when the crew is not deployed for Ask and Run Fitness', async () => {
+    const source = await loadBundle();
+    await run('crewforge.deployDev', source);
+    await run('crewforge.redeployDev', source);
+    await run('crewforge.askSource', source);
+    await run('crewforge.runFitness', source);
+    expect(recorded.info.filter((m) => m === 'demo is not deployed in fake. Deploy it to a dev namespace first.')).toHaveLength(2);
+    recorded.quickPicks.push(undefined);
+    await run('crewforge.crewActions', source);
+    expect(recorded.errors).toEqual([]);
+  });
+
+  it('creates a crew in the Explorer folder, and reports a missing kmctl before asking anything', async () => {
+    const saved = process.env.PATH;
+    process.env.PATH = '';
+    try {
+      await run('crewforge.newCrewHere', Uri.file('/w/crews'));
+      await run('crewforge.createCrew');
+    } finally {
+      process.env.PATH = saved;
+    }
+    expect(recorded.modalErrors).toHaveLength(2);
+    expect(recorded.modalErrors[0]).toContain('needs kmctl');
+  });
+
+  it('links a chat to the agents of the crew source open in the workspace', async () => {
+    await loadBundle();
+    await run('crewforge.askCrew', { kind: 'crew', crew: { name: 'demo', namespace: 'somewhere', ready: true, phase: 'Ready' } });
+    await tick();
+    const states = recorded.panels[0].webview.posted as { type: string; links?: { agents: string[] } }[];
+    expect(states.at(-1)?.links?.agents).toEqual([]);
+  });
+});
+
+describe('Commands', () => {
+  const tree = () => new CrewTreeProvider();
+  const view = (id = 'crewforge.crews') => ({ id, reveal: (node: unknown, options?: unknown) => (recorded.revealed.push({ view: id, node, options }), Promise.resolve()) }) as unknown as FakeTreeView;
+
+  it('reveals a live crew in the Crews view, or says its namespace is not listed', async () => {
+    const commands = new Commands(Uri.file('/ext') as never, tree(), view() as never, new ConversationStore(path.join(storage, 'c')));
+    await commands.revealLive({ name: 'lab-ops', namespace: 'team-a', ready: true, phase: 'Ready' });
+    expect(recorded.revealed).toMatchObject([{ view: 'crewforge.crews', node: { kind: 'crew', crew: { name: 'lab-ops' } }, options: { select: true, expand: true } }]);
+    await commands.revealLive({ name: 'lab-ops', namespace: 'elsewhere', ready: true, phase: 'Ready' });
+    expect(recorded.info.at(-1)).toContain('does not list elsewhere');
+  });
+
+  it('asks the last question again from the newest saved conversation, or says there is none', async () => {
+    const store = new ConversationStore(path.join(storage, 'c'));
+    const commands = new Commands(Uri.file('/ext') as never, tree(), view() as never, store);
+    const crew = { name: 'lab-ops', namespace: 'team-a', ready: true, phase: 'Ready' };
+    await commands.reaskLast(crew);
+    expect(recorded.info.at(-1)).toBe('There is no earlier question for lab-ops to ask again. Ask it one in the chat.');
+    for (const p of recorded.panels) p.dispose();
+    const saved = newConversation('fake', 'team-a', 'lab-ops');
+    saved.messages.push({ role: 'user', content: 'Which nodes have a GPU?', timestamp: saved.startedAt });
+    await store.save(saved);
+    await commands.reaskLast(crew);
+    expect(api.posts.map((p) => JSON.parse(p.body).message)).toContain('Which nodes have a GPU?');
+    await commands.reaskLast(crew);
+    expect(recorded.panels.filter((p) => p.title === 'Ask lab-ops')).toHaveLength(2);
   });
 });

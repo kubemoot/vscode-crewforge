@@ -19,6 +19,19 @@ beforeEach(() => {
 });
 
 describe('CrewTreeProvider', () => {
+  it('finds a crew again for revealing it, with its namespace as parent and stable ids', async () => {
+    const tree = onCluster(seedCrew(new FakeCluster()));
+    const found = await tree.nodeFor('team-a', 'lab-ops');
+    expect(found).toMatchObject({ kind: 'crew', crew: { name: 'lab-ops' } });
+    expect(tree.getTreeItem(found!)).toMatchObject({ id: 'crew:team-a/lab-ops' });
+    const parent = tree.getParent(found!);
+    expect(parent).toMatchObject({ kind: 'namespace', group: { namespace: 'team-a' } });
+    expect(tree.getTreeItem(parent!)).toMatchObject({ id: 'namespace:team-a' });
+    expect(tree.getParent(parent!)).toBeUndefined();
+    expect(tree.getParent({ kind: 'crew', crew: { name: 'x', namespace: 'gone', ready: true, phase: 'Ready' } })).toBeUndefined();
+    expect(await tree.nodeFor('team-z', 'lab-ops')).toBeUndefined();
+  });
+
   it('lists namespaces, then the crews in each, with their readiness', async () => {
     const tree = new CrewTreeProvider();
     const roots = await tree.getChildren();

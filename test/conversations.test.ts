@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { newConversation, questionFor, titleFrom, type ChatMessage } from '../src/store/conversation';
+import { agentsOf, newConversation, questionFor, titleFrom, type ChatMessage } from '../src/store/conversation';
 import { ConversationStore, safeSegment } from '../src/store/conversations';
 
 const store = () => new ConversationStore(fs.mkdtempSync(path.join(os.tmpdir(), 'crewforge-store-')));
@@ -102,5 +102,18 @@ describe('questionFor', () => {
     expect(questionFor(messages, -1)).toBeUndefined();
     expect(questionFor([], 3)).toBeUndefined();
     expect(questionFor(messages, 99)).toBe('second?');
+  });
+});
+
+describe('agentsOf', () => {
+  it('keeps only well-formed agent notes from a saved file', () => {
+    const m = { role: 'assistant', content: 'a', timestamp: 't' } as ChatMessage;
+    expect(agentsOf(m)).toEqual([]);
+    expect(agentsOf({ ...m, agents: 'nope' as never })).toEqual([]);
+    const agents = [{ agent: 'a', text: 'agrees', problem: true }, { agent: 'b', text: 'x', problem: 'yes' }, { agent: 3, text: 'y' }, null, { agent: 'c' }] as never;
+    expect(agentsOf({ ...m, agents })).toEqual([
+      { agent: 'a', text: 'agrees', problem: true },
+      { agent: 'b', text: 'x', problem: false },
+    ]);
   });
 });

@@ -22,7 +22,53 @@ export class EventEmitter<T> {
 export const ProgressLocation = { Notification: 15 } as const;
 
 export const TreeItemCollapsibleState = { None: 0, Collapsed: 1, Expanded: 2 } as const;
-export const ViewColumn = { Active: -1 } as const;
+export const ViewColumn = { Active: -1, Beside: -2 } as const;
+export const StatusBarAlignment = { Left: 1, Right: 2 } as const;
+export const DiagnosticSeverity = { Error: 0, Warning: 1, Information: 2, Hint: 3 } as const;
+
+export class Diagnostic {
+  source?: string;
+  constructor(
+    public range: Range,
+    public message: string,
+    public severity: number,
+  ) {}
+}
+
+/** A diagnostic collection that keeps what was set, by URI text. */
+export class FakeDiagnostics {
+  entries = new Map<string, Diagnostic[]>();
+  constructor(public name: string) {}
+  set(uri: Uri, diagnostics: Diagnostic[]): void {
+    this.entries.set(uri.toString(), diagnostics);
+  }
+  delete(uri: Uri): void {
+    this.entries.delete(uri.toString());
+  }
+  dispose(): void {
+    this.entries.clear();
+  }
+}
+
+export class FakeStatusBarItem {
+  text = '';
+  tooltip?: string;
+  command?: { command: string; title: string; arguments?: unknown[] };
+  visible = false;
+  constructor(
+    public alignment: number,
+    public priority: number,
+  ) {}
+  show(): void {
+    this.visible = true;
+  }
+  hide(): void {
+    this.visible = false;
+  }
+  dispose(): void {
+    this.visible = false;
+  }
+}
 export const ConfigurationTarget = { Global: 1 } as const;
 
 export class TreeItem {
@@ -54,6 +100,11 @@ export class CodeLens {
 }
 
 export const languages = {
+  createDiagnosticCollection(name: string) {
+    const collection = new FakeDiagnostics(name);
+    recorded.diagnostics.push(collection);
+    return collection;
+  },
   registerCodeLensProvider(_selector: unknown, provider: unknown) {
     recorded.codeLensProviders.push(provider);
     return { dispose: () => undefined };
@@ -79,12 +130,13 @@ export class Uri {
   private constructor(
     public fsPath: string,
     private text: string,
+    public scheme = 'file',
   ) {}
   static file(p: string): Uri {
     return new Uri(p, `file://${p}`);
   }
   static parse(s: string): Uri {
-    return new Uri(s, s);
+    return new Uri(s, s, /^([a-z][\w+.-]*):/i.exec(s)?.[1] ?? 'file');
   }
   static joinPath(base: Uri, ...parts: string[]): Uri {
     const p = [base.fsPath, ...parts].join('/');
@@ -126,6 +178,18 @@ export const recorded = {
   textDocuments: [] as { uri: Uri; getText(): string }[],
   cancel: undefined as (() => void) | undefined,
   documentProviders: new Map<string, { provideTextDocumentContent(uri: Uri): string }>(),
+  /** Answers for information messages with actions, in order; undefined dismisses. */
+  infoAnswers: [] as (string | undefined)[],
+  /** Options each showTextDocument call got, in order. */
+  shownOptions: [] as unknown[],
+  diagnostics: [] as FakeDiagnostics[],
+  statusBarItems: [] as FakeStatusBarItem[],
+  editorListeners: [] as Listener<unknown>[],
+  saveListeners: [] as Listener<{ uri: Uri }>[],
+  /** Nodes revealed in tree views, with the view's id. */
+  revealed: [] as { view: string; node: unknown; options?: unknown }[],
+  /** Values stored in the fake workspace state. */
+  workspaceState: new Map<string, unknown>(),
   /** The editor window.activeTextEditor answers with. */
   activeEditor: undefined as { document: { uri: Uri; languageId: string; getText(range?: unknown): string }; selection: unknown } | undefined,
 };
@@ -159,7 +223,27 @@ export function resetFake(): void {
   recorded.textDocuments = [];
   recorded.cancel = undefined;
   recorded.activeEditor = undefined;
+  recorded.infoAnswers = [];
+  recorded.shownOptions = [];
+  recorded.diagnostics = [];
+  recorded.statusBarItems = [];
+  recorded.editorListeners = [];
+  recorded.saveListeners = [];
+  recorded.revealed = [];
+  recorded.workspaceState.clear();
 }
+
+/** A Memento over recorded.workspaceState, for an ExtensionContext's workspaceState. */
+export const workspaceState = {
+  get<T>(key: string, fallback?: T): T | undefined {
+    return recorded.workspaceState.has(key) ? (recorded.workspaceState.get(key) as T) : fallback;
+  },
+  update(key: string, value: unknown): Promise<void> {
+    recorded.workspaceState.set(key, value);
+    return Promise.resolve();
+  },
+  keys: () => [...recorded.workspaceState.keys()],
+};
 
 export class FakeWebview {
   html = '';
@@ -213,10 +297,23 @@ export class FakeTreeView {
     public id: string,
     public options: { treeDataProvider: unknown },
   ) {}
+  reveal(node: unknown, options?: unknown): Promise<void> {
+    recorded.revealed.push({ view: this.id, node, options });
+    return Promise.resolve();
+  }
   dispose(): void {}
 }
 
 export const window = {
+  createStatusBarItem(alignment: number, priority: number) {
+    const item = new FakeStatusBarItem(alignment, priority);
+    recorded.statusBarItems.push(item);
+    return item;
+  },
+  onDidChangeActiveTextEditor(listener: Listener<unknown>) {
+    recorded.editorListeners.push(listener);
+    return { dispose() {} };
+  },
   get activeTextEditor() {
     return recorded.activeEditor;
   },
@@ -230,9 +327,9 @@ export const window = {
     recorded.treeViews.push(view);
     return view;
   },
-  showInformationMessage(message: string) {
+  showInformationMessage(message: string, ...actions: unknown[]) {
     recorded.info.push(message);
-    return Promise.resolve(undefined);
+    return Promise.resolve(actions.length && typeof actions[0] === 'string' ? recorded.infoAnswers.shift() : undefined);
   },
   showErrorMessage(message: string, options?: { modal?: boolean }) {
     recorded.errors.push(message);
@@ -264,7 +361,8 @@ export const window = {
       dispose: () => undefined,
     };
   },
-  showTextDocument(target: Uri | { content: string } | { uri: Uri; languageId: string }) {
+  showTextDocument(target: Uri | { content: string } | { uri: Uri; languageId: string }, options?: unknown) {
+    recorded.shownOptions.push(options);
     if ('uri' in target) {
       recorded.shownDocuments.push(`${target.uri.toString()} (${target.languageId})`);
       return Promise.resolve(undefined);
@@ -321,6 +419,10 @@ export const workspace = {
   registerTextDocumentContentProvider(scheme: string, provider: { provideTextDocumentContent(uri: Uri): string }) {
     recorded.documentProviders.set(scheme, provider);
     return { dispose: () => recorded.documentProviders.delete(scheme) };
+  },
+  onDidSaveTextDocument(listener: Listener<{ uri: Uri }>) {
+    recorded.saveListeners.push(listener);
+    return { dispose() {} };
   },
   onDidChangeConfiguration(listener: Listener<{ affectsConfiguration: (s: string) => boolean }>) {
     recorded.configListeners.push(listener);

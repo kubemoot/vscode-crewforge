@@ -2,7 +2,7 @@ import { marked } from 'marked';
 import { cardText } from '../discussion/cardText';
 import { turnStatus } from '../discussion/turnStatus';
 import type { AgentCard, TurnState } from '../discussion/reducer';
-import { problemsOf, type ChatMessage, type ConversationMeta } from '../store/conversation';
+import { agentsOf, problemsOf, type AgentNote, type ChatMessage, type ConversationMeta } from '../store/conversation';
 import type { HostMessage, StateMessage, WebviewMessage } from './protocol';
 import { escapeHtml, formatAgo, htmlAttribute, icons, isWebLink, metaLine } from './render';
 
@@ -97,6 +97,11 @@ narrow?.addEventListener('change', (e) => {
   if (e.matches) els.sidebar.classList.add('hidden');
 });
 els.messages.addEventListener('click', (e) => {
+  const agent = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-agent]');
+  if (agent?.dataset.agent) {
+    vscode.postMessage({ type: 'openAgentSource', agent: agent.dataset.agent });
+    return;
+  }
   const button = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-action]');
   if (!button || button.disabled) return;
   const run = MESSAGE_ACTIONS[button.dataset.action as MessageActionId] as ((index: number) => void) | undefined;
@@ -196,7 +201,7 @@ function emptyState(crew: string, about: string): string {
     <p>Ask a question and its agents will discuss it.</p>${list}</div>`;
 }
 
-type MessageActionId = 'copy' | 'reask' | 'edit';
+type MessageActionId = 'copy' | 'reask' | 'edit' | 'dashboard';
 
 /** One button under a message: what it does, its tooltip, and its icon. */
 interface MessageAction {
@@ -212,7 +217,16 @@ const MESSAGE_ACTIONS: Record<MessageActionId, (index: number) => void> = {
   copy: (index) => vscode.postMessage({ type: 'copyMessage', index }),
   reask: (index) => vscode.postMessage({ type: 'reask', index }),
   edit: editMessage,
+  dashboard: (index) => vscode.postMessage({ type: 'openTurnInDashboard', index }),
 };
+
+/** Opens the turn a message ends in the Kubemoot dashboard; offered when a dashboard URL is set and the turn's thread is known. */
+const DASHBOARD_ACTION: MessageAction = { action: 'dashboard', label: 'Open this turn in the Kubemoot dashboard', icon: icons.dashboard };
+
+/** The message's buttons: its role's, and Open in Dashboard for a turn the dashboard can show. */
+function actionsFor(base: MessageAction[], m: ChatMessage): MessageAction[] {
+  return state?.links?.dashboard && typeof m.threadId === 'string' && m.threadId ? [...base, DASHBOARD_ACTION] : base;
+}
 
 /** How a question and a crew answer are shown: their class, avatar, body, and buttons. */
 const ROLES = {
@@ -257,13 +271,17 @@ function editMessage(index: number): void {
 
 function renderMessage(m: ChatMessage, index: number, busy: boolean): string {
   const meta = `<span class="message-time"${htmlAttribute('title', m.timestamp)}>${escapeHtml(metaLine(m.timestamp, m.durationMs))}</span>`;
-  if (m.role === 'system') return `<div class="notice" role="status"><div class="notice-text">${escapeHtml(m.content)}</div>${problemList(m)}<div class="message-meta">${meta}</div></div>`;
+  if (m.role === 'system') {
+    const actions = actionsFor([], m);
+    const row = actions.length ? actionRow(actions, index, busy) : '';
+    return `<div class="notice" role="status"><div class="notice-text">${escapeHtml(m.content)}</div>${problemList(m)}${turnAgents(m)}<div class="message-meta">${meta}${row}</div></div>`;
+  }
   const role = ROLES[m.role];
-  return `<div class="message ${role.cls}">${role.body(m)}${problemList(m)}
+  return `<div class="message ${role.cls}">${role.body(m)}${problemList(m)}${turnAgents(m)}
     <div class="message-meta">
       <span class="message-avatar" aria-hidden="true">${role.icon}</span>
       ${meta}
-      ${actionRow(role.actions, index, busy)}
+      ${actionRow(actionsFor(role.actions, m), index, busy)}
     </div></div>`;
 }
 
@@ -273,6 +291,26 @@ function problemList(m: ChatMessage): string {
   if (problems.length === 0) return '';
   const items = problems.map((p) => `<li>${escapeHtml(p)}</li>`).join('');
   return `<div class="turn-problems" role="note" aria-label="What went wrong in this turn"><ul>${items}</ul></div>`;
+}
+
+/** The agents that took part in the turn a message ends, folded away under a count. */
+function turnAgents(m: ChatMessage): string {
+  const agents = agentsOf(m);
+  if (agents.length === 0) return '';
+  const cards = agents.map((a) => noteCard(a)).join('');
+  const count = agents.length === 1 ? '1 agent took part' : `${agents.length} agents took part`;
+  return `<details class="turn-agents"><summary>${count}</summary><div class="findings-feed">${cards}</div></details>`;
+}
+
+function noteCard(a: AgentNote): string {
+  return `<div class="finding-card${a.problem ? ' finding-problem' : ''}">${agentLabel(a.agent)}<span class="finding-summary">${escapeHtml(a.text)}</span></div>`;
+}
+
+/** An agent's name on its card: a link to its source when the crew's source is open in the workspace. */
+function agentLabel(agent: string): string {
+  if (!state?.links?.agents.includes(agent)) return `<span class="finding-agent">${escapeHtml(agent)}</span>`;
+  const title = `Open where ${agent} is defined: the Agent and its PromptModules`;
+  return `<button type="button" class="finding-agent"${htmlAttribute('data-agent', agent)}${htmlAttribute('title', title)}>${escapeHtml(agent)}</button>`;
 }
 
 /** The buttons under a message; ones that ask are disabled while a turn runs. */
@@ -305,7 +343,7 @@ function renderTurn(turn: TurnState): string {
     .map((card) => {
       const { text, working, problem } = cardText(card);
       const cls = cardClass(card, problem);
-      return `<div class="finding-card${cls}"><span class="finding-agent">${escapeHtml(card.agent)}</span>
+      return `<div class="finding-card${cls}">${agentLabel(card.agent)}
         <span class="${working ? 'finding-status' : 'finding-summary'}">${escapeHtml(text)}</span>${working ? '<div class="finding-spinner"></div>' : ''}</div>`;
     })
     .join('');

@@ -1,0 +1,470 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { KubeClient } from '../src/k8s/request';
+import type { CrewSummary } from '../src/k8s/crews';
+import { DevLoop, nextActions, type DevLoopDeps } from '../src/loop/devLoop';
+import { readiness, waitUntilReady } from '../src/loop/ready';
+import { devDeployment, LoopMemory, LoopStates, stateFrom, stateText, type CrewState } from '../src/loop/state';
+import { CrewStatusBar } from '../src/loop/statusBar';
+import { ANNOTATIONS, type Deployment } from '../src/source/deployments';
+import type { ResourceDrift } from '../src/source/drift';
+import type { Exec } from '../src/source/render';
+import type { SourceEntry } from '../src/source/service';
+import type { DeploymentNode, SourceNode } from '../src/views/sourceTree';
+import { FakeCluster, obj } from './fakeCluster';
+import { recorded, resetFake, Uri, workspaceState } from './vscodeFake';
+
+const ROOT = '/w/demo';
+const entry: SourceEntry = { source: { kind: 'helm', root: ROOT, label: 'demo' }, identity: { id: 'local:demo' }, crewName: 'demo' };
+const crew = (over: Partial<CrewSummary> = {}): CrewSummary => ({ name: 'demo', namespace: 'crew-demo', ready: true, phase: 'Ready', ...over });
+const agent = (name: string, ready: boolean, phase?: string) => ({ name, ready, phase, capabilities: [], promptRefs: [], object: obj('Agent', name, 'ns') });
+const node = (namespace: string, drift: ResourceDrift[] = [], extra: Partial<Deployment> = {}): DeploymentNode => ({
+  kind: 'deployment',
+  entry,
+  deployment: { namespace, crew: crew({ namespace }), channel: 'helm', linked: true, ...extra },
+  drift,
+});
+const changed: ResourceDrift = { kind: 'Agent', name: 'a', state: 'changed', paths: ['spec.x'] };
+
+describe('readiness', () => {
+  it('waits for the Crew, then for the operator to see the deploy, then for every agent', () => {
+    expect(readiness({ agents: [] })).toEqual({ state: 'waiting', message: 'Waiting for the Crew to appear' });
+    const stamped = { annotations: { [ANNOTATIONS.deployedAt]: 'T2' }, revisions: [{ deployedAt: 'T1' }] };
+    expect(readiness({ crew: crew(stamped), agents: [] }).message).toBe('Waiting for the operator to see this deploy');
+    const seen = { annotations: { [ANNOTATIONS.deployedAt]: 'T2' }, revisions: [{ deployedAt: 'T2' }], agents: 2 };
+    expect(readiness({ crew: crew(seen), agents: [agent('a', true), agent('b', false, 'Pending')] })).toEqual({ state: 'waiting', message: 'Crew ready; 1 of 2 agents ready (b: Pending)' });
+    expect(readiness({ crew: crew({ ...seen, agents: 3 }), agents: [agent('a', true), agent('b', true)] }).message).toBe('Crew ready; 2 of 3 agents ready');
+    expect(readiness({ crew: crew({ ready: false, phase: 'Pending' }), agents: [agent('a', false)] }).message).toBe('Crew Pending; 0 of 1 agents ready (a: starting)');
+    expect(readiness({ crew: crew({ ...seen, revisions: [] }), agents: [] }).state).toBe('waiting');
+    expect(readiness({ crew: crew(seen), agents: [agent('a', true), agent('b', true)] }).state).toBe('ready');
+    expect(readiness({ crew: crew({ annotations: { [ANNOTATIONS.deployedAt]: 'T' } }), agents: [agent('a', true)] }).state).toBe('ready');
+  });
+
+  it('ends the wait when the Crew or an agent failed', () => {
+    expect(readiness({ crew: crew({ phase: 'Failed', message: 'no models' }), agents: [] })).toEqual({ state: 'failed', message: 'Crew demo is Failed: no models' });
+    expect(readiness({ crew: crew({ phase: 'Error' }), agents: [] }).message).toBe('Crew demo is Error');
+    expect(readiness({ crew: crew(), agents: [agent('a', false, 'Error')] }).message).toBe('Agent a is Error');
+  });
+});
+
+describe('waitUntilReady', () => {
+  const noSleep = async () => undefined;
+
+  it('reads until ready, reporting each step', async () => {
+    const reads = [{ agents: [] }, { crew: crew(), agents: [agent('a', true)] }];
+    const reports: string[] = [];
+    const out = await waitUntilReady({ read: async () => reads.shift()!, sleep: noSleep, report: (m) => reports.push(m) }, new AbortController().signal);
+    expect(out).toEqual({ outcome: 'ready', message: 'Crew ready; 1 of 1 agents ready' });
+    expect(reports).toEqual(['Waiting for the Crew to appear', 'Crew ready; 1 of 1 agents ready']);
+  });
+
+  it('stops when asked, and gives up at the safety limit', async () => {
+    const stop = new AbortController();
+    const stopped = await waitUntilReady({ read: async () => ({ agents: [] }), sleep: async () => stop.abort(), report: () => undefined }, stop.signal);
+    expect(stopped).toEqual({ outcome: 'stopped', message: 'Waiting for the Crew to appear' });
+    let t = 0;
+    const out = await waitUntilReady({ read: async () => ({ agents: [] }), sleep: noSleep, report: () => undefined, now: () => (t += 1000) }, new AbortController().signal, 1, 2500);
+    expect(out.outcome).toBe('gave-up');
+    const failed = await waitUntilReady({ read: async () => ({ crew: crew({ phase: 'Failed' }), agents: [] }), sleep: noSleep, report: () => undefined }, new AbortController().signal);
+    expect(failed.outcome).toBe('failed');
+  });
+});
+
+describe('loop state', () => {
+  it('picks the dev deployment: the dev namespace, else a linked one, else the first', () => {
+    const a = node('a', [], { linked: false });
+    const b = node('b');
+    expect(devDeployment([a, b], 'a')).toBe(a);
+    expect(devDeployment([a, b], 'zz')).toBe(b);
+    expect(devDeployment([a], undefined)).toBe(a);
+    expect(devDeployment([], 'a')).toBeUndefined();
+  });
+
+  it('tells in sync, changed, not deployed, and unknown apart', () => {
+    expect(stateFrom([node('ns')]).kind).toBe('in-sync');
+    expect(stateFrom([node('ns', [changed])]).kind).toBe('changed');
+    expect(stateFrom([{ ...node('ns'), error: 'no discovery' }])).toEqual({ kind: 'unknown', reason: 'no discovery' });
+    expect(stateFrom([{ kind: 'message', text: 'Not deployed in lab', icon: 'circle-slash' }])).toEqual({ kind: 'not-deployed' });
+    expect(stateFrom([{ kind: 'message', text: 'Forbidden', detail: 'Forbidden: crews' }])).toEqual({ kind: 'unknown', reason: 'Forbidden: crews' });
+    expect(stateFrom([{ kind: 'message', text: 'Forbidden' }])).toEqual({ kind: 'unknown', reason: 'Forbidden' });
+    expect(stateFrom([])).toEqual({ kind: 'not-deployed' });
+    expect(stateText(stateFrom([node('crew-demo', [changed])]))).toBe('changed since deploy (crew-demo)');
+    expect(stateText({ kind: 'not-deployed' })).toBe('not deployed');
+  });
+
+  it('fires only when the state reads differently, and marks a deployed source changed on save', () => {
+    const states = new LoopStates();
+    const fired: string[] = [];
+    states.onDidChange((root) => fired.push(root));
+    states.set(ROOT, { kind: 'not-deployed' });
+    states.set(ROOT, { kind: 'not-deployed' });
+    states.markChanged(ROOT);
+    expect(states.get(ROOT)?.kind).toBe('not-deployed');
+    states.set(ROOT, { kind: 'in-sync', deployment: node('ns') });
+    states.markChanged(ROOT);
+    expect(states.get(ROOT)?.kind).toBe('changed');
+    states.markChanged('/other');
+    expect(fired).toEqual([ROOT, ROOT, ROOT]);
+  });
+
+  it('remembers the dev namespace and the last fitness per source', async () => {
+    resetFake();
+    const memory = new LoopMemory(workspaceState as never);
+    expect(memory.devNamespace(ROOT)).toBeUndefined();
+    await memory.setDevNamespace(ROOT, 'crew-demo');
+    await memory.setLastFitness(ROOT, 'demo-starter');
+    expect([memory.devNamespace(ROOT), memory.lastFitness(ROOT)]).toEqual(['crew-demo', 'demo-starter']);
+    expect(nextActions({ kind: 'changed', deployment: node('ns') })[0]).toBe('redeploy');
+  });
+});
+
+describe('DevLoop', () => {
+  let cluster: FakeCluster;
+  let states: LoopStates;
+  let memory: LoopMemory;
+  let calls: string[];
+  let lastPreferred: string | undefined;
+  let drift: ResourceDrift[];
+  let onApply: () => void;
+  let onSleep: () => void;
+  let refreshed: number;
+  let saved: (() => void) | undefined;
+  let sleeps: number;
+
+  const exec: Exec = async () => ({ code: 128, stdout: '', stderr: '' });
+
+  /** The deployments Crew Sources would load: the Crew in the cluster, or none. */
+  const loadDeployments = async (): Promise<SourceNode[]> => {
+    const found = cluster.objects.filter((o) => o.kind === 'Crew' && o.metadata.name === 'demo');
+    if (found.length === 0) return [{ kind: 'message', text: 'Not deployed in lab', icon: 'circle-slash' }];
+    return found.map((o) => node(o.metadata.namespace!, drift));
+  };
+
+  function liveCrew(namespace = 'crew-demo', status: Record<string, unknown> = { ready: true, phase: 'Ready', agentCount: 1 }, annotations: Record<string, string> = {}) {
+    const c = obj('Crew', 'demo', namespace, {}, { 'app.kubernetes.io/managed-by': 'Helm' });
+    c.metadata.annotations = annotations;
+    c.status = status;
+    const a = obj('Agent', 'demo-coordinator', namespace, {}, { 'kubemoot.ai/crew': 'demo' });
+    a.status = { ready: true, phase: 'Running' };
+    cluster.add(c, a);
+    return c;
+  }
+
+  function loop(over: Partial<DevLoopDeps> = {}): DevLoop {
+    return new DevLoop({
+      sources: { entries: async () => [entry], known: [entry], loadDeployments, refresh: () => void refreshed++ },
+      service: { kinds: async () => new Map([['Agent', { kind: 'Agent', plural: 'agents', namespaced: true }]]) },
+      deploy: {
+        apply: async (_c, request) => {
+          calls.push(`apply ${request.namespace} ${request.channel} ${request.release ?? ''}`);
+          onApply();
+        },
+      },
+      fitness: {
+        runFitness: async (n, preferred) => {
+          calls.push(`fitness ${(n as DeploymentNode).deployment.namespace}`);
+          lastPreferred = preferred;
+          return 'demo-starter';
+        },
+      },
+      linter: {
+        lintCommand: async (e) => void calls.push(`lint ${e.source.label}`),
+        lintOnSave: (e, after) => {
+          calls.push(`lintOnSave ${e.source.label}`);
+          saved = () => after?.();
+        },
+      },
+      memory,
+      states,
+      chat: { ask: async (c) => void calls.push(`ask ${c.namespace}`), reaskLast: async (c) => void calls.push(`reask ${c.namespace}`) },
+      revealLive: async (c) => void calls.push(`reveal ${c.namespace}`),
+      exec,
+      connectTo: () => ({ source: '/k', context: 'lab', client: cluster as unknown as KubeClient }),
+      sleep: async () => {
+        if (++sleeps > 50) throw new Error('the wait did not settle');
+        onSleep();
+      },
+      ...over,
+    });
+  }
+
+  const tick = () => new Promise((r) => setTimeout(r, 0));
+  const source: SourceNode = { kind: 'source', entry };
+
+  beforeEach(() => {
+    resetFake();
+    cluster = new FakeCluster();
+    states = new LoopStates();
+    memory = new LoopMemory(workspaceState as never);
+    calls = [];
+    drift = [];
+    refreshed = 0;
+    saved = undefined;
+    lastPreferred = undefined;
+    onApply = () => liveCrew();
+    onSleep = () => undefined;
+    sleeps = 0;
+  });
+
+  it('deploys to crew-<name> after asking once, waits for ready, reveals the crew, and offers Ask', async () => {
+    recorded.inputs.push('crew-demo');
+    recorded.infoAnswers.push('Ask');
+    await loop().deployDev(source);
+    expect(calls.slice(0, 2)).toEqual(['apply crew-demo helm ', 'reveal crew-demo']);
+    expect(memory.devNamespace(ROOT)).toBe('crew-demo');
+    expect(recorded.info).toEqual(['demo in crew-demo is ready.']);
+    expect(recorded.progress.at(-1)).toBe('Crew ready; 1 of 1 agents ready');
+    expect(states.get(ROOT)?.kind).toBe('in-sync');
+    await tick();
+    expect(calls.at(-1)).toBe('ask crew-demo');
+  });
+
+  it('redeploys without a question, then offers to ask again and rerun the last fitness', async () => {
+    await memory.setDevNamespace(ROOT, 'crew-demo');
+    await memory.setLastFitness(ROOT, 'demo-starter');
+    cluster.namespaces.add('crew-demo');
+    const live = liveCrew('crew-demo', { ready: true, phase: 'Ready', agentCount: 1, revisions: [{ deployedAt: 'T1' }] }, { [ANNOTATIONS.deployedAt]: 'T1', [ANNOTATIONS.source]: 'local:demo', 'meta.helm.sh/release-name': 'demo' });
+    onApply = () => {
+      live.metadata.annotations = { ...live.metadata.annotations, [ANNOTATIONS.deployedAt]: 'T2' };
+    };
+    onSleep = () => {
+      (live.status as { revisions: unknown[] }).revisions = [{ deployedAt: 'T2' }];
+    };
+    recorded.infoAnswers.push('Re-ask last question');
+    const l = loop();
+    await l.deployDev(source);
+    expect(recorded.inputs).toEqual([]);
+    expect(recorded.progress).toContain('Waiting for the operator to see this deploy');
+    expect(recorded.info).toEqual(['demo in crew-demo is redeployed and ready.']);
+    await tick();
+    expect(calls).toEqual(['apply crew-demo helm demo', 'reveal crew-demo', 'reask crew-demo']);
+    recorded.infoAnswers.push('Rerun fitness');
+    await l.deployDev(source);
+    await tick();
+    expect(calls.at(-1)).toBe('fitness crew-demo');
+    expect(lastPreferred).toBe('demo-starter');
+    recorded.infoAnswers.push(undefined);
+    await l.deployDev(source);
+    await tick();
+    expect(calls.at(-1)).toBe('reveal crew-demo');
+  });
+
+  it('says when the crew does not come up, when the wait is stopped, and when it is still not ready', async () => {
+    await memory.setDevNamespace(ROOT, 'crew-demo');
+    onApply = () => liveCrew('crew-demo', { ready: false, phase: 'Failed', message: 'no Models' });
+    await loop().deployDev(source);
+    expect(recorded.errors).toEqual(['demo in crew-demo did not come up: Crew demo is Failed: no Models. See its agents in the Crews view.']);
+    cluster = new FakeCluster();
+    onApply = () => liveCrew('crew-demo', { ready: false, phase: 'Pending' });
+    onSleep = () => recorded.cancel?.();
+    await loop().deployDev(source);
+    expect(recorded.info.at(-1)).toBe('Stopped waiting. demo in crew-demo keeps deploying; the Crews view shows its state.');
+    expect(calls.filter((c) => c.startsWith('reveal'))).toEqual([]);
+  });
+
+  it('reports a gave-up wait as a warning', async () => {
+    await memory.setDevNamespace(ROOT, 'crew-demo');
+    onApply = () => liveCrew('crew-demo', { ready: false, phase: 'Pending' });
+    const clock = vi.spyOn(Date, 'now');
+    let t = 0;
+    clock.mockImplementation(() => (t += 10 * 60_000));
+    try {
+      await loop().deployDev(source);
+    } finally {
+      clock.mockRestore();
+    }
+    expect(recorded.warnings.at(-1)).toMatch(/^demo in crew-demo is not ready yet: Crew Pending/);
+  });
+
+  it('refuses a namespace another channel owns, and asks before replacing a crew from another source', async () => {
+    await memory.setDevNamespace(ROOT, 'crew-demo');
+    cluster.namespaces.add('crew-demo');
+    const flux = obj('Crew', 'demo', 'crew-demo', {}, { 'helm.toolkit.fluxcd.io/name': 'demo' });
+    cluster.add(flux);
+    await loop().deployDev(source);
+    expect(recorded.info[0]).toMatch(/^demo cannot go to crew-demo with one click: Flux manages demo in crew-demo/);
+    cluster.objects = [];
+    const other = obj('Crew', 'demo', 'crew-demo', {}, { 'app.kubernetes.io/managed-by': 'Helm' });
+    other.metadata.annotations = { [ANNOTATIONS.source]: 'github.com/else//demo' };
+    cluster.add(other);
+    await loop().deployDev(source);
+    expect(recorded.warnings[0]).toContain('came from github.com/else//demo');
+    expect(calls).toEqual([]);
+  });
+
+  it('stops when the namespace question is cancelled, and says why a source without a Crew cannot deploy', async () => {
+    recorded.inputs.push(undefined);
+    await loop().deployDev(source);
+    await loop().deployDev({ kind: 'source', entry: { ...entry, crewName: undefined, error: 'helm template failed' } });
+    expect(recorded.errors).toEqual(['CrewForge: demo cannot be deployed: helm template failed.']);
+    await loop().deployDev({ kind: 'source', entry: { ...entry, crewName: undefined } });
+    expect(recorded.errors[1]).toContain('it renders no Crew');
+    expect(calls).toEqual([]);
+  });
+
+  it('finds the source of a file, of the active editor, or the one picked', async () => {
+    const l = loop();
+    expect(await l.entryFor(Uri.file(`${ROOT}/templates/crew.yaml`) as never)).toBe(entry);
+    recorded.activeEditor = { document: { uri: Uri.file(`${ROOT}/values.yaml`), languageId: 'yaml', getText: () => '' }, selection: undefined };
+    expect(await l.entryFor()).toBe(entry);
+    recorded.activeEditor = undefined;
+    recorded.quickPicks.push((items: { entry: SourceEntry; description: string }[]) => items[0]);
+    expect(await l.entryFor()).toBe(entry);
+    recorded.quickPicks.push(undefined);
+    expect(await l.entryFor(Uri.file('/elsewhere/x.yaml') as never)).toBeUndefined();
+    const bare = loop({ sources: { entries: async () => [{ ...entry, crewName: undefined }], known: [], loadDeployments, refresh: () => undefined } });
+    let offered: { description: string }[] = [];
+    recorded.quickPicks.push((items: typeof offered) => ((offered = items), undefined));
+    await bare.entryFor();
+    expect(offered[0].description).toBe('helm');
+  });
+
+  it('asks and runs fitness against the dev deployment, and says when there is none', async () => {
+    liveCrew('crew-demo');
+    const l = loop();
+    await l.ask(source);
+    await l.runFitness(source);
+    expect(calls).toEqual(['ask crew-demo', 'fitness crew-demo']);
+    expect(lastPreferred).toBeUndefined();
+    expect(memory.lastFitness(ROOT)).toBe('demo-starter');
+    cluster.objects = [];
+    recorded.infoAnswers.push('Deploy (dev)');
+    recorded.inputs.push(undefined);
+    await l.ask(source);
+    expect(recorded.info[0]).toBe('demo is not deployed in lab. Deploy it to a dev namespace first.');
+    await tick();
+    const blind = loop({ sources: { entries: async () => [entry], known: [entry], loadDeployments: async () => [{ kind: 'message', text: 'Forbidden' }], refresh: () => undefined } });
+    await blind.runFitness(source);
+    expect(recorded.errors).toEqual(['CrewForge cannot tell where demo is deployed: Forbidden']);
+    recorded.quickPicks.push(undefined);
+    await loop({ sources: { entries: async () => [], known: [], loadDeployments, refresh: () => undefined } }).runFitness();
+    expect(calls).toHaveLength(2);
+  });
+
+  it('keeps the last fitness only when one started', async () => {
+    liveCrew('crew-demo');
+    await loop({ fitness: { runFitness: async () => undefined } }).runFitness(source, true);
+    expect(memory.lastFitness(ROOT)).toBeUndefined();
+  });
+
+  it('offers the next steps for the state, and runs the one picked', async () => {
+    const l = loop();
+    const pick = (label: string) => (items: { label: string }[]) => items.find((i) => i.label.includes(label));
+    let offered: string[] = [];
+    recorded.quickPicks.push((items: { label: string }[]) => ((offered = items.map((i) => i.label)), undefined));
+    await l.actions(source);
+    expect(offered.map((o) => o.replace(/^\$\([a-z-]+\) /, ''))).toEqual(['Deploy (dev)', 'Lint Crew', 'Change the dev namespace']);
+    recorded.quickPicks.push(pick('Lint Crew'));
+    await l.actions(source);
+    recorded.quickPicks.push(pick('Change the dev namespace'));
+    recorded.inputs.push('team-demo');
+    await l.actions(source);
+    expect(memory.devNamespace(ROOT)).toBe('team-demo');
+    recorded.quickPicks.push(pick('Change the dev namespace'));
+    recorded.inputs.push(undefined);
+    await l.actions(source);
+    liveCrew('team-demo');
+    await l.refreshState(entry);
+    recorded.quickPicks.push(pick('Show in the Crews view'), pick('Ask'), pick('Run Fitness'));
+    await l.actions(source);
+    await l.actions(source);
+    await l.actions(source);
+    drift = [changed];
+    await l.refreshState(entry);
+    recorded.quickPicks.push(pick('Redeploy'));
+    await l.actions(source);
+    expect(calls).toEqual(['lint demo', 'reveal team-demo', 'ask team-demo', 'fitness team-demo', 'apply team-demo helm ', 'reveal team-demo']);
+    states.set(ROOT, { kind: 'unknown', reason: 'x' });
+    recorded.quickPicks.push(pick('Check the state again'));
+    await l.actions(source);
+    expect(states.get(ROOT)?.kind).toBe('changed');
+    recorded.quickPicks.push(pick('Deploy (dev)'));
+    states.set(ROOT, { kind: 'not-deployed' });
+    await l.actions(source);
+    await l.actions({ kind: 'source', entry: { ...entry, crewName: undefined } });
+    expect(calls.at(-1)).toBe('reveal team-demo');
+  });
+
+  it('shows nothing to reveal for a crew that is not deployed', async () => {
+    const l = loop();
+    const run = (l as unknown as { run: (id: string, e: SourceEntry, s: CrewState) => Promise<void> }).run.bind(l);
+    await run('reveal', entry, { kind: 'not-deployed' });
+    await l.lint(source);
+    expect(calls).toEqual(['lint demo']);
+    recorded.quickPicks.push(undefined);
+    await loop({ sources: { entries: async () => [], known: [], loadDeployments, refresh: () => undefined } }).lint();
+    expect(calls).toHaveLength(1);
+  });
+
+  it('on save of a crew file marks it changed, lints it, then checks its drift', async () => {
+    liveCrew('crew-demo');
+    const l = loop();
+    await l.refreshState(entry);
+    expect(states.get(ROOT)?.kind).toBe('in-sync');
+    l.onSaved(`${ROOT}/templates/agents.yaml`);
+    expect(states.get(ROOT)?.kind).toBe('changed');
+    expect(calls).toEqual(['lintOnSave demo']);
+    saved?.();
+    await tick();
+    expect(refreshed).toBe(1);
+    expect(states.get(ROOT)?.kind).toBe('in-sync');
+    l.onSaved('/elsewhere/x.yaml');
+    expect(calls).toHaveLength(1);
+  });
+
+  it('reports a failure in a follow-up step as an error', async () => {
+    recorded.inputs.push('crew-demo');
+    recorded.infoAnswers.push('Ask');
+    await loop({ chat: { ask: async () => Promise.reject(new Error('no gateway')), reaskLast: async () => undefined } }).deployDev(source);
+    await tick();
+    expect(recorded.errors).toEqual(['CrewForge: no gateway']);
+    recorded.inputs.push('crew-demo');
+    recorded.infoAnswers.push('Ask');
+    cluster = new FakeCluster();
+    await loop({ chat: { ask: async () => Promise.reject('odd'), reaskLast: async () => undefined } }).deployDev(source);
+    await tick();
+    expect(recorded.errors[1]).toBe('CrewForge: odd');
+  });
+
+  it('reads agents only when the cluster serves them', async () => {
+    recorded.inputs.push('crew-demo');
+    onApply = () => liveCrew('crew-demo', { ready: true, phase: 'Ready' });
+    await loop({ service: { kinds: async () => new Map() } }).deployDev(source);
+    expect(recorded.info).toEqual(['demo in crew-demo is ready.']);
+    expect(recorded.progress.at(-1)).toBe('Crew ready');
+    expect(readiness({ crew: crew({ ready: false, phase: 'Pending' }) }).message).toBe('Crew Pending');
+  });
+});
+
+describe('CrewStatusBar', () => {
+  beforeEach(resetFake);
+
+  it('names the crew of the active file and its state, and hides for other files', async () => {
+    const states = new LoopStates();
+    const refreshed: string[] = [];
+    const bar = new CrewStatusBar(() => [entry], states, async (e) => void refreshed.push(e.source.root));
+    const item = recorded.statusBarItems[0];
+    bar.update(`${ROOT}/templates/crew.yaml`);
+    expect(item).toMatchObject({ visible: true, text: '$(organization) demo: checking...' });
+    expect(item.command).toMatchObject({ command: 'crewforge.crewActions', arguments: [{ kind: 'source', entry }] });
+    expect(refreshed).toEqual([ROOT]);
+    states.set(ROOT, { kind: 'changed', deployment: node('crew-demo') });
+    bar.stateChanged(ROOT);
+    expect(item.text).toBe('$(diff) demo: changed since deploy (crew-demo)');
+    expect(item.tooltip).toContain('Click for the next steps.');
+    bar.stateChanged('/other');
+    bar.update(`${ROOT}/values.yaml`);
+    expect(refreshed).toHaveLength(1);
+    bar.update('/elsewhere/x.yaml');
+    expect(item.visible).toBe(false);
+    bar.stateChanged(ROOT);
+    expect(item.visible).toBe(false);
+    bar.update(undefined);
+    const failing = new CrewStatusBar(() => [entry], new LoopStates(), async () => Promise.reject(new Error('x')));
+    failing.update(`${ROOT}/Chart.yaml`);
+    await new Promise((r) => setTimeout(r, 0));
+    bar.dispose();
+    expect(item.visible).toBe(false);
+    new CrewStatusBar(() => [{ ...entry, crewName: undefined }], states, async () => undefined).update(`${ROOT}/Chart.yaml`);
+    expect(recorded.statusBarItems[2].visible).toBe(false);
+  });
+});

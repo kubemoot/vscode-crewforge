@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { createCrewCommand } from '../src/create/createCrew';
+import { createCrewCommand, DEPLOY_NEXT, showCreatedCrew } from '../src/create/createCrew';
+import type { SourceNode } from '../src/views/sourceTree';
 import { atLeast, createArgs, kmctlProblem, parseVersion, scaffoldCrew } from '../src/create/scaffold';
 import type { Exec, ExecOptions } from '../src/source/render';
 import { recorded, resetFake, Uri } from './vscodeFake';
@@ -89,37 +90,80 @@ describe('scaffoldCrew', () => {
 });
 
 describe('createCrewCommand', () => {
-  let refreshed = 0;
-  const run = () => createCrewCommand(exec, { source: '/k/config', context: 'lab' }, () => refreshed++);
+  let created: string[] = [];
+  const run = (folder?: string) => createCrewCommand(exec, { source: '/k/config', context: 'lab' }, async (root) => void created.push(root), folder);
+  const first = (items: { label: string }[]) => items[0];
 
-  it('asks for the name, size, and family, scaffolds, refreshes, and opens the README', async () => {
+  beforeEach(() => (created = []));
+
+  it('asks for the folder, name, size, and family, scaffolds, and hands over the new chart', async () => {
     recorded.workspaceFolders = [{ name: 'crews', uri: Uri.file('/w') }];
     recorded.inputs.push('demo');
-    recorded.quickPicks.push((items: { label: string }[]) => items[1], (items: { label: string }[]) => items[0]);
+    recorded.quickPicks.push(first, (items: { label: string }[]) => items[1], first);
     answer = { code: 0, stdout: '', stderr: 'warning: check models' };
     await run();
     expect(ran[0].args).toEqual(['create', 'demo', '--chart', '--no-input', '--members', '2', '-o', '/w', '--model-family', 'qwen', '--context', 'lab']);
-    expect(refreshed).toBe(1);
+    expect(created).toEqual(['/w/demo']);
     expect(recorded.warnings).toEqual(['warning: check models']);
-    expect(recorded.shownDocuments).toEqual(['/w/demo/README.md']);
   });
 
-  it('picks among several folders, leaves the family out on none, and stops when anything is cancelled', async () => {
+  it('creates in the Explorer folder of New Crew Here without asking for a folder', async () => {
+    recorded.inputs.push('demo');
+    recorded.quickPicks.push(first, first);
+    await run('/w/crews/team');
+    expect(ran[0].args).toContain('/w/crews/team');
+    expect(created).toEqual(['/w/crews/team/demo']);
+  });
+
+  it("offers the active file's folder first, then the workspace folders, then a folder picker", async () => {
     recorded.workspaceFolders = [{ name: 'a', uri: Uri.file('/a') }, { name: 'b', uri: Uri.file('/b') }];
-    recorded.quickPicks.push((items: { label: string }[]) => items[1], (items: { label: string }[]) => items[0], (items: { label: string }[]) => items.find((i) => i.label === 'none'));
+    recorded.activeEditor = { document: { uri: Uri.file('/b/sub/notes.md'), languageId: 'markdown', getText: () => '' }, selection: undefined };
+    let offered: { detail?: string; description?: string; label: string }[] = [];
+    recorded.quickPicks.push((items: typeof offered) => ((offered = items), items[0]), first, first);
     recorded.inputs.push('demo');
     await run();
-    expect(ran[0].args).toEqual(['create', 'demo', '--chart', '--no-input', '--members', '1', '-o', '/b', '--context', 'lab']);
-    expect(recorded.warnings).toEqual([]);
+    expect(offered.map((i) => i.detail)).toEqual(['/b/sub', '/a', '/b', undefined]);
+    expect(offered[0].description).toBe("the active file's folder");
+    expect(offered.at(-1)?.label).toContain('Browse');
+    expect(created).toEqual(['/b/sub/demo']);
+    recorded.openDialog = [Uri.file('/elsewhere')];
+    recorded.quickPicks.push((items: typeof offered) => items.at(-1), first, first);
+    recorded.inputs.push('demo');
+    await run();
+    expect(created.at(-1)).toBe('/elsewhere/demo');
+    recorded.openDialog = undefined;
+    recorded.quickPicks.push((items: typeof offered) => items.at(-1));
+    await run();
+    expect(created).toHaveLength(2);
+  });
+
+  it('starts from the first workspace folder when the active file is outside the workspace or not a file', async () => {
+    recorded.workspaceFolders = [{ name: 'a', uri: Uri.file('/a') }];
+    let offered: { detail?: string; description?: string }[] = [];
+    for (const uri of [Uri.file('/tmp/x.yaml'), Uri.parse('untitled:Untitled-1')]) {
+      recorded.activeEditor = { document: { uri, languageId: 'yaml', getText: () => '' }, selection: undefined };
+      recorded.quickPicks.push((items: typeof offered) => ((offered = items), undefined));
+      await run();
+      expect(offered.map((i) => [i.detail, i.description])).toEqual([['/a', undefined], [undefined, undefined]]);
+    }
+    expect(ran).toEqual([]);
+  });
+
+  it('leaves the family out on none, and stops when anything is cancelled', async () => {
+    recorded.workspaceFolders = [{ name: 'a', uri: Uri.file('/a') }];
+    recorded.quickPicks.push(first, first, (items: { label: string }[]) => items.find((i) => i.label === 'none'));
+    recorded.inputs.push('demo');
+    await run();
+    expect(ran[0].args).toEqual(['create', 'demo', '--chart', '--no-input', '--members', '1', '-o', '/a', '--context', 'lab']);
     recorded.quickPicks.push(undefined);
     await run();
-    recorded.quickPicks.push((items: { label: string }[]) => items[0]);
+    recorded.quickPicks.push(first);
     recorded.inputs.push(undefined);
     await run();
-    recorded.quickPicks.push((items: { label: string }[]) => items[0], undefined);
+    recorded.quickPicks.push(first, undefined);
     recorded.inputs.push('demo');
     await run();
-    recorded.quickPicks.push((items: { label: string }[]) => items[0], (items: { label: string }[]) => items[0], undefined);
+    recorded.quickPicks.push(first, first, undefined);
     recorded.inputs.push('demo');
     await run();
     expect(ran).toHaveLength(1);
@@ -150,15 +194,43 @@ describe('createCrewCommand', () => {
     expect(ran).toEqual([]);
   });
 
-  it('shows a failed scaffold as a modal error with kmctl\'s message, and does not refresh', async () => {
+  it("shows a failed scaffold as a modal error with kmctl's message, and hands nothing over", async () => {
     recorded.workspaceFolders = [{ name: 'crews', uri: Uri.file('/w') }];
     recorded.inputs.push('demo');
-    recorded.quickPicks.push((items: { label: string }[]) => items[0], (items: { label: string }[]) => items[0]);
+    recorded.quickPicks.push(first, first, first);
     answer = { code: 1, stdout: '', stderr: 'Error: unknown flag: --chart\n' };
-    const before = refreshed;
     await run();
     expect(recorded.modalErrors).toEqual(['CrewForge could not create demo. kmctl create failed: Error: unknown flag: --chart']);
-    expect(refreshed).toBe(before);
-    expect(recorded.shownDocuments).toEqual([]);
+    expect(created).toEqual([]);
+  });
+});
+
+describe('showCreatedCrew', () => {
+  const entry = (root: string) => ({ source: { kind: 'helm' as const, root, label: 'demo' }, identity: { id: 'local:demo' }, crewName: 'demo' });
+  const nodes: SourceNode[] = [{ kind: 'message', text: 'x' }, { kind: 'source', entry: entry('/w/other') }, { kind: 'source', entry: entry('/w/demo') }];
+  let revealed: SourceNode[];
+  const deps = () => ({ reload: async () => nodes, reveal: async (node: SourceNode) => void revealed.push(node) });
+
+  beforeEach(() => (revealed = []));
+
+  it('selects the crew in Crew Sources, opens crew.yaml beside the README, and offers the dev deploy', async () => {
+    recorded.infoAnswers.push(DEPLOY_NEXT);
+    await showCreatedCrew('/w/demo', deps());
+    expect(revealed).toEqual([nodes[2]]);
+    expect(recorded.shownDocuments).toEqual(['/w/demo/README.md', '/w/demo/templates/crew.yaml']);
+    expect(recorded.shownOptions[1]).toEqual({ viewColumn: -2, preview: false });
+    expect(recorded.info[0]).toContain('Next: deploy it to a dev namespace');
+    await new Promise((r) => setTimeout(r, 0));
+    expect(recorded.executed).toEqual([{ id: 'crewforge.deployDev', args: [nodes[2]] }]);
+  });
+
+  it('does nothing more when the offer is dismissed, and says when the crew is outside the workspace', async () => {
+    await showCreatedCrew('/w/demo', deps());
+    await new Promise((r) => setTimeout(r, 0));
+    expect(recorded.executed).toEqual([]);
+    await showCreatedCrew('/tmp/lost', deps());
+    expect(revealed).toHaveLength(1);
+    expect(recorded.info.at(-1)).toContain('outside this workspace');
+    expect(recorded.shownDocuments.slice(-2)).toEqual(['/tmp/lost/README.md', '/tmp/lost/templates/crew.yaml']);
   });
 });

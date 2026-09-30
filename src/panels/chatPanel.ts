@@ -11,6 +11,17 @@ import { exportAsMarkdown, exportFileName } from '../store/export';
 import { crewAbout } from '../views/treeModel';
 import type { HostMessage, WebviewMessage } from '../webview/protocol';
 import { icons } from '../webview/render';
+import type { Located } from '../source/locate';
+import { trimEnd } from '../text';
+
+/** What a chat can link to in the workspace. */
+export interface ChatLinks {
+  /**
+   * Where each of the crew's agents is defined: its Agent, then the PromptModules it
+   * composes. Empty when no workspace source renders the crew.
+   */
+  agentSources(crew: CrewSummary): Promise<Map<string, Located[]>>;
+}
 
 /** A chat with one crew. One panel per context, namespace and crew. */
 export class ChatPanel {
@@ -19,17 +30,22 @@ export class ChatPanel {
 
   private readonly session: ChatSession;
 
-  static show(extensionUri: vscode.Uri, connection: Connection, crew: CrewSummary, store: ConversationStore, conversation?: Conversation): ChatPanel {
-    const key = `${connection.context}/${crew.namespace}/${crew.name}`;
-    const existing = ChatPanel.panels.get(key);
+  static show(extensionUri: vscode.Uri, connection: Connection, crew: CrewSummary, store: ConversationStore, conversation?: Conversation, links?: ChatLinks): ChatPanel {
+    const existing = ChatPanel.find(connection.context, crew);
     if (existing) {
       existing.panel.reveal();
       if (conversation) existing.session.load(conversation);
       return existing;
     }
-    const panel = new ChatPanel(extensionUri, connection, crew, store, conversation, key);
+    const key = panelKey(connection.context, crew);
+    const panel = new ChatPanel(extensionUri, connection, crew, store, conversation, key, links);
     ChatPanel.panels.set(key, panel);
     return panel;
+  }
+
+  /** The open chat with a crew in a context, if there is one. */
+  static find(context: string, crew: Pick<CrewSummary, 'namespace' | 'name'>): ChatPanel | undefined {
+    return ChatPanel.panels.get(panelKey(context, crew));
   }
 
   static get active(): ChatPanel | undefined {
@@ -45,6 +61,7 @@ export class ChatPanel {
     private readonly store: ConversationStore,
     conversation: Conversation | undefined,
     private readonly key: string,
+    links?: ChatLinks,
   ) {
     this.panel = vscode.window.createWebviewPanel('crewforge.chat', `Ask ${crew.name}`, vscode.ViewColumn.Active, {
       enableScripts: true,
@@ -67,6 +84,30 @@ export class ChatPanel {
     });
     this.panel.onDidDispose(() => this.dispose());
     ChatPanel.activePanel = this;
+    if (links) void this.loadSources(links);
+  }
+
+  /** Where each agent is defined, read once when the panel opens; the page links the agents found. */
+  private async loadSources(links: ChatLinks): Promise<void> {
+    try {
+      this.agentSources = await links.agentSources(this.crew);
+    } catch {
+      this.agentSources = new Map();
+    }
+    await this.post(this.session.view);
+  }
+
+  /**
+   * Asks the conversation's last question again, as a new turn, after a redeploy.
+   * Reports false when there is none to ask, or a turn is running.
+   */
+  async reaskLast(): Promise<boolean> {
+    const messages = this.session.view.conversation.messages;
+    const question = questionFor(messages, messages.length - 1);
+    if (!question || this.session.busy) return false;
+    this.panel.reveal();
+    await this.session.send(question);
+    return true;
   }
 
   /** Saves the shown conversation as Markdown where the person chooses. */
@@ -109,7 +150,25 @@ export class ChatPanel {
     rename: () => this.rename(),
     delete: () => this.deleteConversation(),
     openDashboard: () => openDashboard(),
+    openAgentSource: (m) => this.openAgentSource(m.agent),
+    openTurnInDashboard: (m) => this.openTurnInDashboard(m.index),
   };
+
+  /** Opens the file where an agent is defined, or one of its PromptModules the developer picks. */
+  private async openAgentSource(agent: unknown): Promise<void> {
+    const places = typeof agent === 'string' ? this.agentSources.get(agent) : undefined;
+    if (!places?.length) return;
+    const choice = places.length === 1 ? places[0] : await pickPlace(String(agent), places);
+    if (choice?.file) await vscode.commands.executeCommand('vscode.open', vscode.Uri.file(choice.file), { selection: new vscode.Range(choice.line, 0, choice.line, 0) });
+  }
+
+  /** Opens the dashboard at the thread of the turn message `index` ends. */
+  private async openTurnInDashboard(index: unknown): Promise<void> {
+    const message = typeof index === 'number' ? this.session.view.conversation.messages[index] : undefined;
+    const url = dashboardUrl();
+    if (!url || typeof message?.threadId !== 'string') return;
+    await vscode.env.openExternal(vscode.Uri.parse(dashboardThreadUrl(url, this.crew, message.threadId)));
+  }
 
   /**
    * Puts text in the chat input for the person to finish and send. A page still loading
@@ -176,6 +235,8 @@ export class ChatPanel {
   }
 
   private history: ConversationMeta[] = [];
+  /** Where each agent is defined, once read; empty until then or when no source is open. */
+  private agentSources = new Map<string, Located[]>();
   /** The page has said it is ready for messages. */
   private pageReady = false;
   /** Text for the input, waiting for the page to be ready. */
@@ -187,7 +248,8 @@ export class ChatPanel {
     if (this.disposed) return;
     if (!view.busy) this.history = await this.store.list(this.connection.context, this.crew.namespace, this.crew.name);
     if (this.disposed) return;
-    const message: HostMessage = { type: 'state', view: this.session.view, history: this.history, about: crewAbout(this.crew) };
+    const links = { agents: [...this.agentSources.keys()], dashboard: dashboardUrl() !== '' };
+    const message: HostMessage = { type: 'state', view: this.session.view, history: this.history, about: crewAbout(this.crew), links };
     await this.panel.webview.postMessage(message);
   }
 
@@ -248,6 +310,28 @@ export class ChatPanel {
 }
 
 const DELETE = 'Delete';
+
+/** Asks which of an agent's definitions to open: the Agent, then its PromptModules in composition order. */
+async function pickPlace(agent: string, places: Located[]): Promise<Located | undefined> {
+  const choice = await vscode.window.showQuickPick(
+    places.map((l) => ({ label: `${l.manifest.kind} ${l.manifest.metadata.name}`, description: l.file ? `${vscode.workspace.asRelativePath(l.file)}:${l.line + 1}` : undefined, place: l })),
+    { placeHolder: `Open which part of ${agent}? Its PromptModules follow in the order it composes them.` },
+  );
+  return choice?.place;
+}
+
+function panelKey(context: string, crew: Pick<CrewSummary, 'namespace' | 'name'>): string {
+  return `${context}/${crew.namespace}/${crew.name}`;
+}
+
+/**
+ * The dashboard's Discussions page for one thread: the base URL from the setting, then
+ * `/discussions` with the thread, namespace, and crew as query parameters.
+ */
+export function dashboardThreadUrl(base: string, crew: Pick<CrewSummary, 'namespace' | 'name'>, threadId: string): string {
+  const query = new URLSearchParams({ thread: threadId, namespace: crew.namespace, crew: crew.name });
+  return `${trimEnd(base, '/')}/discussions?${query.toString()}`;
+}
 
 /** Opens the Kubemoot dashboard in the default browser, or the setting that names it when unset. */
 async function openDashboard(): Promise<void> {

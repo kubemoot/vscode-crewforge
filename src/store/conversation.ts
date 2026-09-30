@@ -32,6 +32,18 @@ export interface ChatMessage {
    * an agent that failed or a turn that was stopped. Absent when nothing did.
    */
   problems?: string[];
+  /** On the message that ends a turn: the discussion thread behind it, for the dashboard. */
+  threadId?: string;
+  /** On the message that ends a turn: each agent that took part and what its card said last. */
+  agents?: AgentNote[];
+}
+
+/** One agent's part in a turn, as its card said when the turn ended. */
+export interface AgentNote {
+  agent: string;
+  text: string;
+  /** The agent failed or could not run. */
+  problem: boolean;
 }
 
 export interface ChatSignal {
@@ -80,6 +92,12 @@ export function questionFor(messages: ChatMessage[], index: number): string | un
     if (messages[i].role === 'user') return messages[i].content;
   }
   return undefined;
+}
+
+/** A message's agent notes, as far as a saved file holds well-formed ones: never anything else. */
+export function agentsOf(m: ChatMessage): AgentNote[] {
+  if (!Array.isArray(m.agents)) return [];
+  return m.agents.filter((a): a is AgentNote => typeof a?.agent === 'string' && typeof a.text === 'string').map((a) => ({ agent: a.agent, text: a.text, problem: a.problem === true }));
 }
 
 /** A message's problems, as far as a saved file holds a list of lines: never anything else. */
