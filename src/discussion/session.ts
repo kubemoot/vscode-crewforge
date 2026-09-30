@@ -18,6 +18,8 @@ export interface SessionView {
 export class ChatSession {
   private turn?: TurnState;
   private controller?: AbortController;
+  /** The conversation was deleted: nothing more is asked, renamed, or saved. */
+  private removed = false;
 
   constructor(
     private readonly client: KubeTransport,
@@ -42,6 +44,35 @@ export class ChatSession {
     this.emit();
   }
 
+  /**
+   * Names the conversation and saves it. Not while a turn runs, since the turn saves the
+   * conversation too; a blank name is ignored.
+   */
+  async rename(title: string): Promise<void> {
+    const name = title.trim();
+    if (!name || this.busy || this.removed) return;
+    this.conversation.title = name;
+    await this.save(this.conversation);
+    this.emit();
+  }
+
+  /**
+   * Deletes the conversation with `remove`, when no turn runs, and ends the session:
+   * later questions and renames do nothing, so nothing saves the conversation again.
+   * Reports false when a turn is running; a failed `remove` leaves the session as it was.
+   */
+  async remove(remove: (c: Conversation) => Promise<void>): Promise<boolean> {
+    if (this.busy) return false;
+    this.removed = true;
+    try {
+      await remove(this.conversation);
+    } catch (err) {
+      this.removed = false;
+      throw err;
+    }
+    return true;
+  }
+
   /** Stops the running turn; what arrived so far is kept and saved. */
   stop(): void {
     this.controller?.abort();
@@ -49,7 +80,7 @@ export class ChatSession {
 
   async send(text: string): Promise<void> {
     const question = text.trim();
-    if (!question || this.busy) return;
+    if (!question || this.busy || this.removed) return;
     const c = this.conversation;
     if (c.messages.length === 0) c.title = titleFrom(question);
     c.messages.push({ role: 'user', content: question, timestamp: now() });

@@ -38,8 +38,10 @@ of buttons appears on hover or keyboard focus: for your question **Copy**, **Ask
 (sends it as a new turn), and **Edit and resend** (puts it back in the input); for the
 crew's answer **Copy** (its Markdown) and **Ask the question again**.
 
-**CrewForge: Continue a Conversation** reopens any saved conversation. The copy and
-download buttons in a chat's header copy or save it as Markdown. **CrewForge: Open
+**CrewForge: Continue a Conversation** reopens any saved conversation. A conversation is
+named after its first question; the buttons in a chat's header **Rename** it, **Delete**
+it from this computer (after asking; the crew is not changed), and copy or save the whole
+conversation as Markdown. **CrewForge: Open
 Conversations Folder** shows where they are kept.
 
 ## Develop crews

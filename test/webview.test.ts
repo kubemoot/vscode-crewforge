@@ -210,6 +210,22 @@ describe('the chat page', () => {
     expect(document.activeElement).toBe($('input'));
   });
 
+  it('offers rename, delete, copy and save for a conversation with messages, and waits for a running turn', () => {
+    const c = newConversation('ctx', 'team-a', 'lab-ops');
+    const header = ['rename', 'delete', 'copy', 'export'].map((id) => $(id) as HTMLButtonElement);
+    post(c);
+    expect(header.map((b) => b.hidden)).toEqual([true, true, true, true]);
+    c.messages.push({ role: 'user', content: 'q', timestamp: c.startedAt });
+    post(c);
+    expect(header.map((b) => b.hidden)).toEqual([false, false, false, false]);
+    expect(header.map((b) => b.getAttribute('aria-label'))).toEqual(['Rename conversation', 'Delete conversation', 'Copy conversation as Markdown', 'Save conversation as Markdown']);
+    $('rename').click();
+    $('delete').click();
+    expect(sent.slice(1)).toEqual([{ type: 'rename' }, { type: 'delete' }]);
+    post(c, { busy: true });
+    expect(header.map((b) => b.disabled)).toEqual([true, true, false, false]);
+  });
+
   it('hides the conversations pane, and remembers a dragged width', () => {
     $('toggle').click();
     expect($('sidebar').classList.contains('hidden')).toBe(true);

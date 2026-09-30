@@ -145,6 +145,76 @@ describe('ChatPanel', () => {
     expect(recorded.errors).toEqual([]);
   });
 
+  it('renames the conversation, keeping the name when the dialog is cancelled', async () => {
+    const c = newConversation('ctx', 'team-a', 'lab-ops');
+    c.title = 'Which nodes have a GPU?';
+    c.messages.push({ role: 'user', content: 'Which nodes have a GPU?', timestamp: c.startedAt });
+    await store.save(c);
+    const panel = open(c);
+    recorded.inputs.push('  GPU inventory  ');
+    await panel.webview.receive({ type: 'rename' });
+    await settle();
+    expect(lastState(panel).view.conversation.title).toBe('GPU inventory');
+    expect(lastState(panel).history.map((h) => h.title)).toEqual(['GPU inventory']);
+    expect((await store.load(c)).title).toBe('GPU inventory');
+
+    recorded.inputs.push(undefined, '   ');
+    await panel.webview.receive({ type: 'rename' });
+    await panel.webview.receive({ type: 'rename' });
+    expect((await store.load(c)).title).toBe('GPU inventory');
+  });
+
+  it('deletes the conversation after asking, and closes the panel', async () => {
+    const c = newConversation('ctx', 'team-a', 'lab-ops');
+    c.title = 'Old';
+    c.messages.push({ role: 'user', content: 'q', timestamp: c.startedAt });
+    await store.save(c);
+    const panel = open(c);
+
+    recorded.warningAnswers.push(undefined);
+    await panel.webview.receive({ type: 'delete' });
+    expect(recorded.warnings).toEqual(['Delete this conversation?']);
+    expect(fs.existsSync(store.file(c))).toBe(true);
+    expect(ChatPanel.active).toBeDefined();
+
+    recorded.warningAnswers.push('Delete');
+    await panel.webview.receive({ type: 'delete' });
+    expect(fs.existsSync(store.file(c))).toBe(false);
+    expect(ChatPanel.active).toBeUndefined();
+    open(c);
+    expect(recorded.panels).toHaveLength(2);
+  });
+
+  it('keeps the panel open and reports it when the delete fails', async () => {
+    const c = newConversation('ctx', 'team-a', 'lab-ops');
+    c.messages.push({ role: 'user', content: 'q', timestamp: c.startedAt });
+    await store.save(c);
+    store.remove = () => Promise.reject(new Error('EBUSY: resource busy'));
+    const panel = open(c);
+    recorded.warningAnswers.push('Delete');
+    await panel.webview.receive({ type: 'delete' });
+    expect(recorded.errors).toEqual(['CrewForge: EBUSY: resource busy']);
+    expect(ChatPanel.active).toBeDefined();
+    expect(fs.existsSync(store.file(c))).toBe(true);
+  });
+
+  it('does not delete while a turn runs', async () => {
+    const c = newConversation('ctx', 'team-a', 'lab-ops');
+    const panel = open(c);
+    transport.holdOpen = true;
+    transport.responses.push('{"conversationId":"conv-1"}');
+    transport.streams.push('data: {"type":"connected"}\n\n');
+    const turn = panel.webview.receive({ type: 'send', text: 'first' });
+    await settle();
+    recorded.warningAnswers.push('Delete');
+    await panel.webview.receive({ type: 'delete' });
+    expect(recorded.info).toEqual(['Stop the turn before deleting the conversation.']);
+    expect(ChatPanel.active).toBeDefined();
+    await panel.webview.receive({ type: 'stop' });
+    await turn;
+    expect(fs.existsSync(store.file(c))).toBe(true);
+  });
+
   it('does nothing when the export dialog is cancelled', async () => {
     const panel = open();
     await panel.webview.receive({ type: 'export' });

@@ -45,6 +45,18 @@ describe('ConversationStore', () => {
   });
 });
 
+describe('ConversationStore.remove', () => {
+  it('deletes a saved conversation, and is fine with one never saved', async () => {
+    const s = store();
+    const c = newConversation('ctx', 'ns', 'crew');
+    await s.save(c);
+    await s.remove(c);
+    expect(fs.existsSync(s.file(c))).toBe(false);
+    expect(await s.list('ctx', 'ns', 'crew')).toEqual([]);
+    await expect(s.remove(c)).resolves.toBeUndefined();
+  });
+});
+
 describe('safeSegment', () => {
   it('keeps safe names and replaces everything else', () => {
     expect(safeSegment('team-1')).toBe('team-1');

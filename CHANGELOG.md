@@ -13,3 +13,6 @@ generated from the conventional commits since the previous release.
   before this show the time alone.
 - Under each message, buttons for Copy, Ask again, and Edit and resend (your questions), or
   Copy and Ask the question again (crew answers), shown on hover or keyboard focus.
+- Rename and Delete in a chat's header, beside Copy and Save. A conversation keeps its
+  first question as its name until renamed; Delete asks first, removes the saved file, and
+  closes the panel.

@@ -30,6 +30,11 @@ export class ConversationStore {
     return JSON.parse(await fs.readFile(this.file(c), 'utf8')) as Conversation;
   }
 
+  /** Deletes a saved conversation; one never saved is already gone. */
+  async remove(c: Pick<Conversation, 'context' | 'namespace' | 'crewName' | 'id'>): Promise<void> {
+    await fs.rm(this.file(c), { force: true });
+  }
+
   /** One crew's conversations, newest first. Files that cannot be read are left out. */
   async list(context: string, namespace: string, crew: string): Promise<ConversationMeta[]> {
     return newestFirst(await readDir(this.dir(context, namespace, crew)));

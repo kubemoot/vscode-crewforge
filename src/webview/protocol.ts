@@ -22,4 +22,6 @@ export type WebviewMessage =
   /** Asks the question behind message `index` again, as a new turn. */
   | { type: 'reask'; index: number }
   | { type: 'export' }
+  | { type: 'rename' }
+  | { type: 'delete' }
   | { type: 'openDashboard' };

@@ -100,6 +100,59 @@ describe('ChatSession', () => {
     expect(session.view.conversation.messages.map((m) => m.durationMs)).toEqual([undefined, 42_000]);
   });
 
+  it('renames and saves the conversation, but not to a blank name or while a turn runs', async () => {
+    const { t, saved, views, session } = setup();
+    await session.rename('  GPU inventory ');
+    expect(session.view.conversation.title).toBe('GPU inventory');
+    expect(saved.map((c) => c.title)).toEqual(['GPU inventory']);
+    expect(views.at(-1)?.conversation.title).toBe('GPU inventory');
+    await session.rename('   ');
+    expect(saved).toHaveLength(1);
+
+    t.holdOpen = true;
+    t.responses.push('{"conversationId":"c"}');
+    t.streams.push('data: {"type":"connected"}\n\n');
+    const turn = session.send('q');
+    await new Promise((r) => setTimeout(r, 5));
+    await session.rename('During');
+    expect(session.view.conversation.title).not.toBe('During');
+    expect(saved).toHaveLength(1);
+    session.stop();
+    await turn;
+  });
+
+  it('removes the conversation and then neither asks, renames, nor saves', async () => {
+    const { t, saved, session } = setup();
+    let release!: () => void;
+    const removing = session.remove(() => new Promise<void>((resolve) => (release = resolve)));
+    await session.send('asked while deleting');
+    await session.rename('renamed while deleting');
+    release();
+    expect(await removing).toBe(true);
+    await session.send('asked after');
+    expect(t.calls).toEqual([]);
+    expect(saved).toEqual([]);
+    expect(session.view.conversation.title).toBe('New conversation');
+  });
+
+  it('does not remove while a turn runs, and a failed remove leaves the session usable', async () => {
+    const { t, session } = setup();
+    t.holdOpen = true;
+    t.responses.push('{"conversationId":"c"}');
+    t.streams.push('data: {"type":"connected"}\n\n');
+    const turn = session.send('q');
+    await new Promise((r) => setTimeout(r, 5));
+    let called = false;
+    expect(await session.remove(async () => void (called = true))).toBe(false);
+    expect(called).toBe(false);
+    session.stop();
+    await turn;
+
+    await expect(session.remove(() => Promise.reject(new Error('EBUSY')))).rejects.toThrow('EBUSY');
+    await session.rename('Still here');
+    expect(session.view.conversation.title).toBe('Still here');
+  });
+
   it('ignores blank questions and a second question while a turn runs', async () => {
     const { t, session } = setup();
     await session.send('   ');

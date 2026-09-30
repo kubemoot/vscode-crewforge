@@ -10,6 +10,7 @@ import type { ConversationStore } from '../store/conversations';
 import { exportAsMarkdown, exportFileName } from '../store/export';
 import { crewAbout } from '../views/treeModel';
 import type { HostMessage, WebviewMessage } from '../webview/protocol';
+import { icons } from '../webview/render';
 
 /** A chat with one crew. One panel per context, namespace and crew. */
 export class ChatPanel {
@@ -105,6 +106,8 @@ export class ChatPanel {
     copyMessage: (m) => this.copyMessage(m.index),
     reask: (m) => this.reask(m.index),
     export: () => this.export(),
+    rename: () => this.rename(),
+    delete: () => this.deleteConversation(),
     openDashboard: () => openDashboard(),
   };
 
@@ -121,6 +124,32 @@ export class ChatPanel {
   private async reask(index: number): Promise<void> {
     const question = questionFor(this.session.view.conversation.messages, index);
     if (question) await this.session.send(question);
+  }
+
+  /** Asks for a new name for the conversation; its first question stays the name until then. */
+  private async rename(): Promise<void> {
+    const title = await vscode.window.showInputBox({
+      title: 'Rename conversation',
+      value: this.session.view.conversation.title,
+      validateInput: (value) => (value.trim() ? undefined : 'Enter a name.'),
+    });
+    if (title) await this.session.rename(title);
+  }
+
+  /**
+   * Deletes the conversation from this computer after asking, and closes the panel. Not
+   * while a turn runs: stopping it saves the conversation again. A failed delete leaves
+   * the panel open and is reported like any other failed action.
+   */
+  private async deleteConversation(): Promise<void> {
+    const choice = await vscode.window.showWarningMessage(
+      'Delete this conversation?',
+      { modal: true, detail: `"${this.session.view.conversation.title}" is removed from this computer. The crew is not changed.` },
+      DELETE,
+    );
+    if (choice !== DELETE) return;
+    if (await this.session.remove((c) => this.store.remove(c))) this.panel.dispose();
+    else void vscode.window.showInformationMessage('Stop the turn before deleting the conversation.');
   }
 
   private history: ConversationMeta[] = [];
@@ -172,8 +201,10 @@ export class ChatPanel {
         <h1 id="title"></h1><span class="crew-where" id="where"></span>
       </div>
       <div class="header-actions">
-        <button class="export-btn" id="copy" title="Copy conversation as Markdown" hidden><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="5" y="5" width="9" height="9" rx="1" stroke="currentColor" stroke-width="1.3"/><path d="M3 11V3a1 1 0 011-1h8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></button>
-        <button class="export-btn" id="export" title="Save conversation as Markdown" hidden><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2v8M5 7l3 3 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 12h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button>
+        <button class="export-btn" id="rename" title="Rename conversation" aria-label="Rename conversation" hidden>${icons.edit}</button>
+        <button class="export-btn" id="delete" title="Delete conversation" aria-label="Delete conversation" hidden>${icons.trash}</button>
+        <button class="export-btn" id="copy" title="Copy conversation as Markdown" aria-label="Copy conversation as Markdown" hidden>${icons.copy}</button>
+        <button class="export-btn" id="export" title="Save conversation as Markdown" aria-label="Save conversation as Markdown" hidden>${icons.download}</button>
       </div>
     </header>
     <div class="messages" id="messages"></div>
@@ -188,6 +219,8 @@ export class ChatPanel {
 </html>`;
   }
 }
+
+const DELETE = 'Delete';
 
 /** Opens the Kubemoot dashboard in the default browser, or the setting that names it when unset. */
 async function openDashboard(): Promise<void> {

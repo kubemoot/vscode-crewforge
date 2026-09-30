@@ -41,6 +41,8 @@ const els = {
   input: $<HTMLTextAreaElement>('input'),
   send: $<HTMLButtonElement>('send'),
   copy: $<HTMLButtonElement>('copy'),
+  rename: $<HTMLButtonElement>('rename'),
+  deleteBtn: $<HTMLButtonElement>('delete'),
   exportBtn: $<HTMLButtonElement>('export'),
 };
 
@@ -70,6 +72,8 @@ $('toggle').addEventListener('click', () => els.sidebar.classList.toggle('hidden
 $('new').addEventListener('click', () => vscode.postMessage({ type: 'new' }));
 els.copy.addEventListener('click', () => vscode.postMessage({ type: 'copy' }));
 els.exportBtn.addEventListener('click', () => vscode.postMessage({ type: 'export' }));
+els.rename.addEventListener('click', () => vscode.postMessage({ type: 'rename' }));
+els.deleteBtn.addEventListener('click', () => vscode.postMessage({ type: 'delete' }));
 $('dashboard').addEventListener('click', (e) => {
   e.preventDefault();
   vscode.postMessage({ type: 'openDashboard' });
@@ -127,8 +131,11 @@ function render(): void {
   els.title.textContent = conversation.crewName;
   els.where.textContent = `${conversation.namespace} · ${conversation.context}`;
   const hasMessages = conversation.messages.length > 0;
-  els.copy.hidden = !hasMessages;
-  els.exportBtn.hidden = !hasMessages;
+  // A conversation is saved once it has a message; before that there is nothing to act on.
+  for (const button of [els.copy, els.exportBtn, els.rename, els.deleteBtn]) button.hidden = !hasMessages;
+  // Renaming or deleting waits for the turn, which saves the conversation when it ends.
+  els.rename.disabled = busy;
+  els.deleteBtn.disabled = busy;
   els.history.innerHTML = renderHistory(state.history, conversation.id);
   renderMessages();
   els.send.innerHTML = busy ? icons.stop : icons.send;
