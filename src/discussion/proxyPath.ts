@@ -17,8 +17,24 @@ export function startPath(namespace: string, crew: string): string {
   return gatewayBase(namespace, crew);
 }
 
+/** Where a turn's stream starts reading. */
+export interface StreamPosition {
+  /**
+   * When the gateway queued the question, as its reply said; tells this turn's thread
+   * from earlier turns'. Sent on a resume too, so the gateway can judge a thread the
+   * coordinator restarts after the drop.
+   */
+  since?: string;
+  /** The last event id received, to resume after a dropped connection without repeating events. */
+  lastEventId?: string;
+}
+
 /** GET here for the turn's SSE stream. */
-export function streamPath(namespace: string, crew: string, conversationId: string): string {
+export function streamPath(namespace: string, crew: string, conversationId: string, position: StreamPosition = {}): string {
   if (!conversationId) throw new Error('conversationId is required');
-  return `${gatewayBase(namespace, crew)}/${encodeURIComponent(conversationId)}/stream`;
+  const query = new URLSearchParams();
+  if (position.since) query.set('since', position.since);
+  if (position.lastEventId) query.set('lastEventId', position.lastEventId);
+  const q = query.toString();
+  return `${gatewayBase(namespace, crew)}/${encodeURIComponent(conversationId)}/stream${q ? `?${q}` : ''}`;
 }

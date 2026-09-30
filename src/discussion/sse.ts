@@ -2,12 +2,20 @@ import type { DiscussionEvent } from './types';
 
 /**
  * Incremental Server-Sent Events parser. Feed it text chunks as they arrive, in any
- * split, and it returns the complete events each chunk finishes. Only `data:` fields
- * are read; comments, other fields, and data that is not a JSON object are skipped.
+ * split, and it returns the complete events each chunk finishes. `data:` fields make
+ * the events and `id:` fields set {@link lastEventId}; comments, other fields, and data
+ * that is not a JSON object are skipped.
  */
 export class SseParser {
   private buffer = '';
   private data: string[] = [];
+  private pendingId?: string;
+
+  /**
+   * The id of the last event dispatched, as the SSE standard's Last-Event-ID: the point
+   * a reconnecting client resumes from. Empty until the stream sends one.
+   */
+  lastEventId = '';
 
   push(chunk: string): DiscussionEvent[] {
     this.buffer += chunk;
@@ -39,18 +47,33 @@ export class SseParser {
       this.dispatch(events);
       return;
     }
+    if (line.startsWith('id:')) {
+      const id = fieldValue(line, 3);
+      // The standard ignores an id containing NUL.
+      if (!id.includes('\0')) this.pendingId = id;
+      return;
+    }
     if (!line.startsWith('data:')) return;
-    const value = line.slice(5);
-    this.data.push(value.startsWith(' ') ? value.slice(1) : value);
+    this.data.push(fieldValue(line, 5));
   }
 
   private dispatch(events: DiscussionEvent[]): void {
+    if (this.pendingId !== undefined) this.lastEventId = this.pendingId;
+    this.pendingId = undefined;
     if (this.data.length === 0) return;
     const payload = this.data.join('\n');
     this.data = [];
     const event = parseEvent(payload);
-    if (event) events.push(event);
+    if (!event) return;
+    if (this.lastEventId) event.id = this.lastEventId;
+    events.push(event);
   }
+}
+
+/** A field's value: the text after its name and colon, less one leading space. */
+function fieldValue(line: string, nameLength: number): string {
+  const value = line.slice(nameLength);
+  return value.startsWith(' ') ? value.slice(1) : value;
 }
 
 function parseEvent(payload: string): DiscussionEvent | undefined {

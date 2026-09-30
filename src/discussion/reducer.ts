@@ -23,6 +23,12 @@ export interface TurnState {
   synthesis?: string;
   done: boolean;
   error?: string;
+  /** Why the stream dropped, while the client reconnects; cleared when it is back. */
+  reconnecting?: string;
+  /** The coordinator started the question over under a new thread, for example after it restarted. */
+  restarted?: boolean;
+  /** Threads the coordinator gave up on; a late mention of one is not a restart. */
+  abandoned?: string[];
 }
 
 export function initialTurn(now = Date.now()): TurnState {
@@ -32,8 +38,9 @@ export function initialTurn(now = Date.now()): TurnState {
 type Handler = (state: TurnState, e: DiscussionEvent) => TurnState;
 
 const handlers: Record<string, Handler> = {
-  connected: (s) => ({ ...s, connected: true }),
-  thread_found: (s, e) => ({ ...s, threadId: e.threadId ?? s.threadId }),
+  connected: (s) => ({ ...s, connected: true, reconnecting: undefined }),
+  thread_found: threadFound,
+  reconnecting: (s, e) => ({ ...s, reconnecting: e.error || 'the connection dropped' }),
   phase: (s, e) =>
     upsertCard(s, e.agent, (c) => ({
       ...c,
@@ -64,6 +71,18 @@ export function reduce(state: TurnState, e: DiscussionEvent): TurnState {
   if (state.done) return state;
   const handler = handlers[e.type];
   return handler ? handler(state, e) : state;
+}
+
+/**
+ * The first thread_found names the turn's thread. A later one with another id means the
+ * coordinator started the question over; the earlier thread's cards and answer are
+ * dropped, since that thread will not finish.
+ */
+function threadFound(s: TurnState, e: DiscussionEvent): TurnState {
+  if (!e.threadId || e.threadId === s.threadId || s.abandoned?.includes(e.threadId)) return s;
+  if (!s.threadId) return { ...s, threadId: e.threadId };
+  const abandoned = [...(s.abandoned ?? []), s.threadId];
+  return { ...s, threadId: e.threadId, cards: [], synthesis: undefined, restarted: true, abandoned };
 }
 
 function upsertCard(state: TurnState, agent: string | undefined, update: (c: AgentCard) => AgentCard): TurnState {

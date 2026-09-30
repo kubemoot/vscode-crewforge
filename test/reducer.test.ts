@@ -33,6 +33,33 @@ describe('reduce', () => {
     expect(s.synthesis).toContain('Kubernetes pods');
   });
 
+  it('marks the turn reconnecting until the stream connects again', () => {
+    const down = fold([{ type: 'connected' }, { type: 'thread_found', threadId: 'A' }, { type: 'reconnecting', error: 'socket hang up' }]);
+    expect(down.reconnecting).toBe('socket hang up');
+    expect(fold([{ type: 'reconnecting' }]).reconnecting).toBe('the connection dropped');
+    const back = fold([{ type: 'connected' }], down);
+    expect(back.reconnecting).toBeUndefined();
+    expect(back.threadId).toBe('A');
+  });
+
+  it('starts over when the coordinator restarts the question under a new thread', () => {
+    const s = fold([
+      { type: 'connected' },
+      { type: 'thread_found', threadId: 'A' },
+      { type: 'phase', agent: 'a', status: 'triaging' },
+      { type: 'synthesis', content: 'partial' },
+      { type: 'thread_found', threadId: 'A' },
+    ]);
+    expect(s.cards).toHaveLength(1);
+    expect(s.restarted).toBeUndefined();
+    const restarted = fold([{ type: 'thread_found', threadId: 'B' }], s);
+    expect(restarted).toMatchObject({ threadId: 'B', cards: [], synthesis: undefined, restarted: true, abandoned: ['A'] });
+    expect(fold([{ type: 'thread_found' }], s)).toBe(s);
+    const withB = fold([{ type: 'phase', agent: 'b', status: 'triaging' }], restarted);
+    expect(fold([{ type: 'thread_found', threadId: 'A' }], withB)).toBe(withB);
+    expect(fold([{ type: 'thread_found', threadId: 'C' }], withB).abandoned).toEqual(['A', 'B']);
+  });
+
   it('keeps agents in the order they first appeared', () => {
     const s = fold([
       { type: 'phase', agent: 'b', status: 'triaging' },

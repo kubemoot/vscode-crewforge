@@ -12,6 +12,14 @@ describe('proxy paths', () => {
     expect(streamPath('ns', 'c', 'a/b?c')).toContain('/a%2Fb%3Fc/stream');
   });
 
+  it('adds where the stream starts: the queue time and the last event id', () => {
+    const base = '/api/v1/namespaces/ns/services/c-discussion:80/proxy/api/v1/discussions/c/conv/stream';
+    expect(streamPath('ns', 'c', 'conv', {})).toBe(base);
+    expect(streamPath('ns', 'c', 'conv', { since: '2026-09-30T19:36:36.05Z' })).toBe(`${base}?since=2026-09-30T19%3A36%3A36.05Z`);
+    expect(streamPath('ns', 'c', 'conv', { lastEventId: 'da5be99e:42' })).toBe(`${base}?lastEventId=da5be99e%3A42`);
+    expect(streamPath('ns', 'c', 'conv', { since: 'T', lastEventId: 'A:1' })).toBe(`${base}?since=T&lastEventId=A%3A1`);
+  });
+
   it('rejects names that are not Kubernetes names', () => {
     expect(() => startPath('Team 1', 'lab-ops')).toThrow(/namespace "Team 1"/);
     expect(() => startPath('team-1', '../etc')).toThrow(/crew/);

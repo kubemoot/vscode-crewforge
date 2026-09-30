@@ -4,7 +4,7 @@ import { ChatSession, noticeFor, type SessionView } from '../src/discussion/sess
 import { newConversation, type Conversation } from '../src/store/conversation';
 import { FakeTransport, fixture } from './fakes';
 
-const FAST: TurnTiming = { firstEventMs: 50, idleMs: 80, maxMs: 1_000 };
+const FAST: TurnTiming = { firstEventMs: 50, idleMs: 80, maxMs: 1_000, reconnectMs: 1 };
 
 function setup() {
   const t = new FakeTransport();
@@ -37,6 +37,23 @@ describe('ChatSession', () => {
     expect(saved[1].messages).toHaveLength(4);
     expect(views.some((v) => v.busy && v.turn && v.turn.cards.length > 0)).toBe(true);
     expect(session.view).toMatchObject({ busy: false, turn: undefined });
+  });
+
+  it('answers from the thread a restarted coordinator finished, after a dropped stream', async () => {
+    const { t, session } = setup();
+    t.responses.push('{"conversationId":"conv-9","requestedAt":"2026-09-30T19:36:36Z"}');
+    t.streams.push(
+      'data: {"type":"connected"}\n\nid: A:1\ndata: {"type":"thread_found","threadId":"A"}\n\nid: A:2\ndata: {"type":"phase","agent":"k8s","status":"triaging"}\n\n',
+      'data: {"type":"connected"}\n\nid: B:5\ndata: {"type":"thread_found","threadId":"B"}\n\nid: B:8\ndata: {"type":"synthesis","content":"the namespaces are ..."}\n\nid: B:9\ndata: {"type":"done"}\n\n',
+    );
+    await session.send('List the namespaces');
+    const c = session.view.conversation;
+    expect(c.messages.map((m) => [m.role, m.content])).toEqual([
+      ['user', 'List the namespaces'],
+      ['assistant', 'the namespaces are ...'],
+    ]);
+    expect(c.threadIds).toEqual(['A', 'B']);
+    expect(t.calls.at(-1)?.path).toMatch(/\/conv-9\/stream\?since=2026-09-30T19%3A36%3A36Z&lastEventId=A%3A2$/);
   });
 
   it('has saved the conversation by the time the turn ends on screen', async () => {
@@ -139,6 +156,6 @@ describe('noticeFor', () => {
     expect(noticeFor({ kind: 'done' }, false)).toMatch(/without an answer/);
     expect(noticeFor({ kind: 'aborted' }, false)).toBe('Stopped.');
     expect(noticeFor({ kind: 'error', message: 'boom' }, false)).toBe('boom');
-    expect(noticeFor({ kind: 'closed', message: 'closed early' }, false)).toBe('closed early');
+    expect(noticeFor({ kind: 'timeout', message: 'went quiet' }, false)).toBe('went quiet');
   });
 });

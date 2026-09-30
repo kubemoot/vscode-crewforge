@@ -8,6 +8,13 @@ const T0 = 1_000_000;
 const at = (events: DiscussionEvent[]): TurnState => events.reduce(reduce, initialTurn(T0));
 
 describe('turnStatus', () => {
+  it('says so while the stream reconnects, and after the coordinator restarts', () => {
+    const base: DiscussionEvent[] = [{ type: 'connected' }, { type: 'thread_found', threadId: 'A' }, { type: 'phase', agent: 'a', status: 'evaluating' }];
+    expect(turnStatus(at([...base, { type: 'reconnecting', error: 'x' }]), T0)).toMatch(/^Lost the connection to the crew; reconnecting/);
+    expect(turnStatus(at([...base, { type: 'reconnecting' }, { type: 'connected' }]), T0)).toMatch(/^1 of 1 agent still working/);
+    expect(turnStatus(at([...base, { type: 'thread_found', threadId: 'B' }]), T0)).toMatch(/^The coordinator restarted; it is choosing which agents to ask again/);
+  });
+
   it('follows the turn from sending to the answer being written', () => {
     expect(turnStatus(at([]), T0 + 1_000)).toBe('Sending the question · 1s');
     expect(turnStatus(at([{ type: 'connected' }]), T0)).toMatch(/^Waiting for the coordinator/);

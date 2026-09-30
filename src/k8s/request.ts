@@ -74,22 +74,30 @@ export class KubeClient implements KubeTransport {
     const { send, options } = await this.prepare('GET', path, { Accept: 'text/event-stream' });
     return new Promise((resolve, reject) => {
       if (signal.aborted) return resolve();
+      // One signal can serve many streams in turn (a reconnecting turn), so each call
+      // removes its own abort listener when it settles.
+      const settle = (err?: Error) => {
+        signal.removeEventListener('abort', onAbort);
+        if (err && !signal.aborted) reject(err);
+        else resolve();
+      };
       const req = send(options, (res) => {
         const status = res.statusCode ?? 0;
         if (status < 200 || status >= 300) {
-          collect(res).then((text) => reject(describeFailure(status, 'GET', path, text)), reject);
+          collect(res).then((text) => settle(describeFailure(status, 'GET', path, text)), settle);
           return;
         }
         res.setEncoding('utf8');
         res.on('data', onChunk);
-        res.on('end', resolve);
-        res.on('error', (err) => (signal.aborted ? resolve() : reject(connectionError(err))));
+        res.on('end', () => settle());
+        res.on('error', (err) => settle(connectionError(err)));
       });
-      signal.addEventListener('abort', () => {
+      const onAbort = () => {
         req.destroy();
-        resolve();
-      });
-      req.on('error', (err) => (signal.aborted ? resolve() : reject(connectionError(err))));
+        settle();
+      };
+      signal.addEventListener('abort', onAbort, { once: true });
+      req.on('error', (err) => settle(connectionError(err)));
       req.end();
     });
   }
@@ -197,6 +205,14 @@ export function describeFailure(status: number, method: string, path: string, bo
   return new KubeError(`${hint} ${method} ${path} returned ${status}${suffix}`, status);
 }
 
-function connectionError(err: Error): KubeError {
-  return new KubeError(`Could not reach the API server: ${err.message}`);
+/** A request that failed on the wire (reset, refused, timed out) rather than with a status. */
+export class ConnectionError extends KubeError {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ConnectionError';
+  }
+}
+
+function connectionError(err: Error): ConnectionError {
+  return new ConnectionError(`Could not reach the API server: ${err.message}`);
 }

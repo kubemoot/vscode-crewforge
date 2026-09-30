@@ -17,6 +17,11 @@ export interface DiscussionEvent {
   model?: string;
   /** Why an agent is waiting or stood aside, such as gpu-busy or model-too-large. */
   reason?: string;
+  /**
+   * The SSE id the event arrived under (not part of the JSON): where a reconnecting
+   * client resumes once this event is handled.
+   */
+  id?: string;
 }
 
 export type EventType =
@@ -28,6 +33,8 @@ export type EventType =
   | 'done'
   | 'heartbeat'
   | 'error'
+  /** Not from the gateway: the client lost the stream before the answer and is reconnecting. */
+  | 'reconnecting'
   | (string & {});
 
 /** Reports whether an event ends a turn's stream. */

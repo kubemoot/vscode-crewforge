@@ -2,7 +2,8 @@ import * as http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { KubeConfig } from '@kubernetes/client-node';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { describeFailure, KubeClient, KubeError, retryDelayMs, statusMessage } from '../src/k8s/request';
+import { getEventListeners } from 'node:events';
+import { ConnectionError, describeFailure, KubeClient, KubeError, retryDelayMs, statusMessage } from '../src/k8s/request';
 
 let server: http.Server;
 let base: string;
@@ -152,12 +153,22 @@ describe('KubeClient', () => {
     expect(chunks.length).toBeGreaterThan(0);
   });
 
+  it('leaves no abort listener behind, however many streams share one signal', async () => {
+    const abort = new AbortController();
+    for (let i = 0; i < 12; i++) await client().stream('/api/stream', () => {}, abort.signal);
+    await expect(client().stream('/api/forbidden', () => {}, abort.signal)).rejects.toThrow(/403/);
+    await expect(client('http://127.0.0.1:1').stream('/api/stream', () => {}, abort.signal)).rejects.toBeInstanceOf(ConnectionError);
+    expect(getEventListeners(abort.signal, 'abort')).toHaveLength(0);
+  });
+
   it('rejects a failed stream with the status', async () => {
     await expect(client().stream('/api/forbidden', () => {}, new AbortController().signal)).rejects.toThrow(/403/);
   });
 
   it('reports an unreachable server as a connection error', async () => {
-    await expect(client('http://127.0.0.1:1').request('GET', '/api/ok')).rejects.toThrow(/Could not reach the API server/);
+    const failure = client('http://127.0.0.1:1').request('GET', '/api/ok');
+    await expect(failure).rejects.toThrow(/Could not reach the API server/);
+    await expect(failure).rejects.toBeInstanceOf(ConnectionError);
   });
 
   it('fails when the kubeconfig has no current cluster', async () => {

@@ -60,8 +60,9 @@ export class ChatSession {
     const signal = this.controller.signal;
     let end: TurnEnd;
     try {
-      c.conversationId = await ask(this.client, c.namespace, c.crewName, question, c.conversationId ?? '', signal);
-      end = await streamTurn(this.client, c.namespace, c.crewName, c.conversationId, (e) => this.onEvent(e), signal, this.timing);
+      const queued = await ask(this.client, c.namespace, c.crewName, question, c.conversationId ?? '', signal);
+      c.conversationId = queued.conversationId;
+      end = await streamTurn(this.client, c.namespace, c.crewName, queued, (e) => this.onEvent(e), signal, this.timing);
     } catch (err) {
       end = signal.aborted ? { kind: 'aborted' } : { kind: 'error', message: err instanceof Error ? err.message : String(err) };
     }
