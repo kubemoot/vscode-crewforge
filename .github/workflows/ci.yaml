@@ -43,3 +43,29 @@ jobs:
         with:
           name: crewforge-vsix
           path: '*.vsix'
+
+  integration:
+    # A real VS Code runs the packaged extension against a local fake API server, so
+    # this needs no cluster; it runs on GitHub-hosted runners, under a virtual display.
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Cache the VS Code download
+        uses: actions/cache@v4
+        with:
+          path: .vscode-test/vscode-*
+          key: vscode-test-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
+      - name: Integration tests in VS Code
+        run: xvfb-run -a npm run test:integration

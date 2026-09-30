@@ -12,6 +12,8 @@ import { exportAsMarkdown, exportFileName } from '../store/export';
 import { crewAbout } from '../views/treeModel';
 import type { HostMessage, WebviewMessage } from '../webview/protocol';
 import { icons } from '../webview/render';
+import { messageText, type PanelState } from './panelState';
+import { tabIcon } from './tabIcon';
 import type { Located } from '../source/locate';
 import { trimEnd } from '../text';
 
@@ -62,11 +64,18 @@ export class ChatPanel {
     return questionFor(messages, messages.length - 1);
   }
 
+  /** Every open chat and what its page shows. */
+  static states(): PanelState[] {
+    return [...ChatPanel.panels.values()].map((p) => ({ title: p.panel.title, ready: p.pageReady, shown: p.shownText, errors: [...p.pageErrors] }));
+  }
+
   static get active(): ChatPanel | undefined {
     return ChatPanel.activePanel;
   }
 
   private readonly panel: vscode.WebviewPanel;
+  private shownText?: string;
+  private readonly pageErrors: string[] = [];
 
   private constructor(
     private readonly extensionUri: vscode.Uri,
@@ -82,7 +91,7 @@ export class ChatPanel {
       retainContextWhenHidden: true,
       localResourceRoots: [vscode.Uri.joinPath(extensionUri, 'dist'), vscode.Uri.joinPath(extensionUri, 'media')],
     });
-    this.panel.iconPath = vscode.Uri.joinPath(extensionUri, 'media', 'logo.svg');
+    this.panel.iconPath = tabIcon(extensionUri);
     const timing = { ...DEFAULT_TIMING, maxMs: streamTimeoutMs() };
     this.session = new ChatSession(
       connection.client,
@@ -179,6 +188,8 @@ export class ChatPanel {
   /** What each message from the page does, by type. */
   private readonly handlers: { [K in WebviewMessage['type']]: (m: Extract<WebviewMessage, { type: K }>) => unknown } = {
     ready: () => this.onReady(),
+    shown: (m) => void (this.shownText = messageText(m.text)),
+    error: (m) => void this.pageErrors.push(messageText(m.message)),
     send: (m) => this.session.send(m.text),
     stop: () => this.session.stop(),
     new: () => this.session.load(newConversation(this.connection.context, this.crew.namespace, this.crew.name)),

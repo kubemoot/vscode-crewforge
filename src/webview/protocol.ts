@@ -27,6 +27,10 @@ export type HostMessage = StateMessage | { type: 'prefill'; text: string };
 /** Webview to extension host. */
 export type WebviewMessage =
   | { type: 'ready' }
+  /** The page shows a state now; its text, so the extension knows what the person sees. */
+  | { type: 'shown'; text: string }
+  /** The page script hit an error. */
+  | { type: 'error'; message: string }
   | { type: 'send'; text: string }
   | { type: 'stop' }
   | { type: 'new' }

@@ -106,7 +106,7 @@ describe('the crew dashboard', () => {
     const [panel] = recorded.panels;
     const html = await body(panel);
     for (const text of ['demo', 'crew-demo in lab', 'Chart version differs: source 0.2.2, deployed 0.46.0', 'L', 'demo-coordinator', 'Agent k8s failed', 'Threads']) expect(html).toContain(text);
-    expect(panel.title).toBe('Crew demo');
+    expect(panel.title).toBe('demo');
     for (const action of ['redeploy', 'undeploy', 'ask', 'fitness', 'lint', 'yaml', 'refresh', 'deploy']) await press(panel, action);
     expect(recorded.executed.map((e) => e.id)).toEqual([
       'crewforge.redeployDev',
@@ -119,9 +119,9 @@ describe('the crew dashboard', () => {
     ]);
     expect(recorded.executed[1].args[0]).toMatchObject({ kind: 'deployment', entry });
     await press(panel, 'fitnessDashboard');
-    expect(recorded.panels.map((p) => p.title)).toContain('Fitness demo');
+    expect(recorded.panels.map((p) => p.title)).toContain('demo fitness');
     dashboards.openCrew({ kind: 'deployment', entry, deployment: { namespace: NS, crew: liveCrew(), channel: 'helm', linked: true } });
-    expect(recorded.panels.filter((p) => p.title.startsWith('Crew'))).toHaveLength(1);
+    expect(recorded.panels.filter((p) => p.viewType === 'crewforge.page' && p.title === 'demo')).toHaveLength(1);
     dashboards.dispose();
   });
 
@@ -178,7 +178,7 @@ describe('the Crews Overview', () => {
     expect(html).toContain('Deployed crews (2)');
     await press(panel, 'open', 'crew-demo/demo');
     await press(panel, 'open', 'nowhere/none');
-    expect(recorded.panels.map((p) => p.title)).toEqual(['Crews Overview', 'Crew demo']);
+    expect(recorded.panels.map((p) => p.title)).toEqual(['Crews Overview', 'demo']);
     recorded.quickPicks.push(undefined);
     await press(panel, 'connection');
     await press(panel, 'refresh');

@@ -730,7 +730,8 @@
     "test": "vitest run",
     "package": "node esbuild.mjs --production && vsce package --no-dependencies",
     "vscode:prepublish": "node esbuild.mjs --production",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "test:integration": "node esbuild.mjs --integration && node .vscode-test/out/runTest.js"
   },
   "dependencies": {
     "@kubernetes/client-node": "^2.0.0",
@@ -741,13 +742,16 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/js-yaml": "^4.0.9",
+    "@types/mocha": "^10.0.10",
     "@types/node": "^22.20.4",
     "@types/vscode": "^1.95.0",
     "@vitest/coverage-v8": "^5.0.2",
+    "@vscode/test-electron": "^3.1.0",
     "@vscode/vsce": "^4.0.0",
     "esbuild": "^0.28.2",
     "eslint": "^10.11.0",
     "jsdom": "^30.1.1",
+    "mocha": "^12.0.2",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.70.1",
     "vitest": "^5.0.2"

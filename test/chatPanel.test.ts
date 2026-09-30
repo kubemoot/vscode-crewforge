@@ -56,8 +56,15 @@ describe('ChatPanel', () => {
 
   it('answers ready with the state, and runs a turn on send, saving it', async () => {
     const panel = open();
+    expect(ChatPanel.states()).toEqual([{ title: 'Ask lab-ops', ready: false, shown: undefined, errors: [] }]);
     await panel.webview.receive({ type: 'ready' });
     expect(lastState(panel)).toMatchObject({ type: 'state', about: '2 agents, coordinator lab-ops-coordinator', view: { busy: false } });
+    await panel.webview.receive({ type: 'shown', text: 'lab-ops team-a' });
+    await panel.webview.receive({ type: 'shown', text: 7 });
+    await panel.webview.receive({ type: 'error', message: 'boom' });
+    expect(ChatPanel.states()[0]).toEqual({ title: 'Ask lab-ops', ready: true, shown: '', errors: ['boom'] });
+    await panel.webview.receive({ type: 'shown', text: 'lab-ops team-a' });
+    expect(ChatPanel.states()[0].shown).toBe('lab-ops team-a');
 
     transport.responses.push('{"conversationId":"conv-1"}');
     transport.streams.push(fixture('turn1.sse'));

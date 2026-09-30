@@ -3,13 +3,24 @@ import * as http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { KubeError } from '../src/k8s/request';
+import type { FakeCluster } from './fakeCluster';
 import { fixture } from './fakes';
 
 export interface FakeApi {
   url: string;
   kubeconfig: string;
   posts: { path: string; body: string }[];
+  /** Every request, as `METHOD path`. */
+  requests: string[];
   close(): Promise<void>;
+}
+
+export interface FakeApiOptions {
+  /** Answers the Kubemoot group (discovery, lists, gets, writes) from this cluster instead of the two fixed crews. */
+  cluster?: FakeCluster;
+  /** The kubeconfig's context name; "fake" by default. */
+  context?: string;
 }
 
 const CREWS = {
@@ -19,36 +30,46 @@ const CREWS = {
   ],
 };
 
-/**
- * A local stand-in for the Kubernetes API server: lists Crews and serves a crew's
- * discussion gateway through the service-proxy paths, answering every question with a
- * recorded stream. Writes a kubeconfig pointing at it (context "fake").
- */
-export async function startFakeApi(): Promise<FakeApi> {
-  const posts: { path: string; body: string }[] = [];
-  const server = http.createServer((req, res) => {
-    let body = '';
-    req.on('data', (c) => (body += c));
-    req.on('end', () => {
-      const url = req.url ?? '';
-      if (url.endsWith('/apis/kubemoot.ai/v1alpha1/crews')) {
-        res.setHeader('Content-Type', 'application/json');
-        return void res.end(JSON.stringify(CREWS));
-      }
-      if (req.method === 'POST' && url.includes('/proxy/api/v1/discussions/')) {
-        posts.push({ path: url, body });
-        return void res.end('{"conversationId":"conv-fake"}');
-      }
-      if (url.endsWith('/stream')) {
-        res.writeHead(200, { 'Content-Type': 'text/event-stream' });
-        return void res.end(fixture('turn1.sse'));
-      }
-      res.writeHead(404);
-      res.end('not found');
-    });
-  });
-  await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
-  const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+const OPERATOR = {
+  items: [
+    {
+      metadata: { name: 'kubemoot-operator', namespace: 'kubemoot', labels: { 'helm.sh/chart': 'kubemoot-0.300.0' } },
+      spec: { template: { spec: { containers: [{ name: 'manager', image: 'harbor.example/kubemoot/operator:0.300.0' }] } } },
+    },
+  ],
+};
+
+type Reply = { status: number; body: string; type?: string };
+
+const json = (value: unknown, status = 200): Reply => ({ status, body: JSON.stringify(value) });
+
+/** The fixed routes: the version, the operator, and a crew's discussion gateway through the service proxy. */
+function fixedRoute(method: string, url: string, body: string, posts: FakeApi['posts'], cluster?: FakeCluster): Reply | undefined {
+  const route = url.split('?')[0];
+  if (route === '/version') return json({ gitVersion: 'v1.31.0-fake' });
+  if (route === '/apis/apps/v1/deployments' && url.includes('kubemoot-operator')) return json(OPERATOR);
+  if (!cluster && route.endsWith('/apis/kubemoot.ai/v1alpha1/crews')) return json(CREWS);
+  if (method === 'POST' && url.includes('/proxy/api/v1/discussions/')) {
+    posts.push({ path: url, body });
+    return { status: 200, body: '{"conversationId":"conv-fake"}' };
+  }
+  if (route.endsWith('/stream')) return { status: 200, body: fixture('turn1.sse'), type: 'text/event-stream' };
+  return undefined;
+}
+
+/** A Kubemoot group request answered by the cluster, with a Kubernetes Status body on failure. */
+async function clusterRoute(cluster: FakeCluster, method: string, url: string, body: string): Promise<Reply> {
+  const route = url.split('?')[0];
+  if (!route.startsWith('/apis/kubemoot.ai/')) return json({ kind: 'Status', message: `the fake API server has no ${route}` }, 404);
+  try {
+    return { status: 200, body: await cluster.request(method, route, body ? JSON.parse(body) : undefined) };
+  } catch (err) {
+    const status = err instanceof KubeError && err.status ? err.status : 404;
+    return json({ kind: 'Status', message: err instanceof Error ? err.message : String(err) }, status);
+  }
+}
+
+function writeKubeconfig(url: string, context: string): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'crewforge-api-'));
   const kubeconfig = path.join(dir, 'config');
   fs.writeFileSync(
@@ -57,13 +78,50 @@ export async function startFakeApi(): Promise<FakeApi> {
       'apiVersion: v1',
       'kind: Config',
       'clusters:',
-      `- name: fake\n  cluster:\n    server: ${url}\n    insecure-skip-tls-verify: true`,
+      `- name: ${context}\n  cluster:\n    server: ${url}\n    insecure-skip-tls-verify: true`,
       'users:',
-      '- name: fake\n  user:\n    token: t',
+      `- name: ${context}\n  user:\n    token: t`,
       'contexts:',
-      '- name: fake\n  context:\n    cluster: fake\n    user: fake',
-      'current-context: fake',
+      `- name: ${context}\n  context:\n    cluster: ${context}\n    user: ${context}`,
+      `current-context: ${context}`,
     ].join('\n'),
   );
-  return { url, kubeconfig, posts, close: () => new Promise((r) => server.close(() => r())) };
+  return kubeconfig;
+}
+
+/**
+ * A local stand-in for the Kubernetes API server: lists Crews (two fixed ones, or a whole
+ * FakeCluster's objects) and serves a crew's discussion gateway through the service-proxy
+ * paths, answering every question with a recorded stream. Writes a kubeconfig pointing at
+ * it (context "fake" unless named).
+ */
+export async function startFakeApi(options: FakeApiOptions = {}): Promise<FakeApi> {
+  const posts: FakeApi['posts'] = [];
+  const requests: string[] = [];
+  const server = http.createServer((req, res) => {
+    let body = '';
+    req.on('data', (c) => (body += c));
+    req.on('end', async () => {
+      const url = req.url ?? '';
+      const method = req.method ?? 'GET';
+      requests.push(`${method} ${url}`);
+      const reply = fixedRoute(method, url, body, posts, options.cluster) ?? (options.cluster ? await clusterRoute(options.cluster, method, url, body) : { status: 404, body: 'not found' });
+      res.writeHead(reply.status, { 'Content-Type': reply.type ?? 'application/json' });
+      res.end(reply.body);
+    });
+  });
+  await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+  const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  const kubeconfig = writeKubeconfig(url, options.context ?? 'fake');
+  return {
+    url,
+    kubeconfig,
+    posts,
+    requests,
+    close: () =>
+      new Promise((r) => {
+        server.closeAllConnections();
+        server.close(() => r());
+      }),
+  };
 }

@@ -5,6 +5,12 @@ generated from the conventional commits since the previous release.
 
 ## Unreleased
 
+### Fixes
+
+- The crew dashboard, the Crews Overview, and the fitness dashboard show their data again instead of hanging on "Reading...".
+- A page that cannot start says so; a slow read says "Still reading from <context>..."; a cluster that does not answer is named after a bounded wait. Page errors go to the CrewForge output channel.
+- Dashboard and chat tabs carry the Kubemoot logo, in light and dark variants.
+
 ### Crew Sources
 
 - Crew Sources follows the file system: adding, deleting, or renaming a crew folder or one of its files, or a workspace folder, updates the view by itself, with one reload per burst of changes. Refresh stays as a manual fallback.

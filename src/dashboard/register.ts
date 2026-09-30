@@ -193,7 +193,7 @@ class CrewDashboard implements PageModel {
   ) {}
 
   title(): string {
-    return `Crew ${this.vitals?.name ?? this.target.entry?.crewName ?? this.target.crew?.name ?? ''}`;
+    return this.vitals?.name ?? this.target.entry?.crewName ?? this.target.crew?.name ?? this.target.entry?.source.label ?? 'Crew';
   }
 
   async render(): Promise<string> {
@@ -296,7 +296,7 @@ class FitnessDashboard implements PageModel {
   }
 
   title(): string {
-    return `Fitness ${this.at.deployment.crew.name}`;
+    return `${this.at.deployment.crew.name} fitness`;
   }
 
   async render(): Promise<string> {

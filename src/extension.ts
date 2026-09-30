@@ -18,6 +18,7 @@ import { LIVE_SCHEME, LiveDocuments } from './views/liveDocuments';
 import { execProgram, listScripts, readText, readYamlFiles } from './source/nodeDeps';
 import { connectionLines } from './connectionInfo';
 import { Dashboards } from './dashboard/register';
+import { PagePanel, type PageState } from './dashboard/pagePanel';
 import { FitnessActivity } from './fitness/controls';
 import { registerScenarioCommands } from './fitness/scenarioCommands';
 import { ScenarioFiles } from './fitness/scenarios';
@@ -36,7 +37,20 @@ import { YamlCommands, type YamlTarget } from './views/yamlCommands';
 
 const REFRESH_MS = 30_000;
 
-export function activate(context: vscode.ExtensionContext): void {
+/**
+ * What CrewForge hands other code once it is active: its views and what each open page
+ * shows. The integration tests read it to check what a person would see.
+ */
+export interface CrewForgeApi {
+  crews: CrewTreeProvider;
+  sources: SourceTreeProvider;
+  crewsView: vscode.TreeView<CrewNode>;
+  sourcesView: vscode.TreeView<SourceNode>;
+  pages: () => PageState[];
+  chats: () => ReturnType<typeof ChatPanel.states>;
+}
+
+export function activate(context: vscode.ExtensionContext): CrewForgeApi {
   const store = new ConversationStore(path.join(context.globalStorageUri.fsPath, 'conversations'));
   const tree = new CrewTreeProvider();
   const view = vscode.window.createTreeView('crewforge.crews', { treeDataProvider: tree, showCollapseAll: true });
@@ -62,6 +76,7 @@ export function activate(context: vscode.ExtensionContext): void {
   const sourcesView = vscode.window.createTreeView('crewforge.sources', { treeDataProvider: sources, showCollapseAll: true });
   const documents = new ManifestDocuments();
   const output = vscode.window.createOutputChannel('CrewForge');
+  PagePanel.host = { log: (line) => output.appendLine(line), readingFrom: () => (tree.connection ?? connect()).context };
   const schemas = new SchemaProvider(() => currentConnection(tree)?.client);
   void schemas.register();
   const deploy = new DeployCommands(sources, { exec: execProgram, readYamlFiles }, output, () => {
@@ -181,6 +196,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('crewforge.selectKubeconfig', () => commands.selectKubeconfig()),
     vscode.commands.registerCommand('crewforge.openConversationsFolder', () => commands.openConversationsFolder()),
   );
+  return { crews: tree, sources, crewsView: view, sourcesView, pages: () => PagePanel.states(), chats: () => ChatPanel.states() };
 }
 
 export function deactivate(): void {

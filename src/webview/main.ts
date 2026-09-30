@@ -5,6 +5,8 @@ import type { AgentCard, TurnState } from '../discussion/reducer';
 import { agentsOf, problemsOf, type AgentNote, type ChatMessage, type ConversationMeta } from '../store/conversation';
 import type { HostMessage, StateMessage, WebviewMessage } from './protocol';
 import { escapeHtml, formatAgo, htmlAttribute, icons, isWebLink, metaLine } from './render';
+import { reportErrors } from './reportErrors';
+import { shownText } from './shown';
 
 interface VsCodeApi {
   postMessage(message: WebviewMessage): void;
@@ -119,6 +121,7 @@ setInterval(() => {
 }, 1000);
 
 setupResizer();
+reportErrors((message) => vscode.postMessage({ type: 'error', message }));
 
 vscode.postMessage({ type: 'ready' });
 
@@ -178,6 +181,7 @@ function render(): void {
   els.history.innerHTML = renderHistory(state.history, conversation.id);
   renderMessages();
   renderSend();
+  vscode.postMessage({ type: 'shown', text: shownText(document.body) });
 }
 
 function renderHistory(history: ConversationMeta[], activeId: string): string {

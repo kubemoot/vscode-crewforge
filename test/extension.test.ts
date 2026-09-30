@@ -2,7 +2,8 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { activate, Commands, deactivate } from '../src/extension';
+import { activate, Commands, deactivate, type CrewForgeApi } from '../src/extension';
+import { PagePanel } from '../src/dashboard/pagePanel';
 import { newConversation } from '../src/store/conversation';
 import { ConversationStore } from '../src/store/conversations';
 import { startFakeApi, type FakeApi } from './fakeApiServer';
@@ -16,6 +17,7 @@ const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.
 let api: FakeApi;
 let storage: string;
 let subscriptions: { dispose(): unknown }[];
+let exported: CrewForgeApi;
 
 beforeAll(async () => (api = await startFakeApi()));
 afterAll(() => api.close());
@@ -25,7 +27,7 @@ beforeEach(() => {
   recorded.settings.set('crewforge.kubeconfig', api.kubeconfig);
   storage = fs.mkdtempSync(path.join(os.tmpdir(), 'crewforge-ext-'));
   subscriptions = [];
-  activate({ globalStorageUri: Uri.file(storage), extensionUri: Uri.file('/ext'), subscriptions, workspaceState } as never);
+  exported = activate({ globalStorageUri: Uri.file(storage), extensionUri: Uri.file('/ext'), subscriptions, workspaceState } as never);
 });
 
 afterEach(() => {
@@ -52,6 +54,22 @@ describe('activate', () => {
     recorded.configListeners.forEach((l) => l({ affectsConfiguration: (s) => s === 'crewforge' }));
     recorded.configListeners.forEach((l) => l({ affectsConfiguration: () => false }));
     expect(refreshed).toBe(2);
+  });
+});
+
+describe('what CrewForge hands other code', () => {
+  it('is its views and what each open page and chat shows', async () => {
+    expect(exported.crewsView).toBe(recorded.treeViews[0]);
+    expect(exported.sourcesView).toBe(recorded.treeViews[1]);
+    expect(exported.crews).toBe(recorded.treeViews[0].options.treeDataProvider);
+    expect(exported.sources).toBe(recorded.treeViews[1].options.treeDataProvider);
+    expect(exported.pages()).toEqual([]);
+    expect(exported.chats()).toEqual([]);
+    await run('crewforge.openCrewsOverview');
+    expect(exported.pages().map((p) => p.key)).toEqual(['overview']);
+    expect(PagePanel.host.readingFrom()).toBe('fake');
+    PagePanel.host.log('a page problem');
+    expect(recorded.output).toContain('a page problem');
   });
 });
 
@@ -182,7 +200,7 @@ describe('commands', () => {
     await run('crewforge.openFitnessDashboard', { kind: 'crew', crew });
     await run('crewforge.openCrewDashboard');
     await run('crewforge.openFitnessDashboard', { kind: 'message', text: 'x' });
-    expect(recorded.panels.map((p) => p.title)).toEqual(['Crews Overview', 'Crew lab-ops', 'Fitness lab-ops']);
+    expect(recorded.panels.map((p) => p.title)).toEqual(['Crews Overview', 'lab-ops', 'lab-ops fitness']);
     recorded.quickPicks.push(undefined);
     await run('crewforge.showConnectionInfo');
     for (const id of ['crewforge.addScenario', 'crewforge.renameScenario', 'crewforge.deleteScenario', 'crewforge.runScenario']) await run(id, { kind: 'message', text: 'x' });

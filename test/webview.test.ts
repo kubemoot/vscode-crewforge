@@ -9,6 +9,8 @@ import { META_SEPARATOR } from '../src/webview/render';
 import { recorded, resetFake, Uri } from './vscodeFake';
 
 let sent: WebviewMessage[];
+/** The text the page reported after each render. */
+let shown: string[] = [];
 /** What the host says the page may link to; a test changes it before posting. */
 let links: StateMessage['links'];
 let state: unknown;
@@ -20,11 +22,12 @@ async function loadPage(): Promise<void> {
   const html = recorded.panels.at(-1)!.webview.html;
   document.body.innerHTML = /<body>([\s\S]*)<\/body>/.exec(html)![1].replace(/<script[\s\S]*<\/script>/, '');
   sent = [];
+  shown = [];
   state = undefined;
   links = { agents: [], dashboard: false };
   availability = undefined;
   (globalThis as unknown as { acquireVsCodeApi: () => unknown }).acquireVsCodeApi = () => ({
-    postMessage: (m: WebviewMessage) => sent.push(m),
+    postMessage: (m: WebviewMessage) => (m.type === 'shown' ? shown.push(m.text) : sent.push(m)),
     getState: () => state,
     setState: (s: unknown) => (state = s),
   });
@@ -60,6 +63,7 @@ describe('the chat page', () => {
     expect($('where').textContent).toContain('team-a');
     expect($('messages').textContent).toContain('Discuss with the lab-ops crew');
     expect(($('copy') as HTMLButtonElement).hidden).toBe(true);
+    expect(shown.at(-1)).toContain('Discuss with the lab-ops crew');
   });
 
   it('renders the answer as Markdown, shows raw HTML as text, and links only web URLs', () => {
