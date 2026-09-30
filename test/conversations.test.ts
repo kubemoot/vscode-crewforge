@@ -10,11 +10,11 @@ const store = () => new ConversationStore(fs.mkdtempSync(path.join(os.tmpdir(), 
 describe('ConversationStore', () => {
   it('saves and loads a conversation under context, namespace and crew', async () => {
     const s = store();
-    const c = newConversation('admin@homelab-k8s-1', 'team-1', 'lab-ops', new Date('2026-09-27T01:02:03.456Z'));
+    const c = newConversation('admin@team-cluster', 'team-1', 'lab-ops', new Date('2026-09-27T01:02:03.456Z'));
     c.messages.push({ role: 'user', content: 'hi', timestamp: c.startedAt });
     c.conversationId = 'conv-1';
     await s.save(c);
-    expect(s.file(c)).toBe(path.join(s.root, 'admin_homelab-k8s-1', 'team-1', 'lab-ops', '2026-09-27T01-02-03-456Z.json'));
+    expect(s.file(c)).toBe(path.join(s.root, 'admin_team-cluster', 'team-1', 'lab-ops', '2026-09-27T01-02-03-456Z.json'));
     expect(await s.load(c)).toEqual(c);
     expect(fs.readdirSync(path.dirname(s.file(c)))).toEqual(['2026-09-27T01-02-03-456Z.json']);
   });

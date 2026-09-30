@@ -321,7 +321,7 @@
         "crewforge.dashboardUrl": {
           "type": "string",
           "default": "",
-          "markdownDescription": "URL of the Kubemoot dashboard for this cluster, opened from **Powered by Kubemoot** in a chat. With `dashboards.sh`, use the local address it prints for the Kubemoot dashboard."
+          "markdownDescription": "URL of the Kubemoot dashboard for this cluster, opened from **Powered by Kubemoot** in a chat. With a `kubectl port-forward` to the dashboard service, use its local address, for example `http://localhost:8080/dashboard`."
         }
       }
     }
