@@ -60,6 +60,11 @@ export function sourceOf(entries: SourceEntry[], file: string): SourceEntry | un
   return holding.sort((a, b) => b.source.root.length - a.source.root.length)[0];
 }
 
+/** Where a source's fitness definitions live: a `fitness` folder inside it (a kmctl chart) or beside it (a workshop bundle). */
+export function fitnessFolders(source: CrewSource): string[] {
+  return [path.join(source.root, 'fitness'), path.join(path.dirname(source.root), 'fitness')];
+}
+
 /** The namespace a source is rendered into only to learn its crew's name. */
 const PROBE_NAMESPACE = 'default';
 
@@ -125,7 +130,7 @@ export class SourceService {
   }
 
   private async fitnessLocated(entry: SourceEntry, located: Located[]): Promise<Located[]> {
-    const folders = [path.join(entry.source.root, 'fitness'), path.join(path.dirname(entry.source.root), 'fitness')];
+    const folders = fitnessFolders(entry.source);
     const loose = (await Promise.all(folders.map((f) => this.yamlIn(f)))).flat();
     const unique = new Map([...located, ...loose].filter((l) => isFitness(l.manifest)).map((l) => [objectKey(l.manifest), l]));
     return [...unique.values()];

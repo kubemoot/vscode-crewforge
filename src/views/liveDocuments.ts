@@ -50,7 +50,7 @@ export class LiveDocuments implements vscode.TextDocumentContentProvider {
 
   async provideTextDocumentContent(uri: vscode.Uri): Promise<string> {
     const target = this.targets.get(uri.toString());
-    if (!target) return '# This live document is gone; open it again from the Crews view.\n';
+    if (!target) return '# This live document is gone; open it again from the Deployed Crews view.\n';
     try {
       return await this.render(target);
     } catch (err) {

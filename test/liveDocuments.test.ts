@@ -72,7 +72,7 @@ describe('LiveDocuments', () => {
   it('says what went wrong instead of failing, and asks to reopen an unknown document', async () => {
     await documents.show({ kind: 'object', ref: { kind: 'Agent', name: 'gone', namespace: 'team-a' } });
     expect(await text('crewforge-live:/team-a/Agent/gone.yaml')).toBe('# Cannot read it: agents "gone" not found\n');
-    expect(await text('crewforge-live:/team-a/Agent/never.yaml')).toContain('open it again from the Crews view');
+    expect(await text('crewforge-live:/team-a/Agent/never.yaml')).toContain('open it again from the Deployed Crews view');
   });
 
   it('tells an open document to reload each time it is shown', async () => {

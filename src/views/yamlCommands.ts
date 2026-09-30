@@ -14,7 +14,7 @@ type ResourceNode = Extract<SourceNode, { kind: 'resource' }>;
 
 /**
  * Compare with Live, Show Source YAML, and Show Live YAML (normalized or raw), on a
- * resource of Crew Sources, a node of the Crews view, or the diff editor's documents.
+ * resource of Crew Sources, a node of the Deployed Crews view, or the diff editor's documents.
  */
 export class YamlCommands {
   constructor(

@@ -12,7 +12,7 @@ export interface CrewRevision {
   observedAt?: string;
 }
 
-/** What the Crews view shows for one Crew. */
+/** What the Deployed Crews view shows for one Crew. */
 export interface CrewSummary {
   name: string;
   namespace: string;

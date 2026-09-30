@@ -175,7 +175,9 @@ export const recorded = {
   progress: [] as string[],
   extensions: new Map<string, unknown>(),
   codeLensProviders: [] as unknown[],
-  textDocuments: [] as { uri: Uri; getText(): string }[],
+  textDocuments: [] as { uri: Uri; getText(): string; isDirty?: boolean }[],
+  /** The answer applyEdit gives; false makes it fail. */
+  applyEditResult: true,
   cancel: undefined as (() => void) | undefined,
   documentProviders: new Map<string, { provideTextDocumentContent(uri: Uri): string }>(),
   /** Answers for information messages with actions, in order; undefined dismisses. */
@@ -193,6 +195,8 @@ export const recorded = {
   /** File system watchers created, in order. */
   watchers: [] as FakeWatcher[],
   folderListeners: [] as Listener<unknown>[],
+  /** Paths moved to the trash (or deleted) through workspace.fs. */
+  trashed: [] as string[],
   /** The editor window.activeTextEditor answers with. */
   activeEditor: undefined as { document: { uri: Uri; languageId: string; getText(range?: unknown): string }; selection: unknown } | undefined,
 };
@@ -224,6 +228,7 @@ export function resetFake(): void {
   recorded.extensions.clear();
   recorded.codeLensProviders = [];
   recorded.textDocuments = [];
+  recorded.applyEditResult = true;
   recorded.cancel = undefined;
   recorded.activeEditor = undefined;
   recorded.infoAnswers = [];
@@ -236,6 +241,15 @@ export function resetFake(): void {
   recorded.workspaceState.clear();
   recorded.watchers = [];
   recorded.folderListeners = [];
+  recorded.trashed = [];
+}
+
+/** A workspace edit that records file renames. */
+export class WorkspaceEdit {
+  renames: [Uri, Uri][] = [];
+  renameFile(from: Uri, to: Uri): void {
+    this.renames.push([from, to]);
+  }
 }
 
 /** A file system watcher a test fires events on. */
@@ -453,6 +467,25 @@ export const workspace = {
   onDidChangeWorkspaceFolders(listener: Listener<unknown>) {
     recorded.folderListeners.push(listener);
     return { dispose() {} };
+  },
+  /** Applies a WorkspaceEdit's renames on the real file system, unless a test makes it fail. */
+  async applyEdit(edit: WorkspaceEdit) {
+    if (!recorded.applyEditResult) return false;
+    const nodeFs = await import('node:fs/promises');
+    for (const [from, to] of edit.renames) await nodeFs.rename(from.fsPath, to.fsPath);
+    return true;
+  },
+  /** The real file system, except that delete records the path and moves nothing to a real trash. */
+  fs: {
+    async delete(uri: Uri, options?: { recursive?: boolean; useTrash?: boolean }) {
+      recorded.trashed.push(`${uri.fsPath}${options?.useTrash ? ' (trash)' : ''}`);
+      const nodeFs = await import('node:fs/promises');
+      await nodeFs.rm(uri.fsPath, { recursive: options?.recursive ?? false, force: true });
+    },
+    async rename(from: Uri, to: Uri) {
+      const nodeFs = await import('node:fs/promises');
+      await nodeFs.rename(from.fsPath, to.fsPath);
+    },
   },
   onDidSaveTextDocument(listener: Listener<{ uri: Uri }>) {
     recorded.saveListeners.push(listener);

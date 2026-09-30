@@ -18,8 +18,9 @@ crew needs a public address and no extra credential is involved.
    in VS Code, **Extensions: Install from VSIX...**, or
    `code --install-extension crewforge-<version>.vsix`.
 2. Click the Kubemoot mark (the round table) in the activity bar on the left. The
-   **Crews** view lists every crew your kubeconfig can read, grouped by namespace, with a
-   green mark on the ready ones.
+   **Deployed Crews** view lists every crew your kubeconfig can read, grouped by namespace,
+   with a green mark on the ready ones. **Crew Sources** below it lists the crew charts and
+   bundles in your workspace.
 3. Click a crew. A chat opens beside the view. Type a question and press Enter.
 
 CrewForge reads the kubeconfig from the `crewforge.kubeconfig` setting, else every file
@@ -82,16 +83,16 @@ stay the outer loop.
    such as a field the CRD does not define. Saving a file of the crew lints it again once
    the saves settle. A chart needs `helm` on your PATH; without it Lint Crew says where to
    get it.
-5. **Deploy.** **Deploy (dev)** (the rocket on a source) runs `helm upgrade --install` into
+5. **Deploy.** **Deploy to Dev Namespace** (the rocket on a source) runs `helm upgrade --install` into
    `crew-<name>` on the current context. It asks for the namespace the first time and
    remembers it for that source; after that it is one click. A bundle deploys with `kubectl
    apply --server-side` instead. CrewForge then follows the crew until the operator has seen
    the deploy and the Crew and all its agents report ready (cancel the progress
-   notification to stop following), and selects the crew in the Crews view. A crew or agent
+   notification to stop following), and selects the crew in the Deployed Crews view. A crew or agent
    that fails says so.
 6. **Test.** **Ask** opens the chat with the deployed crew; **Run Fitness** runs one of its
    fitness definitions against it. Both are on the source, in the status bar menu, and on
-   the live crew in the Crews view.
+   the live crew in the Deployed Crews view.
 7. **Debug.** Under each crew answer, *N agents took part* lists each agent's last word in
    the turn. When the crew's source is open in the workspace, an agent's name links to where
    it is defined: its Agent, then the PromptModules it composes. With `crewforge.dashboardUrl`
@@ -100,20 +101,20 @@ stay the outer loop.
   address.
 8. **Change and redeploy.** Saving a file of a deployed crew marks it *changed since
    deploy* in the status bar and on its source; the lint and drift check that follow have
-   the last word. **Redeploy (dev)** (the sync icon on a changed source, or the status bar)
+   the last word. **Redeploy to Dev Namespace** (the sync icon on a changed source, or the status bar)
    upgrades the release and waits for the agents again.
 9. **Retest.** The redeploy's notification offers **Re-ask last question** (in the open
    chat, else the newest saved conversation with the crew) and **Rerun fitness** (the
    definition you ran last, without asking).
 
 To deploy somewhere else, choose **Change the dev namespace** from the status bar menu, or
-use **Deploy Crew to a Namespace** for any namespace and channel. A namespace where Flux or
+use **Deploy to a Namespace...** for any namespace and channel. A namespace where Flux or
 a bundle already owns the crew is refused, since two channels must not fight over the same
 objects.
 
 ## Explore a live crew
 
-Expand a crew in the **Crews** view to see what it is made of, read from the cluster:
+Expand a crew in the **Deployed Crews** view to see what it is made of, read from the cluster:
 
 - **Agents**, each with its discussion role, the capabilities it asks the scheduler for
   (never a model name), and whether it is ready.
@@ -132,14 +133,14 @@ namespace, labels, creation time, archetype, and status conditions. Click any le
 its live YAML in a read-only editor; **Show YAML** and **Show Crew Bundle YAML** (the
 Crew with its Agents, PromptModules, and Skills in one document) are on a crew's menu.
 
-A crew's menu also carries the lifecycle commands of Crew Sources: **Update Deployment
-from Source**, **Deploy a Revision**, **Run Fitness**, **Follow GitOps Rollout** (Flux),
-and **Remove Deployment**. CrewForge finds the crew's source among the workspace's crew
+A crew's menu also carries the lifecycle commands of Crew Sources: **Redeploy from
+Source**, **Deploy a Git Revision**, **Run Fitness**, **Follow Flux Rollout** (Flux), and
+**Undeploy (Remove Deployment)**. CrewForge finds the crew's source among the workspace's crew
 charts and bundles: the one the Crew names, else the one that renders a crew of its
-name. When no source is open it says so. Remove Deployment works without a source: it
+name. When no source is open it says so. Undeploy works without a source: it
 confirms with the crew's name, then uninstalls a Helm crew's release, or deletes the
 crew's Crew, Agents, Skills, and the PromptModules only it uses. A Flux-managed crew
-changes only through git. **Create Crew** is on the Crews view's title bar too.
+changes only through git. **Create Crew** is on the Deployed Crews view's title bar too.
 
 
 The **Crew Sources** view finds crew Helm charts and plain-manifest bundles in the
@@ -150,9 +151,8 @@ workspace and, under each, every namespace its crew is deployed to.
   pick. It needs [kmctl](https://github.com/kubemoot/kmctl/releases) 0.12.0 or later on
   your PATH, and checks the version before asking anything.
 - Each source expands to what it declares (see [Develop a crew](#develop-a-crew)), then to
-  its deployments. Its menu has **Deploy (dev)**, **Ask**, **Run Fitness**, and **Lint
-  Crew**.
-- **Deploy Crew to a Namespace** (the upload icon on a source) deploys into any namespace
+  its deployments. Its menu has the actions in the table below.
+- **Deploy to a Namespace...** (on a source's menu) deploys into any namespace
   you name, through Helm (`helm upgrade --install`), as a bundle (`kubectl apply
   --server-side`), or, for a crew Flux manages, by commit and push. A crew keeps the
   channel it came through, and CrewForge asks before replacing a crew from another source
@@ -172,9 +172,9 @@ workspace and, under each, every namespace its crew is deployed to.
   Source YAML** (the object as the source renders it, read-only, with a link that opens
   its source file at the object for editing), **Show Live YAML** (normalized the same
   way), and **Show Live YAML (raw)** (everything the API server holds, status and all).
-- A deployment's menu has **Update Deployment from Source** (a bundle applies only what
-  differs), **Deploy a Revision** (any commit that touched the source, to roll back or
-  forward), **Run Fitness**, **Follow GitOps Rollout** (Flux), and **Remove Deployment**.
+- A deployment's menu has **Redeploy from Source** (a bundle applies only what differs),
+  **Deploy a Git Revision** (any commit that touched the source, to roll back or forward),
+  **Run Fitness**, **Follow Flux Rollout** (Flux), and **Undeploy (Remove Deployment)**.
 - Its **Fitness** node lists its fitness runs with their results; a run opens as a report.
   CrewForge warns before starting a run while another is in progress, since crews share
   the GPUs.
@@ -183,6 +183,28 @@ workspace and, under each, every namespace its crew is deployed to.
   deployment where it was compared; click one for the diff.
 - With the Red Hat YAML extension installed, Kubemoot manifests are checked against the
   cluster's own schema, including fields the CRD does not define.
+
+### What each action does
+
+| Action | When to use it | What it changes |
+|---|---|---|
+| **Deploy to Dev Namespace** | First deploy while developing a crew | `helm upgrade --install` (a bundle: `kubectl apply --server-side`) into the source's dev namespace, `crew-<name>` by default; records the source on the Crew and waits until it is ready |
+| **Redeploy to Dev Namespace (helm upgrade)** | After editing a deployed crew | The same release in the dev namespace, upgraded from the source; waits for the agents again |
+| **Deploy to a Namespace...** | Any other namespace or channel | A Helm release or bundle in the namespace you name; for Flux, nothing (it tells you to commit and push) |
+| **Redeploy from Source (helm upgrade or kubectl apply)** | A deployment in the list is behind its source | That deployment, through the channel it came by; a bundle applies only the objects that differ |
+| **Apply Only This Object (kubectl apply)** | One changed or missing object of a bundle | That one Kubemoot object |
+| **Deploy a Git Revision (Roll Back or Forward)** | Go back to, or forward to, a committed version | The deployment, rendered from that commit |
+| **Follow Flux Rollout (GitOps channel)** | A crew Flux manages, after you push | Nothing; it follows the HelmRelease until it settles |
+| **Undeploy (Remove Deployment)** | Take a crew out of a namespace | `helm uninstall` of its release, or deletes the Kubemoot objects the bundle renders; the operator's finalizers clean up the rest. The namespace stays unless the crew manages it |
+| **Delete Crew Source (move folder to trash)** | Throw away a crew you no longer want | The source folder moves to the trash after a confirmation that names it; if the crew is deployed, it offers to undeploy first. A workspace folder, or a folder holding another crew source, is refused. The cluster does not change otherwise |
+| **Rename Crew** | Give a crew a new name | The chart name, the Crew, every name built on the crew's (agents, prompt modules, policy, fitness suites) and the references to them, and the folder when it carries the crew's name; other keys, prompt text, and `.tpl` helpers stay as they are. It waits until the crew's files are saved. A deployed crew keeps the old name: redeploy to deploy the new one, and undeploy the old one (offered first) |
+| **Compare Source with Live (normalized diff)** | See how a deployed object differs from the source | Nothing |
+| **Show Source YAML** / **Show Live YAML** / **Show Live YAML (raw)** | Look at one side alone | Nothing |
+| **Lint Crew (helm lint and schema check)** | Before deploying, or any time | Nothing; findings go to the Problems panel |
+| **Ask Crew** / **Run Fitness** | Try the deployed crew | Run Fitness creates a fitness run (a Kubemoot object) in the crew's namespace |
+
+CrewForge applies only Kubemoot objects and Helm releases of them. It never deletes a
+namespace or any other kind of object; the operator owns cleanup.
 
 `helm`, `kubectl`, and `git` come from your PATH; CrewForge runs them with its kubeconfig
 and context. Lint Crew reads the Kubemoot schemas from the cluster's OpenAPI; without a

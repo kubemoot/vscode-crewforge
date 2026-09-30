@@ -1,0 +1,119 @@
+import * as fs from 'node:fs/promises';
+import * as path from 'node:path';
+import { IGNORED_DIRS } from './ignored';
+
+/**
+ * Keys whose values name the crew or an object built on its name: `name`, `crew`,
+ * `kubemoot.ai/crew`, and any reference key (`crewRef`, `promptRefs`, `coordinatorRef`).
+ */
+const NAME_KEY = /^(name|crew|kubemoot\.ai\/crew|[A-Za-z]*Refs?)$/;
+const KEY_LINE = /^(\s*)(-\s+)?(["']?)([\w./-]+)\3:(\s*)(.*)$/;
+const LIST_ITEM = /^(\s*)-\s+(.*)$/;
+const BLOCK_SCALAR = /^[|>][-+0-9]*\s*(#.*)?$/;
+
+/** The crew name in one value token: the name itself, or a name built on it (`<crew>-coordinator`). */
+function renameToken(token: string, from: string, to: string): string {
+  if (token === from) return to;
+  return token.startsWith(`${from}-`) ? `${to}${token.slice(from.length)}` : token;
+}
+
+/**
+ * The crew name in a value: a plain or quoted scalar, or each item of a `[a, b]` list;
+ * a trailing comment is kept as it is.
+ */
+function renameValue(value: string, from: string, to: string): string {
+  const flow = /^\[(.*)\](\s*(?:#.*)?)$/.exec(value);
+  if (flow) return `[${flow[1].split(',').map((item) => renameValue(item, from, to)).join(',')}]${flow[2]}`;
+  const m = /^(\s*)(["']?)([^"'#\s]+)\2(\s*(?:#.*)?)$/.exec(value);
+  return m ? `${m[1]}${m[2]}${renameToken(m[3], from, to)}${m[2]}${m[4]}` : value;
+}
+
+/** Where the walk through a file stands: inside a block scalar's text, or in a list under a name key. */
+interface Walk {
+  /** The indent of the key that opened a block scalar (`content: |`); deeper lines are its text. */
+  blockIndent?: number;
+  /** The indent of a name key with no value (`promptRefs:`); its list items name objects. */
+  listIndent?: number;
+}
+
+const indentOf = (line: string) => line.length - line.trimStart().length;
+
+/** True for a line of a block scalar's text: blank, or deeper than the key that opened it. */
+function inBlock(line: string, walk: Walk): boolean {
+  return walk.blockIndent !== undefined && (line.trim() === '' || indentOf(line) > walk.blockIndent);
+}
+
+/** A `key: value` line: renamed when the key holds a name; it may open a block scalar or a list of names. */
+function renameKeyLine(key: RegExpExecArray, from: string, to: string): [string, Walk] {
+  const [line, lead, dash = '', quote, name, gap, value] = key;
+  const at = lead.length + dash.length;
+  if (BLOCK_SCALAR.test(value)) return [line, { blockIndent: at }];
+  if (!NAME_KEY.test(name)) return [line, {}];
+  if (value === '') return [line, { listIndent: at }];
+  return [`${lead}${dash}${quote}${name}${quote}:${gap}${renameValue(value, from, to)}`, {}];
+}
+
+/** One line of the file, renamed where it holds a crew name, with the walk's state after it. */
+function renameLine(line: string, walk: Walk, from: string, to: string): [string, Walk] {
+  if (inBlock(line, walk)) return [line, walk];
+  const key = KEY_LINE.exec(line);
+  if (key) return renameKeyLine(key, from, to);
+  const item = LIST_ITEM.exec(line);
+  if (item && BLOCK_SCALAR.test(item[2])) return [line, { blockIndent: indentOf(line) }];
+  if (item && walk.listIndent !== undefined && indentOf(line) >= walk.listIndent) return [`${item[1]}- ${renameValue(item[2], from, to)}`, walk];
+  const keeps = line.trim() === '' || line.trimStart().startsWith('#');
+  return [line, keeps ? walk : {}];
+}
+
+/**
+ * Renames a crew in the text of one of its YAML files: the values of name and reference
+ * keys (`name`, `crew`, `kubemoot.ai/crew`, `crewRef`, `promptRefs`, ...) that are the
+ * old name or built on it (`demo-coordinator` becomes `lab-coordinator`), including list
+ * items under such a key. Other keys (`namespace`, `image`), prose, and the text of block
+ * scalars (prompt content, test scripts) are left as they are. One pass, so a new name
+ * that starts with the old one is not renamed twice.
+ */
+export function renameCrewText(text: string, from: string, to: string): string {
+  let walk: Walk = {};
+  return text
+    .split('\n')
+    .map((raw) => {
+      // A CRLF file keeps its line endings; the walk reads each line without its \r.
+      const cr = raw.endsWith('\r') ? '\r' : '';
+      const [out, next] = renameLine(cr ? raw.slice(0, -1) : raw, walk, from, to);
+      walk = next;
+      return out + cr;
+    })
+    .join('\n');
+}
+
+/** The YAML files of a crew source, at any depth, leaving out dependencies, git's files, and the chart's own subcharts. */
+export async function crewYamlFiles(root: string, top = root): Promise<string[]> {
+  const entries = await fs.readdir(root, { withFileTypes: true });
+  const nested = await Promise.all(
+    entries.map(async (e) => {
+      const full = path.join(root, e.name);
+      const skip = IGNORED_DIRS.includes(e.name) || full === path.join(top, 'charts');
+      if (e.isDirectory()) return skip ? [] : crewYamlFiles(full, top);
+      return /\.ya?ml$/.test(e.name) ? [full] : [];
+    }),
+  );
+  return nested.flat().sort();
+}
+
+/**
+ * Renames a crew throughout its source: every YAML file under `root`, and those in
+ * `extra` folders (the fitness folder beside a source). Each file that changes is added
+ * to `changed` as it is written, so a failure partway still says what was renamed.
+ */
+export async function renameCrewFiles(root: string, from: string, to: string, extra: string[] = [], changed: string[] = []): Promise<string[]> {
+  const others = await Promise.all(extra.map((folder) => crewYamlFiles(folder).catch(() => [] as string[])));
+  for (const file of [...(await crewYamlFiles(root)), ...others.flat()]) {
+    const before = await fs.readFile(file, 'utf8');
+    const after = renameCrewText(before, from, to);
+    if (after === before) continue;
+    await fs.writeFile(file, after, 'utf8');
+    changed.push(file);
+  }
+  return changed;
+}

@@ -40,7 +40,7 @@
       "kubemoot": [
         {
           "id": "crewforge.crews",
-          "name": "Crews"
+          "name": "Deployed Crews"
         },
         {
           "id": "crewforge.sources",
@@ -51,7 +51,7 @@
     "viewsWelcome": [
       {
         "view": "crewforge.crews",
-        "contents": "No crews found in this context.\n[Select kubeconfig](command:crewforge.selectKubeconfig)\n[Select context](command:crewforge.selectContext)"
+        "contents": "No deployed crews found in this context.\n[Select kubeconfig](command:crewforge.selectKubeconfig)\n[Select context](command:crewforge.selectContext)"
       },
       {
         "view": "crewforge.sources",
@@ -61,7 +61,7 @@
     "commands": [
       {
         "command": "crewforge.refreshCrews",
-        "title": "Refresh Crews",
+        "title": "Refresh Deployed Crews",
         "category": "CrewForge",
         "icon": "$(refresh)"
       },
@@ -117,31 +117,31 @@
       },
       {
         "command": "crewforge.deploySource",
-        "title": "Deploy Crew to a Namespace",
+        "title": "Deploy to a Namespace... (Helm, bundle, or Flux)",
         "category": "CrewForge",
         "icon": "$(cloud-upload)"
       },
       {
         "command": "crewforge.updateDeployment",
-        "title": "Update Deployment from Source",
+        "title": "Redeploy from Source (helm upgrade or kubectl apply)",
         "category": "CrewForge",
         "icon": "$(sync)"
       },
       {
         "command": "crewforge.applyResource",
-        "title": "Apply This Object",
+        "title": "Apply Only This Object (kubectl apply)",
         "category": "CrewForge",
         "icon": "$(arrow-up)"
       },
       {
         "command": "crewforge.removeDeployment",
-        "title": "Remove Deployment",
+        "title": "Undeploy (Remove Deployment)",
         "category": "CrewForge",
         "icon": "$(trash)"
       },
       {
         "command": "crewforge.createCrew",
-        "title": "Create Crew",
+        "title": "Create Crew (kmctl create)",
         "category": "CrewForge",
         "icon": "$(add)"
       },
@@ -153,36 +153,36 @@
       },
       {
         "command": "crewforge.lintCrew",
-        "title": "Lint Crew",
+        "title": "Lint Crew (helm lint and schema check)",
         "category": "CrewForge",
         "icon": "$(checklist)"
       },
       {
         "command": "crewforge.deployDev",
-        "title": "Deploy (dev)",
+        "title": "Deploy to Dev Namespace",
         "category": "CrewForge",
         "icon": "$(rocket)"
       },
       {
         "command": "crewforge.redeployDev",
-        "title": "Redeploy (dev)",
+        "title": "Redeploy to Dev Namespace (helm upgrade)",
         "category": "CrewForge",
         "icon": "$(sync)"
       },
       {
         "command": "crewforge.askSource",
-        "title": "Ask",
+        "title": "Ask Crew",
         "category": "CrewForge",
         "icon": "$(comment-discussion)"
       },
       {
         "command": "crewforge.crewActions",
-        "title": "Crew Actions",
+        "title": "Crew Actions (next steps)",
         "category": "CrewForge"
       },
       {
         "command": "crewforge.deployRevision",
-        "title": "Deploy a Revision (Roll Back or Forward)",
+        "title": "Deploy a Git Revision (Roll Back or Forward)",
         "category": "CrewForge",
         "icon": "$(history)"
       },
@@ -194,12 +194,12 @@
       },
       {
         "command": "crewforge.showRun",
-        "title": "Show Fitness Run",
+        "title": "Show Fitness Run Report",
         "category": "CrewForge"
       },
       {
         "command": "crewforge.followRollout",
-        "title": "Follow GitOps Rollout",
+        "title": "Follow Flux Rollout (GitOps channel)",
         "category": "CrewForge",
         "icon": "$(eye)"
       },
@@ -226,6 +226,18 @@
         "title": "Show Live YAML (raw)",
         "category": "CrewForge",
         "icon": "$(file-binary)"
+      },
+      {
+        "command": "crewforge.deleteSource",
+        "title": "Delete Crew Source (move folder to trash)",
+        "category": "CrewForge",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "crewforge.renameCrew",
+        "title": "Rename Crew",
+        "category": "CrewForge",
+        "icon": "$(edit)"
       }
     ],
     "menus": {
@@ -424,6 +436,26 @@
           "command": "crewforge.showLiveYamlRaw",
           "when": "view == crewforge.crews && (viewItem == liveObject || viewItem =~ /^crew(-flux)?$/)",
           "group": "yaml@3"
+        },
+        {
+          "command": "crewforge.redeployDev",
+          "when": "view == crewforge.sources && viewItem =~ /^source-/",
+          "group": "loop@1"
+        },
+        {
+          "command": "crewforge.removeDeployment",
+          "when": "view == crewforge.sources && viewItem =~ /^source-/",
+          "group": "deploy@9"
+        },
+        {
+          "command": "crewforge.renameCrew",
+          "when": "view == crewforge.sources && viewItem =~ /^source-/",
+          "group": "source@1"
+        },
+        {
+          "command": "crewforge.deleteSource",
+          "when": "view == crewforge.sources && viewItem =~ /^source-/",
+          "group": "source@9"
         }
       ],
       "editor/context": [
@@ -492,6 +524,14 @@
         },
         {
           "command": "crewforge.showLiveYamlRaw",
+          "when": "false"
+        },
+        {
+          "command": "crewforge.deleteSource",
+          "when": "false"
+        },
+        {
+          "command": "crewforge.renameCrew",
           "when": "false"
         }
       ],

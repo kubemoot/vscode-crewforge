@@ -18,7 +18,7 @@ export type LiveCrewNode = Extract<CrewNode, { kind: 'crew' }>;
 
 const crewKey = (crew: CrewSummary) => `${crew.namespace}/${crew.name}`;
 
-/** The Crews view: namespaces, the crews in each with their readiness, and what each crew is made of. */
+/** The Deployed Crews view: namespaces, the crews in each with their readiness, and what each crew is made of. */
 export class CrewTreeProvider implements vscode.TreeDataProvider<CrewNode> {
   private readonly changed = new vscode.EventEmitter<CrewNode | undefined>();
   readonly onDidChangeTreeData = this.changed.event;

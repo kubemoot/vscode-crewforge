@@ -10,6 +10,9 @@ generated from the conventional commits since the previous release.
 - Crew Sources follows the file system: adding, deleting, or renaming a crew folder or one of its files, or a workspace folder, updates the view by itself, with one reload per burst of changes. Refresh stays as a manual fallback.
 - A source whose render fails shows the error as an item; when the error names a file and line, clicking the item opens it there. An undeployed crew (such as a fresh `kmctl create` scaffold) lists what it declares before "Not deployed".
 - Compare with Live is normalized: both sides leave out `status`, server bookkeeping, and the labels and annotations Helm, Flux, kubectl, the operator, and CrewForge add, with keys sorted, so only real differences show. A banner (and the diff title) says when the source and deployed chart versions differ.
+- New on a crew source: Undeploy (Remove Deployment), Delete Crew Source (moves the folder to the trash after a confirmation that names it, and offers to undeploy a deployed crew first), and Rename Crew (the chart, the Crew, and every name built on it, with the references between them and the folder; a deployed crew is offered undeploy first, since it keeps its old name).
+- Every action has a title that says what it does and how, for example "Redeploy from Source (helm upgrade or kubectl apply)" and "Follow Flux Rollout (GitOps channel)". The README has a table of each action, when to use it, and what it changes.
+- The Crews view is now **Deployed Crews**.
 - Show Source YAML, Show Live YAML, and Show Live YAML (raw) on a resource and in the diff editor's title bar. The source view links to the file to edit; live YAML is normalized by default, and the raw view keeps everything the API server holds.
 
 ### Inner loop

@@ -252,12 +252,12 @@ describe('DevLoop', () => {
     await memory.setDevNamespace(ROOT, 'crew-demo');
     onApply = () => liveCrew('crew-demo', { ready: false, phase: 'Failed', message: 'no Models' });
     await loop().deployDev(source);
-    expect(recorded.errors).toEqual(['demo in crew-demo did not come up: Crew demo is Failed: no Models. See its agents in the Crews view.']);
+    expect(recorded.errors).toEqual(['demo in crew-demo did not come up: Crew demo is Failed: no Models. See its agents in the Deployed Crews view.']);
     cluster = new FakeCluster();
     onApply = () => liveCrew('crew-demo', { ready: false, phase: 'Pending' });
     onSleep = () => recorded.cancel?.();
     await loop().deployDev(source);
-    expect(recorded.info.at(-1)).toBe('Stopped waiting. demo in crew-demo keeps deploying; the Crews view shows its state.');
+    expect(recorded.info.at(-1)).toBe('Stopped waiting. demo in crew-demo keeps deploying; the Deployed Crews view shows its state.');
     expect(calls.filter((c) => c.startsWith('reveal'))).toEqual([]);
   });
 
@@ -327,7 +327,7 @@ describe('DevLoop', () => {
     expect(lastPreferred).toBeUndefined();
     expect(memory.lastFitness(ROOT)).toBe('demo-starter');
     cluster.objects = [];
-    recorded.infoAnswers.push('Deploy (dev)');
+    recorded.infoAnswers.push('Deploy to Dev Namespace');
     recorded.inputs.push(undefined);
     await l.ask(source);
     expect(recorded.info[0]).toBe('demo is not deployed in lab. Deploy it to a dev namespace first.');
@@ -352,7 +352,7 @@ describe('DevLoop', () => {
     let offered: string[] = [];
     recorded.quickPicks.push((items: { label: string }[]) => ((offered = items.map((i) => i.label)), undefined));
     await l.actions(source);
-    expect(offered.map((o) => o.replace(/^\$\([a-z-]+\) /, ''))).toEqual(['Deploy (dev)', 'Lint Crew', 'Change the dev namespace']);
+    expect(offered.map((o) => o.replace(/^\$\([a-z-]+\) /, ''))).toEqual(['Deploy to Dev Namespace', 'Lint Crew', 'Change the dev namespace']);
     recorded.quickPicks.push(pick('Lint Crew'));
     await l.actions(source);
     recorded.quickPicks.push(pick('Change the dev namespace'));
@@ -364,7 +364,7 @@ describe('DevLoop', () => {
     await l.actions(source);
     liveCrew('team-demo');
     await l.refreshState(entry);
-    recorded.quickPicks.push(pick('Show in the Crews view'), pick('Ask'), pick('Run Fitness'));
+    recorded.quickPicks.push(pick('Show in the Deployed Crews view'), pick('Ask'), pick('Run Fitness'));
     await l.actions(source);
     await l.actions(source);
     await l.actions(source);
@@ -377,7 +377,7 @@ describe('DevLoop', () => {
     recorded.quickPicks.push(pick('Check the state again'));
     await l.actions(source);
     expect(states.get(ROOT)?.kind).toBe('changed');
-    recorded.quickPicks.push(pick('Deploy (dev)'));
+    recorded.quickPicks.push(pick('Deploy to Dev Namespace'));
     states.set(ROOT, { kind: 'not-deployed' });
     await l.actions(source);
     await l.actions({ kind: 'source', entry: { ...entry, crewName: undefined } });

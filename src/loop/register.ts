@@ -26,7 +26,7 @@ export interface LoopParts {
 }
 
 /**
- * Wires the inner loop into VS Code: Lint Crew with its diagnostics, Deploy (dev) and
+ * Wires the inner loop into VS Code: Lint Crew with its diagnostics, Deploy to Dev Namespace and
  * Redeploy, Ask and Run Fitness from a source, the status bar item, and the on-save lint.
  */
 export function registerLoop(context: vscode.ExtensionContext, parts: LoopParts): DevLoop {

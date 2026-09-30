@@ -1,8 +1,7 @@
 import * as path from 'node:path';
 import * as vscode from 'vscode';
+import { IGNORED_PATH } from './ignored';
 
-/** Folders whose changes never touch a crew source. */
-const IGNORED = /[\\/](node_modules|\.git|dist)([\\/]|$)/;
 const YAML = /\.ya?ml$/i;
 
 /**
@@ -12,7 +11,7 @@ const YAML = /\.ya?ml$/i;
  * or a path with no extension, which is usually a folder being added, moved, or removed.
  */
 export function affectsSources(file: string, roots: string[]): boolean {
-  if (IGNORED.test(file)) return false;
+  if (IGNORED_PATH.test(file)) return false;
   if (YAML.test(file) || path.extname(file) === '') return true;
   return roots.some((root) => file === root || file.startsWith(root + path.sep) || root.startsWith(file + path.sep));
 }

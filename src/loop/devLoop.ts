@@ -35,7 +35,7 @@ export interface DevLoopDeps {
   memory: LoopMemory;
   states: LoopStates;
   chat: ChatActions;
-  /** Shows a live crew in the Crews view. */
+  /** Shows a live crew in the Deployed Crews view. */
   revealLive: (crew: CrewSummary) => Promise<void>;
   exec: Exec;
   connectTo?: () => Connection;
@@ -59,11 +59,11 @@ const NEXT: Record<CrewState['kind'], ActionId[]> = {
 };
 
 const LABELS: Record<ActionId, string> = {
-  deploy: '$(cloud-upload) Deploy (dev)',
-  redeploy: '$(sync) Redeploy (dev)',
+  deploy: '$(cloud-upload) Deploy to Dev Namespace',
+  redeploy: '$(sync) Redeploy to Dev Namespace',
   ask: '$(comment-discussion) Ask',
   fitness: '$(beaker) Run Fitness',
-  reveal: '$(eye) Show in the Crews view',
+  reveal: '$(eye) Show in the Deployed Crews view',
   lint: '$(checklist) Lint Crew',
   namespace: '$(edit) Change the dev namespace',
   refresh: '$(refresh) Check the state again',
@@ -77,7 +77,7 @@ const ASK = 'Ask';
 const RUN = 'Run Fitness';
 const REASK = 'Re-ask last question';
 const RERUN = 'Rerun fitness';
-const DEPLOY = 'Deploy (dev)';
+const DEPLOY = 'Deploy to Dev Namespace';
 
 /**
  * The inner loop: deploy a source to its dev namespace with one click, wait until the
@@ -220,7 +220,7 @@ export class DevLoop {
     const channel = entry.source.kind === 'helm' ? 'helm' : 'bundle';
     const option = channelOptions(entry.source, entry.crewName, target).find((o) => o.channel === channel);
     if (!option?.enabled) {
-      void vscode.window.showInformationMessage(`${entry.crewName} cannot go to ${target.namespace} with one click: ${option?.reason}. Change the dev namespace from the status bar, or use Deploy Crew to a Namespace.`);
+      void vscode.window.showInformationMessage(`${entry.crewName} cannot go to ${target.namespace} with one click: ${option?.reason}. Change the dev namespace from the status bar, or use Deploy to a Namespace.`);
       return undefined;
     }
     const identity = await identify(entry.source, this.deps.exec);
@@ -278,9 +278,9 @@ export class DevLoop {
 }
 
 function notReady(where: string, result: WaitOutcome): void {
-  if (result.outcome === 'failed') void vscode.window.showErrorMessage(`${where} did not come up: ${result.message}. See its agents in the Crews view.`);
-  else if (result.outcome === 'stopped') void vscode.window.showInformationMessage(`Stopped waiting. ${where} keeps deploying; the Crews view shows its state.`);
-  else void vscode.window.showWarningMessage(`${where} is not ready yet: ${result.message}. See its agents in the Crews view.`);
+  if (result.outcome === 'failed') void vscode.window.showErrorMessage(`${where} did not come up: ${result.message}. See its agents in the Deployed Crews view.`);
+  else if (result.outcome === 'stopped') void vscode.window.showInformationMessage(`Stopped waiting. ${where} keeps deploying; the Deployed Crews view shows its state.`);
+  else void vscode.window.showWarningMessage(`${where} is not ready yet: ${result.message}. See its agents in the Deployed Crews view.`);
 }
 
 /** The source when it renders a Crew; otherwise says why it cannot be deployed. */

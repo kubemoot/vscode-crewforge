@@ -17,6 +17,8 @@ import { LIVE_SCHEME, LiveDocuments } from './views/liveDocuments';
 import { execProgram, readText, readYamlFiles } from './source/nodeDeps';
 import { SourceService } from './source/service';
 import { SourceWatcher } from './source/watcher';
+import { IGNORED_GLOB } from './source/ignored';
+import { SourceActions } from './source/sourceActions';
 import { ConversationStore } from './store/conversations';
 import { CrewTreeProvider, type CrewNode } from './views/crewTree';
 import { MANIFEST_SCHEME, ManifestDocuments } from './views/manifestDocuments';
@@ -50,6 +52,7 @@ export function activate(context: vscode.ExtensionContext): void {
     sources.refresh();
     tree.refresh();
   });
+  const actions = new SourceActions({ sources, deploy });
   const liveDocuments = new LiveDocuments(() => tree.connection ?? connect());
   const yaml = new YamlCommands(documents, liveDocuments, service);
   const live = new LiveCrewActions({
@@ -118,7 +121,9 @@ export function activate(context: vscode.ExtensionContext): void {
     ),
     vscode.commands.registerCommand('crewforge.showRun', (node?: SourceNode) => guard(() => fitness.showRun(node))),
     vscode.commands.registerCommand('crewforge.followRollout', either((crew) => live.followRollout(crew), (node) => followRolloutCommand(node, () => sources.refresh()))),
-    vscode.commands.registerCommand('crewforge.removeDeployment', either((crew) => live.remove(crew), (node) => deploy.removeDeployment(node))),
+    vscode.commands.registerCommand('crewforge.removeDeployment', either((crew) => live.remove(crew), (node) => actions.undeploy(node))),
+    vscode.commands.registerCommand('crewforge.deleteSource', (node?: SourceNode) => guard(() => actions.deleteSource(node))),
+    vscode.commands.registerCommand('crewforge.renameCrew', (node?: SourceNode) => guard(() => actions.rename(node))),
     vscode.workspace.registerTextDocumentContentProvider(LIVE_SCHEME, liveDocuments),
     vscode.commands.registerCommand('crewforge.showLiveYaml', (target?: YamlTarget) => guard(() => yaml.showLive(target))),
     vscode.commands.registerCommand('crewforge.showCrewBundleYaml', (node?: CrewNode) => guard(() => showCrewBundleYaml(liveDocuments, node))),
@@ -186,12 +191,12 @@ export class Commands {
     if (!(await panel.reaskLast())) void vscode.window.showInformationMessage(`There is no earlier question for ${crew.name} to ask again. Ask it one in the chat.`);
   }
 
-  /** Selects a live crew in the Crews view, reading the crews again first. */
+  /** Selects a live crew in the Deployed Crews view, reading the crews again first. */
   async revealLive(crew: CrewSummary): Promise<void> {
     this.tree.refresh();
     const node = await this.tree.nodeFor(crew.namespace, crew.name);
     if (node) await this.view.reveal(node, { select: true, focus: false, expand: true });
-    else void vscode.window.showInformationMessage(`The Crews view does not list ${crew.namespace}; add it to the crewforge.namespaces setting to see ${crew.name} there.`);
+    else void vscode.window.showInformationMessage(`The Deployed Crews view does not list ${crew.namespace}; add it to the crewforge.namespaces setting to see ${crew.name} there.`);
   }
 
   async continueConversation(): Promise<void> {
@@ -253,13 +258,13 @@ export class Commands {
   private async pickCrew(): Promise<CrewSummary | undefined> {
     const choice = await vscode.window.showQuickPick(
       this.tree.known.map((crew) => ({ label: crew.name, description: `${crew.namespace} · ${crew.phase}`, crew })),
-      { placeHolder: this.tree.known.length ? 'Ask which crew?' : 'No crews loaded; refresh the Crews view first' },
+      { placeHolder: this.tree.known.length ? 'Ask which crew?' : 'No crews loaded; refresh the Deployed Crews view first' },
     );
     return choice?.crew;
   }
 }
 
-/** The connection the Crews view uses, or one from the settings; undefined when there is no usable kubeconfig. */
+/** The connection the Deployed Crews view uses, or one from the settings; undefined when there is no usable kubeconfig. */
 function currentConnection(tree: CrewTreeProvider): Connection | undefined {
   try {
     return tree.connection ?? connect();
@@ -268,13 +273,11 @@ function currentConnection(tree: CrewTreeProvider): Connection | undefined {
   }
 }
 
-const IGNORED_FOLDERS = '{**/node_modules/**,**/.git/**,**/dist/**}';
-
 /** Chart.yaml files and every other YAML file in the workspace, as paths. */
 async function listWorkspaceFiles(): Promise<{ charts: string[]; yamls: string[] }> {
   const [charts, yamls] = await Promise.all([
-    vscode.workspace.findFiles('**/Chart.yaml', IGNORED_FOLDERS),
-    vscode.workspace.findFiles('**/*.{yaml,yml}', IGNORED_FOLDERS),
+    vscode.workspace.findFiles('**/Chart.yaml', IGNORED_GLOB),
+    vscode.workspace.findFiles('**/*.{yaml,yml}', IGNORED_GLOB),
   ]);
   return { charts: charts.map((u) => u.fsPath), yamls: yamls.map((u) => u.fsPath).filter((p) => !p.endsWith('Chart.yaml')) };
 }
@@ -283,7 +286,7 @@ async function showCrewBundleYaml(documents: LiveDocuments, node?: CrewNode): Pr
   if (node?.kind === 'crew') return documents.show({ kind: 'bundle', namespace: node.crew.namespace, crew: node.crew.name });
 }
 
-/** A crew known only from a saved conversation, before the Crews view has loaded it. */
+/** A crew known only from a saved conversation, before the Deployed Crews view has loaded it. */
 function placeholderCrew(name: string, namespace: string): CrewSummary {
   return { name, namespace, ready: true, phase: 'Unknown' };
 }

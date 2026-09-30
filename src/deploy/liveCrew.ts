@@ -22,7 +22,7 @@ export function liveDeployment(crew: CrewSummary): Deployment {
 }
 
 /**
- * Runs the Crew Sources lifecycle commands on a crew picked in the Crews view. Each one
+ * Runs the Crew Sources lifecycle commands on a crew picked in the Deployed Crews view. Each one
  * that needs the crew's source resolves the live crew to a workspace source first: the
  * source its Crew names, else the one source that renders a crew of its name, else the
  * one the developer picks.

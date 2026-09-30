@@ -165,6 +165,16 @@ describe('commands', () => {
     expect(recorded.shownDocuments).toEqual(['crewforge-manifest:/rendered/ns/Crew-demo.yaml (yaml)']);
   });
 
+  it('routes Undeploy, Delete Crew Source, and Rename Crew on a source, and ignores anything else', async () => {
+    const entry = { source: { kind: 'helm', root: '/w/none', label: 'none' }, identity: { id: 'local:none' } };
+    await run('crewforge.removeDeployment', { kind: 'source', entry });
+    await run('crewforge.deleteSource', { kind: 'message', text: 'x' });
+    await run('crewforge.renameCrew', { kind: 'source', entry });
+    await run('crewforge.deleteSource');
+    expect(recorded.info).toEqual(['none is not deployed in this context.']);
+    expect(recorded.warnings).toEqual([]);
+  });
+
   it('showLiveYamlRaw opens the raw YAML of a crew and ignores anything else', async () => {
     await run('crewforge.showLiveYamlRaw', { kind: 'crew', crew: { name: 'lab-ops', namespace: 'team-a', ready: true, phase: 'Ready' } });
     await run('crewforge.showLiveYamlRaw', { kind: 'message', text: 'x' });
