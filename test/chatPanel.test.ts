@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Connection } from '../src/connection';
 import type { KubeClient } from '../src/k8s/request';
 import { ChatPanel, dashboardThreadUrl, type ChatLinks } from '../src/panels/chatPanel';
@@ -69,7 +69,8 @@ describe('ChatPanel', () => {
     transport.responses.push('{"conversationId":"conv-1"}');
     transport.streams.push(fixture('turn1.sse'));
     await panel.webview.receive({ type: 'send', text: 'Which nodes have a GPU?' });
-    await settle();
+    // The turn streams on its own; wait for it to end rather than for a fixed time.
+    await vi.waitFor(() => expect(lastState(panel).view.busy).toBe(false), { timeout: 5000 });
     const states = panel.webview.posted as StateMessage[];
     expect(states.some((s) => s.view.busy)).toBe(true);
     const final = lastState(panel);
