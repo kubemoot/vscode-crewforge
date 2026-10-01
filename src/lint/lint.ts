@@ -102,9 +102,12 @@ export function compiled(text: string): ValidateFunction | undefined {
 
 async function checkObject(l: Located, validate: ValidateFunction, readText: (file: string) => Promise<string>): Promise<Finding[]> {
   if (validate(l.manifest)) return [];
+  // Ajv keeps the last call's errors on the shared function; other objects validate
+  // while this one awaits its file, so copy them before the await.
+  const errors = [...(validate.errors ?? [])];
   const file = l.file as string;
   const text = await readText(file).catch(() => '');
-  return schemaIssues(l.manifest, validate.errors ?? []).map(({ keys, message }) => ({ file, line: keyLine(text, l.line, keys), severity: 'error', message, source: 'schema' }));
+  return schemaIssues(l.manifest, errors).map(({ keys, message }) => ({ file, line: keyLine(text, l.line, keys), severity: 'error', message, source: 'schema' }));
 }
 
 /**

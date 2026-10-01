@@ -124,6 +124,20 @@ describe('lintSource', () => {
     const unreadable = await lintSource(chart, deps(SCHEMA, { readText: async () => Promise.reject(new Error('gone')) }));
     expect(unreadable.findings.filter((f) => f.source === 'schema').map((f) => f.line)).toEqual([0, 0]);
   });
+  it('keeps each invalid object\'s findings when a valid object validates while it reads its file', async () => {
+    const bad = (name: string) => `apiVersion: kubemoot.ai/v1alpha1\nkind: Agent\nmetadata:\n  name: ${name}\nspec:\n  nope: 1\n`;
+    const good = 'apiVersion: kubemoot.ai/v1alpha1\nkind: Agent\nmetadata:\n  name: ok\nspec: {}\n';
+    const files: Record<string, string> = { '/w/bundle/a.yaml': bad('a'), '/w/bundle/b.yaml': bad('b'), '/w/bundle/ok.yaml': good };
+    const slowRead = async (file: string) => {
+      await new Promise((r) => setTimeout(r, file.endsWith('a.yaml') ? 20 : 0));
+      return files[file];
+    };
+    const { findings } = await lintSource(bundle, deps(SCHEMA, {
+      readYamlFiles: async () => Object.entries(files).map(([file, text]) => ({ file, text })),
+      readText: slowRead,
+    }));
+    expect(findings.filter((f) => f.source === 'schema').map((f) => f.file).sort()).toEqual(['/w/bundle/a.yaml', '/w/bundle/b.yaml']);
+  });
 });
 
 describe('CrewLinter', () => {
