@@ -27,6 +27,12 @@ export function button(b: ButtonSpec): string {
 /** The button a page shows when it could not read the cluster: another context may help. */
 export const SELECT_CONTEXT_BUTTON: ButtonSpec = { action: 'selectContext', label: SELECT_CONTEXT.title, title: 'Pick another context from the kubeconfig' };
 
+/** The button a page shows when no local source renders the crew. */
+export const OPEN_SOURCE_FOLDER: ButtonSpec = { action: 'openSourceFolder', label: "Open the Crew's Source Folder...", title: 'Add the folder that holds its chart or bundle to the workspace', primary: true };
+
+/** The button a page shows when the crew is not deployed and a source can deploy it. */
+export const DEPLOY_TO_NAMESPACE: ButtonSpec = { action: 'deploy', label: 'Deploy to Namespace...', title: 'Deploy the source to a namespace you pick', primary: true };
+
 export function buttons(specs: ButtonSpec[]): string {
   return specs.length ? `<div class="actions">${specs.map(button).join('')}</div>` : '';
 }

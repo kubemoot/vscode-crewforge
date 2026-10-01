@@ -38,7 +38,12 @@ export async function liveObjects(client: KubeTransport, kinds: Map<string, Kube
   const names = new Set(wanted.map(objectKey));
   const kindNames = [...new Set(wanted.map((m) => m.kind))].filter((k) => kinds.get(k)?.namespaced);
   const lists = await Promise.all(kindNames.map((k) => listKind(client, kinds.get(k) as KubemootKind, namespace)));
-  return lists.flat().filter((m) => names.has(objectKey(m)) || (m.metadata.labels?.['kubemoot.ai/crew'] === crew && !isOwned(m)));
+  return lists.flat().filter((m) => names.has(objectKey(m)) || madeForCrew(m, crew));
+}
+
+/** True when the object carries the crew's label and no controller made it: a crew's own object, as a source or a deploy writes it. */
+export function madeForCrew(m: Manifest, crew: string): boolean {
+  return m.metadata.labels?.['kubemoot.ai/crew'] === crew && !isOwned(m);
 }
 
 /** True when a controller owns the object (it has ownerReferences), so its owner, not a source, makes it. */
@@ -51,4 +56,17 @@ export function isOwned(m: Manifest): boolean {
 export async function listKind(client: KubeTransport, kind: KubemootKind, namespace: string): Promise<Manifest[]> {
   const body = JSON.parse(await client.request('GET', objectPath(kind, namespace))) as { items?: Manifest[] };
   return (body.items ?? []).map((m) => ({ ...m, apiVersion: m.apiVersion ?? `${KUBEMOOT_GROUP}/v1alpha1`, kind: kind.kind }));
+}
+
+/**
+ * Every live object of a crew without a source to say which: its Crew, and the objects of
+ * any namespaced Kubemoot kind made for it. A kind that cannot be read is left out, since
+ * this lists everything for a person to look at; liveObjects, which feeds the drift,
+ * fails instead, so a comparison is never made on a partial list.
+ */
+export async function crewObjects(client: KubeTransport, kinds: Map<string, KubemootKind>, namespace: string, crew: string): Promise<Manifest[]> {
+  const namespaced = [...kinds.values()].filter((k) => k.namespaced);
+  const lists = await Promise.all(namespaced.map((k) => listKind(client, k, namespace).catch((): Manifest[] => [])));
+  const ofCrew = (m: Manifest) => (m.kind === 'Crew' && m.metadata.name === crew) || madeForCrew(m, crew);
+  return lists.flat().filter(ofCrew).sort((a, b) => a.kind.localeCompare(b.kind) || a.metadata.name.localeCompare(b.metadata.name));
 }

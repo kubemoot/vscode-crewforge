@@ -3,12 +3,14 @@ import { connect, namespaceFilter, type Connection } from '../connection';
 import { listCrews } from '../k8s/crews';
 import { deploymentDescription, historyLines, type Deployment } from '../source/deployments';
 import { summarize, type ResourceDrift } from '../source/drift';
+import { DRIFT_STATES } from '../source/driftStates';
 import { isRunning, runSummary, type FitnessRun } from '../fitness/fitness';
 import { fluxSummary, type FluxState } from '../gitops/flux';
 import type { DeclaredItem, DeclaredSection } from '../source/declared';
 import { locationOf } from '../source/render';
 import { sourceOf, type SourceEntry, type SourceService } from '../source/service';
 import { errorItems, errorText, type MessageNode } from './errors';
+import { ReadingNotice } from './readingNotice';
 
 export type SourceNode =
   | { kind: 'source'; entry: SourceEntry }
@@ -51,6 +53,14 @@ export class SourceTreeProvider implements vscode.TreeDataProvider<SourceNode> {
   stateOf: (root: string) => SourceState | undefined = () => undefined;
   /** Whether a crew has a fitness run in progress, by namespace and crew; its items then hide Run Fitness. */
   fitnessBusy: (namespace: string, crew: string) => boolean = () => false;
+  /** Shows a line above the view's items, such as "Still reading from lab...", or clears it; set to the view's message. */
+  onMessage: (text: string | undefined) => void = () => undefined;
+  /** Says on the view when a read from the cluster takes a while. */
+  readonly reading = new ReadingNotice(
+    (text) => this.onMessage(text),
+    () => (this.connection ?? this.connectTo()).context,
+  );
+  private everLoaded = false;
   /** Told the runs read for a deployment, so the busy state follows them. */
   onRuns: (namespace: string, crew: string, runs: FitnessRun[]) => void = () => undefined;
 
@@ -94,6 +104,11 @@ export class SourceTreeProvider implements vscode.TreeDataProvider<SourceNode> {
   /** The deployments of a source, with their drift, from the last time it was expanded. */
   deploymentsOf(root: string): DeploymentNode[] {
     return this.loaded.get(root) ?? [];
+  }
+
+  /** Whether the workspace's sources have loaded at least once, so `known` is not just empty for want of a load. */
+  get hasLoaded(): boolean {
+    return this.everLoaded;
   }
 
   /** The sources from the last load, for pickers. */
@@ -181,6 +196,7 @@ export class SourceTreeProvider implements vscode.TreeDataProvider<SourceNode> {
       return errorNodes(err);
     }
     this.roots = this.loadedEntries.map((entry) => ({ kind: 'source', entry }));
+    this.everLoaded = true;
     this.sourcesLoaded.fire();
     return this.roots.length ? this.roots : [{ kind: 'message', text: 'No crew charts or bundles in this workspace', icon: 'info' }];
   }
@@ -204,7 +220,11 @@ export class SourceTreeProvider implements vscode.TreeDataProvider<SourceNode> {
   }
 
   /** Loads a source's deployments and their drift, for the tree and for the status bar. */
-  async loadDeployments(entry: SourceEntry): Promise<SourceNode[]> {
+  loadDeployments(entry: SourceEntry): Promise<SourceNode[]> {
+    return this.reading.track(() => this.readDeployments(entry));
+  }
+
+  private async readDeployments(entry: SourceEntry): Promise<SourceNode[]> {
     try {
       this.connection = this.connectTo();
       const connection = this.connection;
@@ -375,26 +395,12 @@ function fluxLines(node: Extract<SourceNode, { kind: 'deployment' }>): string[] 
   return lines;
 }
 
-const RESOURCE_ICONS: Record<ResourceDrift['state'], [string, string]> = {
-  'in-sync': ['check', 'testing.iconPassed'],
-  changed: ['diff-modified', 'gitDecoration.modifiedResourceForeground'],
-  missing: ['diff-added', 'gitDecoration.addedResourceForeground'],
-  extra: ['diff-removed', 'gitDecoration.deletedResourceForeground'],
-};
-
-const STATE_TEXT: Record<ResourceDrift['state'], string> = {
-  'in-sync': 'in sync',
-  changed: 'changed in source',
-  missing: 'in source, not deployed',
-  extra: 'deployed, not in source',
-};
-
 function resourceItem(node: Extract<SourceNode, { kind: 'resource' }>): vscode.TreeItem {
   const { drift } = node;
   const item = new vscode.TreeItem(`${drift.kind}/${drift.name}`, vscode.TreeItemCollapsibleState.None);
-  item.description = STATE_TEXT[drift.state];
-  item.tooltip = drift.paths.length ? `${STATE_TEXT[drift.state]}:\n${drift.paths.join('\n')}` : STATE_TEXT[drift.state];
-  const [icon, color] = RESOURCE_ICONS[drift.state];
+  const { text, icon, color } = DRIFT_STATES[drift.state];
+  item.description = text;
+  item.tooltip = drift.paths.length ? `${text}:\n${drift.paths.join('\n')}` : text;
   item.iconPath = new vscode.ThemeIcon(icon, new vscode.ThemeColor(color));
   item.contextValue = `resource-${drift.state}`;
   item.command = { command: 'crewforge.showDrift', title: 'Compare with Live', arguments: [node] };

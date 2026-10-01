@@ -49,6 +49,8 @@ export interface CrewForgeApi {
   crewsView: vscode.TreeView<CrewNode>;
   sourcesView: vscode.TreeView<SourceNode>;
   pages: () => PageState[];
+  /** Runs a button of an open page as if pressed on it. */
+  press: (key: string, action: string, arg?: string) => Promise<boolean>;
   chats: () => ReturnType<typeof ChatPanel.states>;
 }
 
@@ -74,9 +76,11 @@ export function activate(context: vscode.ExtensionContext): CrewForgeApi {
   const busy = (namespace: string, crew: string) => activity.isBusy(namespace, crew);
   sources.fitnessBusy = busy;
   tree.fitnessBusy = busy;
-  tree.sourceOpen = (crew) => sourceForCrew(crew, sources.known) !== undefined;
+  tree.sourceOpen = (crew) => (sources.hasLoaded ? sourceForCrew(crew, sources.known) !== undefined : undefined);
   sources.onRuns = (namespace, crew, runs) => activity.record(namespace, crew, runs);
   const sourcesView = vscode.window.createTreeView('crewforge.sources', { treeDataProvider: sources, showCollapseAll: true });
+  tree.onMessage = (text) => (view.message = text);
+  sources.onMessage = (text) => (sourcesView.message = text);
   const documents = new ManifestDocuments();
   const output = vscode.window.createOutputChannel('CrewForge');
   PagePanel.host = { log: (line) => output.appendLine(line), readingFrom: () => (tree.connection ?? connect()).context };
@@ -209,7 +213,7 @@ export function activate(context: vscode.ExtensionContext): CrewForgeApi {
     vscode.commands.registerCommand('crewforge.selectKubeconfig', () => commands.selectKubeconfig()),
     vscode.commands.registerCommand('crewforge.openConversationsFolder', () => commands.openConversationsFolder()),
   );
-  return { crews: tree, sources, crewsView: view, sourcesView, pages: () => PagePanel.states(), chats: () => ChatPanel.states() };
+  return { crews: tree, sources, crewsView: view, sourcesView, pages: () => PagePanel.states(), press: (key, action, arg) => PagePanel.press(key, action, arg), chats: () => ChatPanel.states() };
 }
 
 export function deactivate(): void {

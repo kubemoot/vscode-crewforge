@@ -15,6 +15,9 @@ generated from the conventional commits since the previous release.
 
 ### Crew Sources
 
+- The crew dashboard has **Overview**, **Source**, **Live**, and **Diff** tabs: the rendered objects by kind (each opens its file at the object), the live objects normalized or raw, and each changed, missing, or extra object with its normalized diff inline and Open in Diff Editor. A tab without its counterpart says why and offers Open the Crew's Source Folder..., Deploy to Namespace..., or Select Kubernetes Context.
+- Deployed Crews and Crew Sources say "Still reading from <context>..." above their items while the cluster is slow.
+
 - **Deploy to Namespace...** replaces Deploy to Dev Namespace: it asks for the namespace every time, offering the last one (else `crew-<name>`), and remembers it for **Redeploy**, which replaces Redeploy to Dev Namespace. A deployed crew can go to more namespaces; each deployment shows under its source. The channel-picking deploy is now **Deploy with a Channel...**.
 - In the Explorer, **New Kubemoot Crew Here** (was New Crew Here) shows only on folders outside crew sources, and **View in CrewForge** on any file or folder inside one selects the matching item in Crew Sources (the object a manifest declares, or the crew) and opens its dashboard.
 - "Crew" no longer leads labels, menu entries, and command titles where the view already says it: a source reads as its crew name ("grade", with "helm" and where it stands on its line), and the menus say Ask, Lint, Rename..., Delete Source..., Undeploy, Redeploy, Open Dashboard, and Next Steps.... A source's line says where it stands ("deployed in crew-grade, changed" or "not deployed"), read for every source when the sources load; a live crew's line says "source open" or "no local source".

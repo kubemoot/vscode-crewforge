@@ -11,7 +11,7 @@ export default defineConfig({
     environment: 'node',
     coverage: {
       include: ['src/**'],
-      thresholds: { statements: 90, branches: 80, functions: 90, lines: 90 },
+      thresholds: { statements: 98.5, branches: 95, functions: 96, lines: 99 },
     },
   },
 });

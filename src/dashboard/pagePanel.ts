@@ -66,6 +66,14 @@ export class PagePanel {
     return PagePanel.panels.get(key);
   }
 
+  /** Runs a button of the open page `key` as if pressed on the page; false when no such page is open. */
+  static async press(key: string, action: string, arg?: string): Promise<boolean> {
+    const page = PagePanel.panels.get(key);
+    if (!page) return false;
+    await page.onMessage({ type: 'action', action, arg });
+    return true;
+  }
+
   /** Every open page and what it shows. */
   static states(): PageState[] {
     return [...PagePanel.panels.values()].map((p) => ({ ...p.state, title: p.panel.title, errors: [...p.state.errors] }));

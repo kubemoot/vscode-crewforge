@@ -3,6 +3,7 @@ import { liveDeployment } from '../deploy/liveCrew';
 import type { CrewSummary } from '../k8s/crews';
 import type { ThreadStats } from '../kubemoot/dashboardApi';
 import type { Deployment } from '../source/deployments';
+import type { ResourceDrift } from '../source/drift';
 import type { Located } from '../source/locate';
 import { crewOf, isKubemoot, type Manifest } from '../source/manifests';
 import { provenanceOf, type Provenance } from '../source/provenance';
@@ -43,6 +44,10 @@ export interface CrewVitals {
   sourceAt?: { file: string; line: number };
   deployment?: Deployment;
   deploymentError?: string;
+  /** How each object of the source compares with the deployment, when both are known. */
+  drift?: ResourceDrift[];
+  /** Why the source could not be compared with the deployment. */
+  driftError?: string;
   provenance?: Provenance;
   helm?: HelmInfo;
   agents: AgentInfo[];
@@ -74,7 +79,7 @@ const NO_CONVERSATIONS: ConversationStats = { total: 0, turns: 0, errors: [] };
 
 /** Everything a crew dashboard shows, read now. A part that cannot be read says why instead of failing the page. */
 export async function gatherVitals(target: CrewTarget, deps: VitalsDeps): Promise<CrewVitals> {
-  const { deployment, deploymentError } = await deploymentFor(target, deps);
+  const { deployment, deploymentError, drift, driftError } = await deploymentFor(target, deps);
   const declared = await declaredOf(target.entry, deps);
   const vitals: CrewVitals = {
     name: nameOf(target, deployment),
@@ -84,6 +89,8 @@ export async function gatherVitals(target: CrewTarget, deps: VitalsDeps): Promis
     sourceAt: declared.at,
     deployment,
     deploymentError,
+    drift,
+    driftError,
     provenance: deployment && provenanceOf(deployment.crew),
     agents: declared.agents,
     agentsFrom: declared.agents.length ? 'source' : 'none',
@@ -99,9 +106,14 @@ function nameOf(target: CrewTarget, deployment?: Deployment): string {
   return target.entry?.crewName ?? deployment?.crew.name ?? target.crew?.name ?? target.entry?.source.label ?? '';
 }
 
-async function deploymentFor(target: CrewTarget, deps: VitalsDeps): Promise<{ deployment?: Deployment; deploymentError?: string }> {
+type Found = Pick<CrewVitals, 'deployment' | 'deploymentError' | 'drift' | 'driftError'>;
+
+async function deploymentFor(target: CrewTarget, deps: VitalsDeps): Promise<Found> {
   try {
-    if (target.entry?.crewName) return { deployment: (await deps.deploymentOf(target.entry))?.deployment };
+    if (target.entry?.crewName) {
+      const node = await deps.deploymentOf(target.entry);
+      return { deployment: node?.deployment, drift: node?.drift, driftError: node?.error };
+    }
     if (!target.crew) return {};
     const crew = (await deps.liveCrew(target.crew.namespace, target.crew.name)) ?? target.crew;
     return { deployment: liveDeployment(crew) };

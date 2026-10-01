@@ -240,12 +240,29 @@ check was skipped.
 
 ## Dashboards
 
-Dashboards open as editor tabs and read again every few seconds while visible (the fitness
-dashboard, while a run is going). They are read-only pages: every value is escaped, the
+Dashboards open as editor tabs, with the Kubemoot logo as their icon, and read again every
+few seconds while visible (the fitness dashboard, while a run is going). A read that takes
+a moment says "Still reading from <context>..." above the page, and one that gets no answer
+is ended after a bounded wait with a plain message, so a page never waits on "Reading..."
+without saying why; the trees say the same above their items. They are read-only pages: every value is escaped, the
 page runs one script under a strict content security policy, and it can only ask the
 extension to run one of its own buttons.
 
-- **Crew dashboard.** Click a crew in Crew Sources or Deployed Crews. It shows the crew's
+- **Crew dashboard.** Click a crew in Crew Sources or Deployed Crews. Its tab is titled
+  with the crew's name. Four tabs sit under its buttons:
+  - **Overview** (described below).
+  - **Source**: the objects the local source renders, grouped by kind; click one to open
+    its file at the object.
+  - **Live**: the crew's objects in the cluster, normalized like Compare with Live, with
+    **Show Raw** for everything the API server holds.
+  - **Diff**: each object changed, missing in the cluster, or extra in it, with the
+    normalized diff inline (lines marked - are live only, + are source only) and **Open in
+    Diff Editor**.
+
+  A tab whose side of the crew is missing says why and offers the way to it: **Open the
+  Crew's Source Folder...** (adds it to the workspace) when no source is open, **Deploy to
+  Namespace...** when the crew is not deployed, and **Select Kubernetes Context** when the
+  cluster cannot be reached. The Overview shows the crew's
   name and description; the source's path, chart name, chart version, and app version; where
   it is deployed (namespace and context, channel, Helm release, deployed chart and app
   version, first deployed and last redeploy from `helm status`, and what a CrewForge

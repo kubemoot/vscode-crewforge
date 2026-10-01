@@ -12,6 +12,9 @@ import { DashboardApi } from '../kubemoot/dashboardApi';
 import { redeployTarget, type LoopMemory } from '../loop/state';
 import { ChatPanel } from '../panels/chatPanel';
 import type { Deployment } from '../source/deployments';
+import { crewObjects } from '../source/live';
+import type { Located } from '../source/locate';
+import type { Manifest } from '../source/manifests';
 import { provenanceOf } from '../source/provenance';
 import { errorText, SELECT_CONTEXT } from '../views/errors';
 import type { Exec } from '../source/render';
@@ -19,8 +22,9 @@ import type { SourceEntry, SourceService } from '../source/service';
 import { conversationStats } from '../store/stats';
 import type { ConversationStore } from '../store/conversations';
 import type { CrewNode } from '../views/crewTree';
-import type { DeploymentNode, SourceNode, SourceTreeProvider } from '../views/sourceTree';
+import { openAt, type DeploymentNode, type SourceNode, type SourceTreeProvider } from '../views/sourceTree';
 import { renderCrewPage } from './crewPage';
+import { isTab, tabBody, type CrewTab, type TabReads } from './crewTabs';
 import { gatherVitals, parseHelmStatus, type CrewTarget, type CrewVitals, type VitalsDeps } from './crewVitals';
 import { renderFitnessPage, type FitnessView } from './fitnessPage';
 import { agentCounts, lastDeployOf, renderOverview, type OverviewRow } from './overview';
@@ -93,6 +97,17 @@ export class Dashboards implements vscode.Disposable {
     if (node?.kind === 'crew') return { entry: sourceForCrew(node.crew, this.parts.sources.known), deployment: liveDeployment(node.crew) };
     if (node && 'deployment' in node) return { entry: node.entry, deployment: node.deployment };
     return undefined;
+  }
+
+  /** The objects a source renders, where each starts in its files. */
+  locate(entry: SourceEntry): Promise<Located[]> {
+    return this.parts.service.located(entry);
+  }
+
+  /** A crew's live objects, for a crew no open source describes. */
+  async crewObjects(namespace: string, crew: string): Promise<Manifest[]> {
+    const { client } = this.parts.connect();
+    return crewObjects(client, await this.parts.service.kinds(client), namespace, crew);
   }
 
   /** Where a crew dashboard reads from. */
@@ -186,6 +201,10 @@ export class Dashboards implements vscode.Disposable {
 /** The crew dashboard: vitals and the lifecycle buttons, read again every few seconds while visible. */
 class CrewDashboard implements PageModel {
   private vitals?: CrewVitals;
+  private tab: CrewTab = 'overview';
+  private raw = false;
+  /** The objects the Source tab last listed, which its links open by index. */
+  private located: Located[] = [];
 
   constructor(
     private readonly target: CrewTarget,
@@ -197,12 +216,28 @@ class CrewDashboard implements PageModel {
   }
 
   async render(): Promise<string> {
-    this.vitals = await gatherVitals(this.target, this.dashboards.vitalsDeps());
-    return renderCrewPage(this.vitals);
+    const vitals = await gatherVitals(this.target, this.dashboards.vitalsDeps());
+    this.vitals = vitals;
+    if (this.tab === 'overview') return renderCrewPage(vitals);
+    return renderCrewPage(vitals, this.tab, await tabBody(this.tab, vitals, this.reads, this.raw));
   }
 
   refreshMs(): number {
     return REFRESH.crew;
+  }
+
+  /** Where the Source and Live tabs read; the Source tab's objects are kept for its links. */
+  private readonly reads: TabReads = {
+    located: async (entry) => {
+      this.located = await this.dashboards.locate(entry);
+      return this.located;
+    },
+    crewObjects: (namespace, crew) => this.dashboards.crewObjects(namespace, crew),
+  };
+
+  /** Shows a tab from the next render on; anything but a tab's name is ignored. */
+  select(tab?: string): void {
+    if (isTab(tab)) this.tab = tab;
   }
 
   private get sourceNode(): SourceNode | undefined {
@@ -227,18 +262,46 @@ class CrewDashboard implements PageModel {
     yaml: () => this.showYaml(),
     refresh: async () => undefined,
     selectContext: () => selectContext(),
+    tab: async (arg) => this.select(arg),
+    raw: async () => void (this.raw = !this.raw),
+    openAt: (arg) => this.openAt(arg),
+    openDiff: (arg) => this.openDiff(arg),
+    openSourceFolder: () => addSourceFolder(),
   };
+
+  private async openAt(index?: string): Promise<void> {
+    const at = this.located[Number(index)];
+    if (at?.file) await runCommand(openAt(at.file, at.line));
+  }
+
+  private async openDiff(kindName?: string): Promise<void> {
+    const { entry } = this.target;
+    const deployment = this.vitals?.deployment;
+    const drift = this.vitals?.drift?.find((d) => `${d.kind}/${d.name}` === kindName);
+    if (entry && deployment && drift) await run('crewforge.showDrift', { kind: 'resource', entry, deployment, drift });
+  }
 
   private async showYaml(): Promise<void> {
     const at = this.vitals?.sourceAt;
-    if (at) return run('vscode.open', vscode.Uri.file(at.file), { selection: new vscode.Range(at.line, 0, at.line, 0) });
+    if (at) return runCommand(openAt(at.file, at.line));
     const crew = this.vitals?.deployment?.crew;
     if (crew) return run('crewforge.showLiveYaml', { kind: 'crew', crew });
   }
 }
 
+/** Asks for a folder and adds it to the workspace, so its crew source shows in Crew Sources and on the dashboard. */
+async function addSourceFolder(): Promise<void> {
+  const picked = await vscode.window.showOpenDialog({ canSelectFolders: true, canSelectFiles: false, canSelectMany: false, openLabel: 'Add to Workspace', title: "Open the crew's source folder" });
+  if (!picked?.[0]) return;
+  vscode.workspace.updateWorkspaceFolders(vscode.workspace.workspaceFolders?.length ?? 0, 0, { uri: picked[0] });
+}
+
 async function selectContext(): Promise<void> {
   await vscode.commands.executeCommand(SELECT_CONTEXT.command);
+}
+
+async function runCommand(c: vscode.Command): Promise<void> {
+  await vscode.commands.executeCommand(c.command, ...(c.arguments ?? []));
 }
 
 async function run(command: string, ...args: unknown[]): Promise<void> {

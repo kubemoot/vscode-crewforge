@@ -16,7 +16,7 @@ import { newConversation } from '../src/store/conversation';
 import { ConversationStore } from '../src/store/conversations';
 import type { SourceNode } from '../src/views/sourceTree';
 import { FakeCluster, obj } from './fakeCluster';
-import { recorded, resetFake, type FakePanel } from './vscodeFake';
+import { recorded, resetFake, Uri, type FakePanel } from './vscodeFake';
 
 /** The fake API server plus /version, the operator Deployment, and the suite CRD's OpenAPI. */
 class Cluster extends FakeCluster {
@@ -159,6 +159,51 @@ describe('the crew dashboard', () => {
     const failing = new Dashboards({ ...parts, sources: { known: [], loadDeployments: async () => [{ kind: 'message', text: 'Forbidden.', detail: 'crews is forbidden' }] } });
     failing.openCrew({ kind: 'source', entry });
     expect(await body(recorded.panels[1])).toContain('Cannot tell where it is deployed: crews is forbidden');
+  });
+});
+
+describe('the crew dashboard tabs', () => {
+  it('switches between Overview, Source, Live, and Diff, and their links open the file, the diff, and a source folder', async () => {
+    const rendered = obj('Crew', 'demo', NS, { description: 'new' });
+    const drift = [{ kind: 'Crew', name: 'demo', state: 'changed' as const, paths: ['spec.description'], rendered, live: crewObject() }];
+    const loaded = parts.sources.loadDeployments;
+    parts.sources.loadDeployments = async (e) => (await loaded(e)).map((n) => (n.kind === 'deployment' ? { ...n, drift } : n));
+    new Dashboards(parts).openCrew({ kind: 'source', entry });
+    const [panel] = recorded.panels;
+    expect(await body(panel)).toContain('aria-selected="true" data-action="tab" data-arg="overview"');
+    const shown = () => (panel.webview.posted.filter((m) => (m as { type: string }).type === 'render').at(-1) as { html: string }).html;
+    await press(panel, 'tab', 'source');
+    expect(shown()).toContain('data-action="openAt" data-arg="0"');
+    await press(panel, 'openAt', '0');
+    await press(panel, 'openAt', '9');
+    expect(recorded.executed.at(-1)).toMatchObject({ id: 'vscode.open', args: [{ fsPath: '/w/demo/templates/crew.yaml' }, { selection: { startLine: 3 } }] });
+    await press(panel, 'tab', 'live');
+    expect(shown()).toContain('Normalized:');
+    await press(panel, 'raw');
+    expect(shown()).toContain('Raw:');
+    await press(panel, 'tab', 'diff');
+    expect(shown()).toContain('1 of 1 objects differ');
+    await press(panel, 'openDiff', 'Crew/demo');
+    await press(panel, 'openDiff', 'Crew/nope');
+    expect(recorded.executed.filter((e) => e.id === 'crewforge.showDrift')).toHaveLength(1);
+    expect(recorded.executed.at(-1)?.args[0]).toMatchObject({ kind: 'resource', entry, drift: drift[0] });
+    await press(panel, 'tab', 'nonsense');
+    expect(shown()).toContain('1 of 1 objects differ');
+    await press(panel, 'openSourceFolder');
+    expect(recorded.workspaceFolders).toBeUndefined();
+    recorded.openDialog = [Uri.file('/w/other') as never];
+    await press(panel, 'openSourceFolder');
+    expect(recorded.workspaceFolders?.map((f) => f.uri.fsPath)).toEqual(['/w/other']);
+  });
+
+  it('reads a live crew without a source by its label on the Live tab', async () => {
+    new Dashboards(parts).openCrew({ kind: 'crew', crew: liveCrew() });
+    const [panel] = recorded.panels;
+    await body(panel);
+    await press(panel, 'tab', 'live');
+    const html = (panel.webview.posted.at(-1) as { html: string }).html;
+    expect(html).toContain('<h2>Agent (1)</h2>');
+    expect(html).toContain('demo-coordinator');
   });
 });
 

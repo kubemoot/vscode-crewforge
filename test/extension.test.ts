@@ -291,8 +291,8 @@ describe('the inner loop in the extension', () => {
   });
 
   it('says on a live crew whether its source is open', async () => {
-    await loadBundle();
     const tree = recorded.treeViews[0].options.treeDataProvider as CrewTreeProvider;
+    await loadBundle();
     expect(tree.sourceOpen?.({ name: 'demo', namespace: 'somewhere', ready: true, phase: 'Ready' })).toBe(true);
     expect(tree.sourceOpen?.({ name: 'other', namespace: 'somewhere', ready: true, phase: 'Ready' })).toBe(false);
   });

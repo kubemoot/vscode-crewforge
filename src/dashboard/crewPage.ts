@@ -1,10 +1,12 @@
 import { chartVersionBanner } from '../source/normalize';
+import { tabBar, type CrewTab } from './crewTabs';
 import { agentsByRole, type CrewVitals } from './crewVitals';
 import { badge, banner, buttons, escape, facts, note, section, SELECT_CONTEXT_BUTTON, table, type ButtonSpec } from './html';
 
-/** The crew dashboard's page body. */
-export function renderCrewPage(v: CrewVitals): string {
-  return [header(v), buttons(crewButtons(v)), sourceSection(v), deploymentSection(v), agentsSection(v), statusSection(v), conversationsSection(v), kubemootSection(v)].join('');
+/** The crew dashboard's page body: the header, the buttons, the tabs, and the shown tab (the overview unless `body` is given). */
+export function renderCrewPage(v: CrewVitals, tab: CrewTab = 'overview', body?: string): string {
+  const shown = body ?? [sourceSection(v), deploymentSection(v), agentsSection(v), statusSection(v), conversationsSection(v), kubemootSection(v)].join('');
+  return [header(v), buttons(crewButtons(v)), tabBar(tab), shown].join('');
 }
 
 function header(v: CrewVitals): string {

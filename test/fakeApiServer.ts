@@ -21,6 +21,8 @@ export interface FakeApiOptions {
   cluster?: FakeCluster;
   /** The kubeconfig's context name; "fake" by default. */
   context?: string;
+  /** More contexts in the kubeconfig, each pointing at its own server, such as one nobody answers. */
+  otherContexts?: { name: string; server: string }[];
 }
 
 const CREWS = {
@@ -69,20 +71,21 @@ async function clusterRoute(cluster: FakeCluster, method: string, url: string, b
   }
 }
 
-function writeKubeconfig(url: string, context: string): string {
+function writeKubeconfig(url: string, context: string, others: { name: string; server: string }[] = []): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'crewforge-api-'));
   const kubeconfig = path.join(dir, 'config');
+  const all = [{ name: context, server: url }, ...others];
   fs.writeFileSync(
     kubeconfig,
     [
       'apiVersion: v1',
       'kind: Config',
       'clusters:',
-      `- name: ${context}\n  cluster:\n    server: ${url}\n    insecure-skip-tls-verify: true`,
+      ...all.map((c) => `- name: ${c.name}\n  cluster:\n    server: ${c.server}\n    insecure-skip-tls-verify: true`),
       'users:',
-      `- name: ${context}\n  user:\n    token: t`,
+      ...all.map((c) => `- name: ${c.name}\n  user:\n    token: t`),
       'contexts:',
-      `- name: ${context}\n  context:\n    cluster: ${context}\n    user: ${context}`,
+      ...all.map((c) => `- name: ${c.name}\n  context:\n    cluster: ${c.name}\n    user: ${c.name}`),
       `current-context: ${context}`,
     ].join('\n'),
   );
@@ -112,7 +115,7 @@ export async function startFakeApi(options: FakeApiOptions = {}): Promise<FakeAp
   });
   await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
   const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
-  const kubeconfig = writeKubeconfig(url, options.context ?? 'fake');
+  const kubeconfig = writeKubeconfig(url, options.context ?? 'fake', options.otherContexts);
   return {
     url,
     kubeconfig,

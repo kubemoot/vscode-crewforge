@@ -63,7 +63,7 @@ function prepare(kubeconfig: string): { workspace: string; userData: string } {
 async function main(): Promise<void> {
   fs.mkdirSync(work, { recursive: true });
   const extensionDevelopmentPath = extensionUnderTest();
-  const api = await startFakeApi({ cluster: integrationCluster(), context: 'kind-fake' });
+  const api = await startFakeApi({ cluster: integrationCluster(), context: 'kind-fake', otherContexts: [{ name: 'down', server: 'http://127.0.0.1:1' }] });
   const { workspace, userData } = prepare(api.kubeconfig);
   try {
     const vscodeExecutablePath = await downloadAndUnzipVSCode(process.env.VSCODE_VERSION ?? 'stable');

@@ -35,6 +35,32 @@ describe('CrewForge webviews in a real VS Code', () => {
     assert.equal(api.pages().find((p) => p.key === key)?.title, 'demo');
   });
 
+  it('the crew dashboard of a source shows its Source, Live, and Diff tabs', async () => {
+    const node = await sourceNode(api, 'demo/crew');
+    await vscode.commands.executeCommand('crewforge.openCrewDashboard', node);
+    const key = `crew:${node.entry.source.root}`;
+    await pageShows(api, key, ['Overview', 'Source', 'Live', 'Diff']);
+    assert.ok(await api.press(key, 'tab', 'source'));
+    await pageShows(api, key, ['Crew (1)', '02-crew.yaml']);
+    await api.press(key, 'tab', 'live');
+    await pageShows(api, key, ['Normalized:', 'demo']);
+    await api.press(key, 'raw');
+    await pageShows(api, key, ['Raw:']);
+    await api.press(key, 'tab', 'diff');
+    await pageShows(api, key, ['objects differ', 'Crew/demo', 'changed', 'A demo crew, changed in the cluster']);
+  });
+
+  it('the Live tab of a crew with no local source reads it by its label, and Source says how to open one', async () => {
+    const node = await liveCrew(api, 'team-a', 'lab-ops');
+    await vscode.commands.executeCommand('crewforge.openCrewDashboard', node);
+    const key = 'crew:team-a/lab-ops';
+    await pageShows(api, key, ['lab-ops']);
+    await api.press(key, 'tab', 'live');
+    await pageShows(api, key, ['Agent (2)', 'coordinator', 'k8s']);
+    await api.press(key, 'tab', 'source');
+    await pageShows(api, key, ['No local source is open', "Open the Crew's Source Folder..."]);
+  });
+
   it('the fitness dashboard lists the runs, titled "<name> fitness"', async () => {
     const node = await liveCrew(api, 'somewhere', 'demo');
     await vscode.commands.executeCommand('crewforge.openFitnessDashboard', node);

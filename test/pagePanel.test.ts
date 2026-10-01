@@ -231,6 +231,13 @@ describe('PagePanel', () => {
     await vi.waitFor(() => expect(posted().at(-1)).toEqual({ type: 'render', html: '<p>two</p>' }));
   });
 
+  it('runs a button as if pressed on the page, for the integration tests', async () => {
+    PagePanel.show(Uri.file('/ext') as never, 'k', model());
+    expect(await PagePanel.press('k', 'go', 'y')).toBe(true);
+    expect(acted).toEqual(['y']);
+    expect(await PagePanel.press('nope', 'go')).toBe(false);
+  });
+
   it('stops reading once closed, even with a render under way', async () => {
     let finish: (html: string) => void = () => undefined;
     const slow: PageModel = { ...model(), render: () => new Promise((r) => (finish = r)), refreshMs: () => 10 };

@@ -6,6 +6,7 @@ import { channelOf } from '../source/deployments';
 import { discoverKinds, type KubemootKind } from '../source/live';
 import { memberItem, membersOf, readyIcon, sectionItem, sectionsOf, type DetailNode } from './crewDetailsTree';
 import { errorItems, errorLabel, type MessageNode } from './errors';
+import { ReadingNotice } from './readingNotice';
 import { crewDescription, crewTooltip, groupByNamespace, type NamespaceGroup } from './treeModel';
 
 export type CrewNode =
@@ -31,8 +32,15 @@ export class CrewTreeProvider implements vscode.TreeDataProvider<CrewNode> {
   connectionItem: () => { label: string; tooltip: string } | undefined = () => undefined;
   /** Whether a crew has a fitness run in progress; its item then hides Run Fitness. */
   fitnessBusy: (namespace: string, crew: string) => boolean = () => false;
+  /** Shows a line above the view's items, such as "Still reading from lab...", or clears it; set to the view's message. */
+  onMessage: (text: string | undefined) => void = () => undefined;
+  /** Says on the view when a read from the cluster takes a while. */
+  readonly reading = new ReadingNotice(
+    (text) => this.onMessage(text),
+    () => (this.connection ?? this.connectTo()).context,
+  );
   /** Whether a workspace source renders a crew, shown on its line; unknown (nothing shown) until set. */
-  sourceOpen?: (crew: CrewSummary) => boolean;
+  sourceOpen?: (crew: CrewSummary) => boolean | undefined;
 
   constructor(private readonly connectTo: () => Connection = () => connect()) {}
 
@@ -46,9 +54,9 @@ export class CrewTreeProvider implements vscode.TreeDataProvider<CrewNode> {
   }
 
   async getChildren(node?: CrewNode): Promise<CrewNode[]> {
-    if (!node) return this.loadRoot();
+    if (!node) return this.reading.track(() => this.loadRoot());
     if (node.kind === 'namespace') return node.group.crews.map((crew) => ({ kind: 'crew', crew }));
-    if (node.kind === 'crew') return this.loadCrew(node.crew);
+    if (node.kind === 'crew') return this.reading.track(() => this.loadCrew(node.crew));
     if (node.kind === 'section') return membersOf(node);
     return [];
   }

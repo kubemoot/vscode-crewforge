@@ -461,6 +461,12 @@ export const workspace = {
   get workspaceFolders() {
     return recorded.workspaceFolders;
   },
+  updateWorkspaceFolders(start: number, _deleteCount: number, ...folders: { uri: Uri }[]) {
+    const list = recorded.workspaceFolders ?? [];
+    list.splice(start, 0, ...folders.map((f) => ({ name: f.uri.fsPath.split('/').pop() ?? '', uri: f.uri })));
+    recorded.workspaceFolders = list;
+    return true;
+  },
   getConfiguration(section: string) {
     return {
       get<T>(key: string, fallback: T): T {
