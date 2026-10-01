@@ -1,12 +1,13 @@
 import type { KubeTransport } from '../k8s/request';
-import { byName, text } from './describe';
+import { byName } from './describe';
+import { namesOf, strings, text } from './values';
 import { byCodeUnits, LINE_BREAK } from '../text';
-import { isOwned, listKind, objectPath, type KubemootKind } from '../source/live';
+import { clusterPath, isOwned, listKind, objectPath, type KubemootKind } from '../source/live';
 import { KUBEMOOT_GROUP, type Manifest } from '../source/manifests';
 import { errorText } from '../views/errors';
+import { CREW_LABEL, liveOwn, relatedOf, SYSTEM_NAMESPACE, type RelatedGroups } from './related';
 
-/** The label the operator reads to find a crew's Agents and Skills. */
-export const CREW_LABEL = 'kubemoot.ai/crew';
+export { CREW_LABEL } from './related';
 
 /** The order the operator gives a PromptModule or Skill that sets none (the CRD default). */
 const DEFAULT_ORDER = 100;
@@ -59,6 +60,10 @@ export interface McpServerInfo {
 export interface ToolInfo {
   name: string;
   agents: string[];
+  /** The crew's MCPServer that lists it among its tools, when one does. */
+  server?: string;
+  /** What the tool does, as its server reports it. */
+  description?: string;
 }
 
 /** A live crew and the Kubemoot objects it is made of. */
@@ -71,6 +76,10 @@ export interface CrewDetails {
   tools: ToolInfo[];
   /** The MootArchetype of the crew's CrewSchedulingPolicy, when it has one. */
   archetype?: string;
+  /** Models and providers, RAG sources, MCP infrastructure, policies, notifications, fitness, and the operator's defaults. */
+  related: RelatedGroups;
+  /** The MCPGateway the agents call tools through: the first in the namespace by name, as the operator wires it. */
+  gateway?: Manifest;
   /** Kinds that could not be read, such as a PromptModule list the account may not see. */
   problems: string[];
 }
@@ -91,14 +100,12 @@ export function promptForm(content: string): PromptForm {
   return content.split(LINE_BREAK).some((line) => ADL_KEYWORD.test(line.trimStart())) ? 'ADL' : 'prose';
 }
 
-const strings = (value: unknown): string[] => (Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : []);
 const order = (o: Obj): number => (typeof o.spec?.order === 'number' ? o.spec.order : DEFAULT_ORDER);
 const byOrder = <T extends { name: string; order: number }>(a: T, b: T) => a.order - b.order || byName(a, b);
 
 /** The names in spec.mcpServers[] of an Agent or Skill. */
 export function serverRefs(o: Obj): string[] {
-  const refs = o.spec?.mcpServers;
-  return Array.isArray(refs) ? refs.map((r: { name?: unknown }) => r?.name).filter((n): n is string => typeof n === 'string') : [];
+  return namesOf(o.spec?.mcpServers);
 }
 
 function readyCondition(o: Obj): boolean | undefined {
@@ -144,12 +151,13 @@ export function toPromptModule(name: string, usedBy: string[], object: Obj | und
  * The MCPServers that serve the crew: those its agents or skills name, and those installed
  * with it (the crew's label, or the Crew's own Helm release).
  */
-export function mcpServersOf(crew: Manifest, members: Obj[], servers: Obj[]): McpServerInfo[] {
+export function mcpServersOf(crew: Manifest, members: Obj[], servers: Obj[], registered: string[] = []): McpServerInfo[] {
   const named = new Set(members.flatMap(serverRefs));
   const release = crew.metadata.labels?.['app.kubernetes.io/instance'];
+  const viaGateway = new Set(registered);
   const result = new Map<string, McpServerInfo>();
   for (const server of servers) {
-    const reason = serverReason(server, crew.metadata.name, named, release);
+    const reason = serverReason(server, crew.metadata.name, named, release) ?? (viaGateway.has(server.metadata.name) ? "registered with the agents' gateway" : undefined);
     if (reason) result.set(server.metadata.name, { name: server.metadata.name, ...serverStatus(server), reason, object: server });
   }
   for (const name of named) if (!result.has(name)) result.set(name, { name, reason: 'named by an agent or skill, but not found' });
@@ -169,11 +177,27 @@ function serverStatus(server: Obj): Pick<McpServerInfo, 'ready' | 'toolCount'> {
   return { ready: typeof server.status?.ready === 'boolean' ? server.status.ready : undefined, toolCount: Array.isArray(tools) ? tools.length : undefined };
 }
 
-/** The MCP tools the crew's agents may call (spec.enabledTools), each with the agents that enable it. */
-export function toolsOf(agents: Obj[]): ToolInfo[] {
+/**
+ * The MCP tools the crew's agents may call (spec.enabledTools), each with the agents that
+ * enable it and, when one of the crew's MCPServers lists it, that server and its description.
+ */
+export function toolsOf(agents: Obj[], servers: McpServerInfo[] = []): ToolInfo[] {
   const tools = new Map<string, string[]>();
   for (const agent of agents) for (const tool of strings(agent.spec?.enabledTools)) tools.set(tool, [...(tools.get(tool) ?? []), agent.metadata.name]);
-  return [...tools.entries()].map(([name, users]) => ({ name, agents: users.toSorted(byCodeUnits) })).sort(byName);
+  const offered = serverTools(servers);
+  return [...tools.entries()].map(([name, users]) => ({ name, agents: users.toSorted(byCodeUnits), ...offered.get(name) })).sort(byName);
+}
+
+/** Each tool the servers report in their status, with the first server (by name) that offers it. */
+function serverTools(servers: McpServerInfo[]): Map<string, { server: string; description?: string }> {
+  const offered = new Map<string, { server: string; description?: string }>();
+  for (const s of servers) {
+    const tools = (s.object as Obj | undefined)?.status?.tools;
+    for (const t of Array.isArray(tools) ? (tools as { name?: unknown; description?: unknown }[]) : []) {
+      if (typeof t?.name === 'string' && !offered.has(t.name)) offered.set(t.name, { server: s.name, description: text(t.description) });
+    }
+  }
+  return offered;
 }
 
 export function archetypeOf(crew: string, policies: Obj[]): string | undefined {
@@ -197,28 +221,78 @@ async function listOptional(client: KubeTransport, kinds: Map<string, KubemootKi
   }
 }
 
+/** Lists a cluster-scoped kind; a kind the cluster does not serve yields nothing, a read failure a problem. */
+async function listClusterKind(client: KubeTransport, kinds: Map<string, KubemootKind>, kind: string): Promise<Listed> {
+  const k = kinds.get(kind);
+  if (!k || k.namespaced) return { items: [] };
+  try {
+    const body = JSON.parse(await client.request('GET', clusterPath(k))) as { items?: Obj[] };
+    return { items: (body.items ?? []).map((o) => ({ ...o, apiVersion: o.apiVersion ?? `${KUBEMOOT_GROUP}/v1alpha1`, kind })) };
+  } catch (err) {
+    return { items: [], problem: `${kind}: ${errorText(err)}` };
+  }
+}
+
 const MEMBER_KINDS = ['Agent', 'Skill', 'PromptModule', 'MCPServer', 'CrewSchedulingPolicy'] as const;
+
+/** The kinds in the crew's namespace whose objects the crew may use beyond its members. */
+const NAMESPACE_KINDS = ['Model', 'ModelProvider', 'EmbeddingModel', 'RAGSource', 'MCPGateway', 'MCPQualityPolicy', 'MCPCatalog', 'MCPServerReport', 'NotificationSink', 'CrewFitness', 'CrewFitnessSuite'] as const;
+
+/** Cluster-scoped kinds a crew uses: its archetype and the operator's defaults. */
+const CLUSTER_KINDS = ['MootArchetype', 'KubemootConfig'] as const;
+
+/**
+ * Reads every kind a crew may use. A failure to read a kind in the crew's namespace is a
+ * problem to show; one outside it (the system namespace's ModelProviders, cluster-scoped
+ * kinds) only makes those objects unknown, since a namespace account may not see them.
+ */
+async function readPool(client: KubeTransport, kinds: Map<string, KubemootKind>, namespace: string): Promise<{ pool: Map<string, Obj[]>; problems: string[]; unreadable: Set<string> }> {
+  const system = namespace === SYSTEM_NAMESPACE ? Promise.resolve<Listed>({ items: [] }) : listOptional(client, kinds, 'ModelProvider', SYSTEM_NAMESPACE);
+  const [local, providers, cluster] = await Promise.all([
+    Promise.all(NAMESPACE_KINDS.map((k) => listOptional(client, kinds, k, namespace))),
+    system,
+    Promise.all(CLUSTER_KINDS.map((k) => listClusterKind(client, kinds, k))),
+  ]);
+  const pool = new Map<string, Obj[]>(NAMESPACE_KINDS.map((k, i) => [k, local[i].items]));
+  pool.set('ModelProvider', [...(pool.get('ModelProvider') ?? []), ...providers.items]);
+  for (const [i, k] of CLUSTER_KINDS.entries()) pool.set(k, cluster[i].items);
+  const unreadable = new Set<string>();
+  if (providers.problem) unreadable.add('ModelProvider');
+  for (const [i, k] of CLUSTER_KINDS.entries()) if (cluster[i].problem) unreadable.add(k);
+  return { pool, problems: local.map((l) => l.problem).filter((p): p is string => p !== undefined), unreadable };
+}
+
+/** Why a named object of a kind is not listed: missing, or not readable by this account. */
+export function missingText(unreadable: Set<string>): (kind: string) => string {
+  return (kind) => (unreadable.has(kind) ? 'this account cannot read it' : 'not found');
+}
 
 /** Reads a live Crew and the objects that make it up. The Crew itself must be readable; every other kind is best effort. */
 export async function loadCrewDetails(client: KubeTransport, kinds: Map<string, KubemootKind>, namespace: string, name: string): Promise<CrewDetails> {
   const crewKind = kinds.get('Crew') ?? { kind: 'Crew', plural: 'crews', namespaced: true };
   const raw = JSON.parse(await client.request('GET', objectPath(crewKind, namespace, name))) as Obj;
   const crew: Obj = { ...raw, apiVersion: raw.apiVersion ?? `${KUBEMOOT_GROUP}/v1alpha1`, kind: raw.kind ?? 'Crew' };
-  const [agents, skills, modules, servers, policies] = await Promise.all(MEMBER_KINDS.map((k) => listOptional(client, kinds, k, namespace)));
+  const [members, extra] = await Promise.all([Promise.all(MEMBER_KINDS.map((k) => listOptional(client, kinds, k, namespace))), readPool(client, kinds, namespace)]);
+  const [agents, skills, modules, servers, policies] = members;
   const member = (o: Obj) => o.metadata.labels?.[CREW_LABEL] === name;
   const agentObjects = agents.items.filter(member);
   const skillObjects = skills.items.filter(member);
   const agentInfos = agentObjects.map(toAgent).sort(byName);
   const sharedRefs = new Set(agents.items.filter((o) => !member(o)).flatMap((o) => strings(o.spec?.promptRefs)));
+  const gateway = (extra.pool.get('MCPGateway') ?? []).toSorted((a, b) => byCodeUnits(a.metadata.name, b.metadata.name))[0];
+  const mcpServers = mcpServersOf(crew, [...agentObjects, ...skillObjects], servers.items, strings(gateway?.status?.mcpServers));
+  extra.pool.set('CrewSchedulingPolicy', policies.items);
   return {
     crew,
     agents: agentInfos,
     skills: skillObjects.map(toSkill).sort(byOrder),
     promptModules: promptModulesOf(agentInfos, modules.items, sharedRefs),
-    mcpServers: mcpServersOf(crew, [...agentObjects, ...skillObjects], servers.items),
-    tools: toolsOf(agentObjects),
+    mcpServers,
+    tools: toolsOf(agentObjects, mcpServers),
     archetype: archetypeOf(name, policies.items),
-    problems: [agents, skills, modules, servers, policies].map((l) => l.problem).filter((p): p is string => p !== undefined),
+    related: relatedOf({ crew: name, namespace, agents: agentObjects, skills: skillObjects, servers: mcpServers.map((s) => s.name), pool: extra.pool, own: liveOwn(crew), missing: missingText(extra.unreadable) }),
+    gateway,
+    problems: [...members.map((l) => l.problem), ...extra.problems].filter((p): p is string => p !== undefined),
   };
 }
 

@@ -72,7 +72,7 @@ beforeEach(async () => {
       known: [entry],
       loadDeployments: async (e: SourceEntry): Promise<SourceNode[]> => (deployed ? [{ kind: 'deployment', entry: e, deployment: { namespace: NS, crew: { ...liveCrew(), agents: 1 }, channel: 'helm', release: 'demo', linked: true } }] : [{ kind: 'message', text: 'Not deployed in lab', icon: 'circle-slash' }]),
     },
-    service: { located: async () => located, kinds: discoverKinds },
+    service: { located: async () => located, kinds: discoverKinds, declarations: async () => ({ sections: [] }) },
     details: async (crew) => loadCrewDetails(cluster, await discoverKinds(cluster), crew.namespace, crew.name),
     store,
     memory: { redeployNamespace: () => undefined },

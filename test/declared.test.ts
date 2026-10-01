@@ -6,7 +6,7 @@ import { objectKey, type Manifest } from '../src/source/manifests';
 import { chartDocuments, chartFile, helmErrorLocation, RenderError, renderWithOrigins, type Exec } from '../src/source/render';
 import { SourceService, sourceOf, type SourceDeps, type SourceEntry } from '../src/source/service';
 import { openAt, SourceTreeProvider, type SourceNode } from '../src/views/sourceTree';
-import { FakeCluster } from './fakeCluster';
+import { FakeCluster, obj } from './fakeCluster';
 import { resetFake } from './vscodeFake';
 
 const ROOT = '/w/demo';
@@ -238,6 +238,35 @@ describe('declarationsOf', () => {
     expect(unreadable.sections.at(-1)?.items.map((i) => [i.label, i.line])).toEqual([['a', 2]]);
   });
 
+  it('lists the Models, RAG sources, MCP infrastructure, tools, policies, and notifications a source declares or names', async () => {
+    const ns = 'default';
+    const at = (manifest: Manifest, line: number): Located => ({ manifest, file: '/w/x/templates/all.yaml', line });
+    const located: Located[] = [
+      at(obj('Crew', 'lab', ns), 0),
+      at(obj('Agent', 'k8s', ns, { enabledTools: ['pods_list'], ragSources: [{ name: 'docs' }] }), 5),
+      at(obj('Agent', 'nodes', ns, { enabledTools: ['pods_list', 'nodes_top'] }), 9),
+      at(obj('Model', 'qwen', ns, { model: 'qwen3:8b', providerRef: 'ollama' }, { latencyClass: 'low' }), 14),
+      at(obj('RAGSource', 'docs', ns, { source: { type: 'git', git: { url: 'https://x' } }, embeddingModelRef: 'gone' }), 20),
+      at(obj('MCPGateway', 'gw', ns, { qualityPolicyRef: 'q' }), 30),
+      at(obj('MCPQualityPolicy', 'q', ns), 34),
+      at(obj('CrewSchedulingPolicy', 'lab-scheduling', ns, { crewRef: 'lab', rules: [{ phase: 'mulling' }] }), 40),
+      at(obj('NotificationSink', 'pager', ns, { webhook: { url: 'https://ntfy.example.com/t' } }), 50),
+    ];
+    const { sections } = await declarationsOf(located, [], readText);
+    const shown = Object.fromEntries(sections.map((s) => [s.section, s.items.map((i) => `${i.label}|${i.description}|${i.line}|${i.object ? 'object' : '-'}`)]));
+    expect(shown.models).toEqual(['qwen|Model · qwen3:8b · low tier|14|object', 'ollama|ModelProvider · shared, installed elsewhere|0|-']);
+    expect(shown.rag).toEqual(['docs|RAGSource · git: https://x · not indexed yet|20|object', 'gone|EmbeddingModel · not in this source|0|-']);
+    expect(shown.mcp).toEqual(['gw|MCPGateway · kubemoot|30|object', 'q|MCPQualityPolicy · 0 allowed · 0 blocked · AI review on|34|object']);
+    expect(shown.tools).toEqual(['nodes_top|nodes|9|-', 'pods_list|k8s, nodes|5|-']);
+    expect(shown.policies).toEqual(['lab-scheduling|CrewSchedulingPolicy · rules for mulling|40|object', 'consent-3|MootArchetype · shared, installed elsewhere|0|-']);
+    expect(shown.notifications).toEqual(['pager|NotificationSink · ntfy.example.com · every agent|50|object']);
+    const items = Object.fromEntries(sections.map((s) => [s.section, s.items]));
+    expect(items.rag[1]).toMatchObject({ icon: 'warning', warn: true });
+    expect(items.models[1]).toMatchObject({ icon: 'globe', warn: false, tooltip: expect.stringContaining('Shared: owned by the cluster.') });
+    expect(items.tools[1].tooltip).toContain('Which MCP server offers it shows once the crew is deployed');
+    expect(items.agents[0].object).toEqual({ kind: 'Agent', name: 'k8s' });
+  });
+
   it('gives an agent and the prompt modules it composes, for jumping to them', async () => {
     const located = await locate(chartDocuments(ROOT, HELM_OUT), readText);
     expect(agentPrompts(located, 'demo-coordinator').map((l: Located) => objectKey(l.manifest))).toEqual(['Agent/demo-coordinator', 'PromptModule/rules', 'PromptModule/style']);
@@ -303,7 +332,7 @@ describe('Crew Sources declarations', () => {
     const [source] = await provider.getChildren();
     expect(provider.getTreeItem(source)).toMatchObject({ id: `source:${ROOT}` });
     const children = await provider.getChildren(source);
-    expect(children.map((c) => provider.getTreeItem(c).label)).toEqual(['demo', 'Agents', 'PromptModules', 'Skills', 'MCP Servers', 'Fitness Scenarios', 'Not deployed in lab']);
+    expect(children.map((c) => provider.getTreeItem(c).label)).toEqual(['demo', 'Agents', 'Prompts', 'Skills', 'Models', 'RAG Sources', 'MCP Servers', 'Tools', 'Policies', 'Notifications', 'Fitness Scenarios', 'Not deployed in lab']);
     const crew = provider.getTreeItem(children[0]);
     expect(crew.command).toMatchObject({ command: 'vscode.open', arguments: [{ fsPath: `${ROOT}/templates/crew.yaml` }, { selection: { startLine: 0 } }] });
     expect(crew.tooltip).toContain(`${ROOT}/templates/crew.yaml:1`);
@@ -332,15 +361,16 @@ describe('Crew Sources declarations', () => {
     expect(await provider.entries()).toHaveLength(1);
   });
 
-  it('hides an empty MCP section, shows an empty one of the others as none, and reports what it cannot read', async () => {
+  it('shows every group, an empty one as none, and reports what it cannot read', async () => {
     resetFake();
     const bare: Exec = async (cmd) => (cmd === 'helm' ? { code: 0, stdout: `---\n# Source: demo-chart/templates/crew.yaml\n${FILES[`${ROOT}/templates/crew.yaml`]}\n`, stderr: '' } : { code: 128, stdout: '', stderr: '' });
     const provider = tree(deps(bare, []));
     const [source] = await provider.getChildren();
     const children = await provider.getChildren(source);
     const labels = children.map((c) => provider.getTreeItem(c));
-    expect(labels.map((i) => i.label)).toEqual(['demo', 'Agents', 'PromptModules', 'Skills', 'Fitness Scenarios', 'Not deployed in lab']);
+    expect(labels.map((i) => i.label)).toEqual(['demo', 'Agents', 'Prompts', 'Skills', 'Models', 'RAG Sources', 'MCP Servers', 'Tools', 'Policies', 'Notifications', 'Fitness Scenarios', 'Not deployed in lab']);
     expect(labels[1]).toMatchObject({ description: 'none', collapsibleState: 0 });
+    expect(labels[6]).toMatchObject({ description: 'none', tooltip: expect.stringContaining('MCPServers') });
     const failing = { ...deps(bare, []), readYamlFiles: async () => Promise.reject(new Error('disk gone')) };
     const broken = tree(failing);
     const [brokenSource] = await broken.getChildren();

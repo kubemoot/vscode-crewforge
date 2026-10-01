@@ -212,7 +212,7 @@ describe('Deployer', () => {
     await expect(deployer.deleteObjects('team-a', [obj('Agent', 'a', 'team-a'), { apiVersion: 'v1', kind: 'Namespace', metadata: { name: 'team-a' } }])).rejects.toThrow(
       'CrewForge deletes only Kubemoot objects, not Namespace/team-a.',
     );
-    await expect(deployer.deleteObjects('team-a', [obj('MootArchetype', 'x', 'team-a')])).rejects.toThrow('The cluster does not serve MootArchetype.');
+    await expect(deployer.deleteObjects('team-a', [obj('Widget', 'x', 'team-a')])).rejects.toThrow('The cluster does not serve Widget.');
     expect(cluster.calls.filter((c) => c.method === 'DELETE')).toEqual([]);
     cluster.failures.set('/apis/kubemoot.ai/v1alpha1/namespaces/team-a/agents/a', new KubeError('forbidden', 403));
     await expect(deployer.deleteObjects('team-a', [obj('Agent', 'a', 'team-a')])).rejects.toThrow('forbidden');

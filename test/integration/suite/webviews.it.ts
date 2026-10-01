@@ -27,6 +27,14 @@ describe('CrewForge webviews in a real VS Code', () => {
     assert.equal(api.pages().find((p) => p.key === 'crew:team-a/lab-ops')?.title, 'lab-ops');
   });
 
+  it('the dashboard of a live crew counts every group, and a group opens in Deployed Crews', async () => {
+    const node = await liveCrew(api, 'team-a', 'lab-ops');
+    await vscode.commands.executeCommand('crewforge.openCrewDashboard', node);
+    await pageShows(api, 'crew:team-a/lab-ops', ['Contents', 'RAG Sources', 'Notifications']);
+    assert.ok(await api.press('crew:team-a/lab-ops', 'group', 'models'));
+    await until('the Models group selected in Deployed Crews', () => api.crewsView.selection.find((n) => n.kind === 'section' && n.section === 'models'), () => api.crewsView.selection);
+  });
+
   it('the dashboard of a crew source shows its source and its deployment', async () => {
     const node = await sourceNode(api, 'demo/crew');
     await vscode.commands.executeCommand('crewforge.openCrewDashboard', node);

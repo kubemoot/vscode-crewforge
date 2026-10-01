@@ -1,17 +1,21 @@
 import * as vscode from 'vscode';
 import { agentLine, agentTooltip, lines, missingPromptTooltip, promptLine, promptTooltip, usersText } from '../crew/describe';
 import type { AgentInfo, CrewDetails, McpServerInfo, PromptModuleInfo, SkillInfo, ToolInfo } from '../crew/details';
+import { COUNTS, GROUP_ORDER, GROUPS, SHARED, sharedLine, type Group } from '../crew/groups';
+import { factsOf } from '../crew/kindFacts';
+import type { Related } from '../crew/related';
+import { parameters, toolOrigin, type ToolCatalog } from '../crew/toolCatalog';
 import type { CrewSummary } from '../k8s/crews';
 import { provenanceFacts, provenanceOf, type ProvenanceFact } from '../source/provenance';
 
-/** A live object whose YAML can be opened: a Kubemoot object, or the Flux object that applies a crew. */
+/** A live object whose YAML can be opened: a Kubemoot object, or the Flux object that applies a crew. An empty namespace is a cluster-scoped object. */
 export interface ObjectRef {
   kind: string;
   name: string;
   namespace: string;
 }
 
-export type Section = 'agents' | 'prompts' | 'skills' | 'mcp' | 'tools' | 'deployment';
+export type Section = Group;
 
 /** One leaf under a crew section. */
 export interface MemberView {
@@ -22,52 +26,38 @@ export interface MemberView {
   color?: string;
   /** Set when the leaf is a live object; clicking it opens the object's YAML. */
   ref?: ObjectRef;
+  /** Set on a tool; clicking it opens the tool's details. */
+  tool?: { info: ToolInfo; catalog?: ToolCatalog };
+  /** Set when the object is not the crew's own. */
+  shared?: boolean;
 }
 
 export type DetailNode =
-  | { kind: 'section'; crew: CrewSummary; section: Section; details: CrewDetails }
+  | { kind: 'section'; crew: CrewSummary; section: Section; details: CrewDetails; catalog?: ToolCatalog }
   | { kind: 'member'; crew: CrewSummary; view: MemberView };
 
-const SECTION_TITLES: Record<Section, [string, string]> = {
-  agents: ['Agents', 'organization'],
-  prompts: ['PromptModules', 'note'],
-  skills: ['Skills', 'mortar-board'],
-  mcp: ['MCP Servers', 'server-process'],
-  tools: ['Tools', 'tools'],
-  deployment: ['Deployment', 'package'],
-};
-
-/** The sections under a crew; MCP servers and tools appear only when the crew has some. */
+/** Every group under a crew, in order; a group with nothing in it says "none". */
 export function sectionsOf(crew: CrewSummary, details: CrewDetails): DetailNode[] {
-  const sections: Section[] = ['agents', 'prompts', 'skills'];
-  if (details.mcpServers.length) sections.push('mcp');
-  if (details.tools.length) sections.push('tools');
-  sections.push('deployment');
-  return sections.map((section) => ({ kind: 'section', crew, section, details }));
+  return GROUP_ORDER.map((section) => ({ kind: 'section', crew, section, details }));
 }
 
-const MEMBERS: Record<Section, (crew: CrewSummary, d: CrewDetails) => MemberView[]> = {
+const MEMBERS: Record<Section, (crew: CrewSummary, d: CrewDetails, catalog?: ToolCatalog) => MemberView[]> = {
   agents: (crew, d) => d.agents.map((a) => agentView(crew, a)),
   prompts: (crew, d) => d.promptModules.map((m) => promptView(crew, m)),
   skills: (crew, d) => d.skills.map((s) => skillView(crew, s)),
-  mcp: (crew, d) => d.mcpServers.map((s) => serverView(crew, s)),
-  tools: (_crew, d) => d.tools.map(toolView),
-  deployment: (crew) => provenanceFacts(provenanceOf(crew)).map((f) => factView(crew, f)),
+  models: (_crew, d) => d.related.models.map(relatedView),
+  rag: (_crew, d) => d.related.rag.map(relatedView),
+  mcp: (crew, d) => [...d.mcpServers.map((s) => serverView(crew, s)), ...d.related.mcp.map(relatedView)],
+  tools: (_crew, d, catalog) => d.tools.map((t) => toolView(t, catalog)),
+  policies: (_crew, d) => d.related.policies.map(relatedView),
+  notifications: (_crew, d) => d.related.notifications.map(relatedView),
+  fitness: (_crew, d) => d.related.fitness.map(relatedView),
+  deployment: (crew, d) => [...provenanceFacts(provenanceOf(crew)).map((f) => factView(crew, f)), ...d.related.operator.map(relatedView)],
 };
 
 export function membersOf(node: Extract<DetailNode, { kind: 'section' }>): DetailNode[] {
-  return MEMBERS[node.section](node.crew, node.details).map((view) => ({ kind: 'member', crew: node.crew, view }));
+  return MEMBERS[node.section](node.crew, node.details, node.catalog).map((view) => ({ kind: 'member', crew: node.crew, view }));
 }
-
-/** How many members a section has; the deployment section always has its channel. */
-const COUNTS: Record<Section, (d: CrewDetails) => number> = {
-  agents: (d) => d.agents.length,
-  prompts: (d) => d.promptModules.length,
-  skills: (d) => d.skills.length,
-  mcp: (d) => d.mcpServers.length,
-  tools: (d) => d.tools.length,
-  deployment: () => 1,
-};
 
 function sectionSummary(section: Section, d: CrewDetails): string | undefined {
   if (section === 'deployment') return undefined;
@@ -77,13 +67,22 @@ function sectionSummary(section: Section, d: CrewDetails): string | undefined {
 }
 
 export function sectionItem(node: Extract<DetailNode, { kind: 'section' }>): vscode.TreeItem {
-  const [title, icon] = SECTION_TITLES[node.section];
+  const { label, icon, rule } = GROUPS[node.section];
   const empty = COUNTS[node.section](node.details) === 0;
-  const item = new vscode.TreeItem(title, empty ? vscode.TreeItemCollapsibleState.None : vscode.TreeItemCollapsibleState.Collapsed);
+  const item = new vscode.TreeItem(label, empty ? vscode.TreeItemCollapsibleState.None : vscode.TreeItemCollapsibleState.Collapsed);
+  item.id = `section:${node.crew.namespace}/${node.crew.name}:${node.section}`;
   item.description = empty ? 'none' : sectionSummary(node.section, node.details);
+  item.tooltip = rule;
   item.iconPath = new vscode.ThemeIcon(icon);
   item.contextValue = `crewSection-${node.section}`;
   return item;
+}
+
+/** The context value of a leaf: a live object, a shared one, or a tool; none for a fact without an object. */
+function memberContext(view: MemberView): string | undefined {
+  if (view.tool) return 'tool';
+  if (!view.ref) return undefined;
+  return view.shared ? 'liveObject-shared' : 'liveObject';
 }
 
 export function memberItem(node: Extract<DetailNode, { kind: 'member' }>): vscode.TreeItem {
@@ -92,11 +91,26 @@ export function memberItem(node: Extract<DetailNode, { kind: 'member' }>): vscod
   item.description = view.description;
   item.tooltip = view.tooltip;
   item.iconPath = new vscode.ThemeIcon(view.icon, view.color ? new vscode.ThemeColor(view.color) : undefined);
-  if (view.ref) {
-    item.contextValue = 'liveObject';
-    item.command = { command: 'crewforge.showLiveYaml', title: 'Show YAML', arguments: [node] };
-  }
+  item.contextValue = memberContext(view);
+  if (view.tool) item.command = { command: 'crewforge.showToolDetails', title: 'Show Tool Details', arguments: [node] };
+  else if (view.ref) item.command = { command: 'crewforge.showLiveYaml', title: 'Show YAML', arguments: [node] };
   return item;
+}
+
+/** A related object: its facts, marked shared with its owner when it is not the crew's own; a missing one warns. */
+export function relatedView(r: Related): MemberView {
+  const facts = factsOf(r);
+  const shared = r.sharedBy !== undefined;
+  const state = facts.ready === undefined ? {} : readyIcon(facts.ready);
+  const icon = r.object ? { icon: facts.icon, ...state } : { icon: 'warning', color: 'list.warningForeground' };
+  return {
+    label: r.name,
+    description: [shared ? `${r.kind} · ${SHARED}` : r.kind, facts.description].filter(Boolean).join(' · '),
+    tooltip: lines(`${r.kind} ${r.namespace ? r.namespace + '/' : ''}${r.name}`, `Why it is listed: ${r.reason}`, ...facts.lines, shared && sharedLine(r.sharedBy as string)),
+    ...icon,
+    ref: r.object ? { kind: r.kind, name: r.name, namespace: r.namespace ?? '' } : undefined,
+    shared,
+  };
 }
 
 const ref = (crew: CrewSummary, kind: string, name: string): ObjectRef => ({ kind, name, namespace: crew.namespace });
@@ -159,8 +173,32 @@ export function serverView(crew: CrewSummary, s: McpServerInfo): MemberView {
   };
 }
 
-export function toolView(t: ToolInfo): MemberView {
-  return { label: t.name, description: t.agents.join(', '), tooltip: `Tool ${t.name}, enabled for: ${t.agents.join(', ')}`, icon: 'wrench' };
+/** A tool: the server it comes from, what it does, who enables it, and its inputs; a catalog that cannot be read is said on the item. */
+export function toolView(t: ToolInfo, catalog?: ToolCatalog): MemberView {
+  const { server } = toolOrigin(t, catalog);
+  const from = server ? `from ${server}` : 'no server offers it';
+  const unreadable = catalog?.unreadable ? 'catalog unreadable' : undefined;
+  const warn = server ? {} : { color: 'list.warningForeground' };
+  return {
+    label: t.name,
+    description: [from, t.agents.join(', '), unreadable].filter(Boolean).join(' · '),
+    tooltip: toolTooltip(t, catalog),
+    icon: server ? 'wrench' : 'warning',
+    ...warn,
+    tool: { info: t, catalog },
+  };
+}
+
+function toolTooltip(t: ToolInfo, catalog?: ToolCatalog): string {
+  const { server, description, schema } = toolOrigin(t, catalog);
+  return lines(
+    `Tool ${t.name}`,
+    server ? `From: MCPServer ${server}` : 'No MCP server of this crew lists it.',
+    description,
+    `Enabled by: ${t.agents.join(', ')}`,
+    schema && `Inputs: ${parameters(schema) || 'none'}`,
+    catalog?.unreadable && `Cannot read the gateway's tool catalog: ${catalog.unreadable}`,
+  );
 }
 
 /** A deployment fact; a Flux fact opens the Flux object, every other fact the Crew whose labels it came from. */

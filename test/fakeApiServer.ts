@@ -59,9 +59,11 @@ function fixedRoute(method: string, url: string, body: string, posts: FakeApi['p
   return undefined;
 }
 
-/** A Kubemoot group request answered by the cluster, with a Kubernetes Status body on failure. */
+/** A Kubemoot group request answered by the cluster, or a GET of a path the cluster has a body for (a service proxy path), with a Kubernetes Status body on failure. */
 async function clusterRoute(cluster: FakeCluster, method: string, url: string, body: string): Promise<Reply> {
   const route = url.split('?')[0];
+  const proxied = method === 'GET' ? cluster.bodies.get(route) : undefined;
+  if (proxied !== undefined) return { status: 200, body: proxied };
   if (!route.startsWith('/apis/kubemoot.ai/')) return json({ kind: 'Status', message: `the fake API server has no ${route}` }, 404);
   try {
     return { status: 200, body: await cluster.request(method, route, body ? JSON.parse(body) : undefined) };

@@ -1,12 +1,16 @@
 import { agentLine, agentTooltip, byName, lines, missingPromptTooltip, promptLine, promptTooltip, text, usersText } from '../crew/describe';
-import { promptModulesOf, serverRefs, toAgent, toPromptModule, toSkill, type AgentInfo, type PromptModuleInfo } from '../crew/details';
+import { promptModulesOf, serverRefs, toAgent, toolsOf, toPromptModule, toSkill, type AgentInfo, type PromptModuleInfo } from '../crew/details';
+import { sharedLine } from '../crew/groups';
+import { factsOf } from '../crew/kindFacts';
+import { strings } from '../crew/values';
+import { relatedOf, type Obj as RelatedObj, type Related } from '../crew/related';
 import { isFitness } from '../fitness/fitness';
 import { scenarioLine, type Located } from './locate';
 import { scriptForm, scriptName } from './scripts';
 import { crewOf, isKubemoot, type Manifest } from './manifests';
 
 /** The groups a crew source's declarations appear in, in tree order. */
-export type DeclaredSection = 'agents' | 'prompts' | 'skills' | 'mcp' | 'fitness';
+export type DeclaredSection = 'agents' | 'prompts' | 'skills' | 'models' | 'rag' | 'mcp' | 'tools' | 'policies' | 'notifications' | 'fitness';
 
 /** One thing a source declares, ready to show, and where it starts in its file. */
 export interface DeclaredItem {
@@ -20,6 +24,8 @@ export interface DeclaredItem {
   line: number;
   /** For a fitness scenario: what kind it is, so it can be run, renamed, or deleted. */
   scenario?: ScenarioRef;
+  /** For an object the source declares: its kind and name, so it can be removed from the source. */
+  object?: { kind: string; name: string };
 }
 
 /**
@@ -42,7 +48,6 @@ export interface Declarations {
 
 type Obj = Manifest & { spec?: Record<string, unknown> };
 
-const strings = (value: unknown): string[] => (Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : []);
 
 /**
  * What a crew source declares, read from its rendered objects: the Crew, its Agents
@@ -56,22 +61,73 @@ export async function declarationsOf(located: Located[], fitness: Located[], rea
     const l = m && where.get(m);
     return { file: l?.file, line: l?.line ?? 0 };
   };
+  const declared = (m: Manifest) => ({ ...at(m), object: { kind: m.kind, name: m.metadata.name } });
   const ofKind = (kind: string) => locatedOfKind(located, kind).map((l) => l.manifest as Obj);
   const crew = crewOf(located.map((l) => l.manifest));
   const agents = ofKind('Agent').map(toAgent).sort(byName);
   const skills = ofKind('Skill').map(toSkill).sort((a, b) => a.order - b.order || byName(a, b));
+  const related = sourceRelated(located, crew, agents.map((a) => a.object as Obj), skills.map((s) => s.object as Obj));
+  const relatedItems = (r: Related[]) => r.map((x) => relatedItem(x, declared));
   return {
     crew: crew && { label: crew.metadata.name, description: 'Crew', tooltip: lines(`Crew ${crew.metadata.name}`, text((crew as Obj).spec?.description)), icon: 'organization', ...at(crew) },
     sections: [
-      { section: 'agents', items: agents.map((a) => ({ ...agentItem(a), ...at(a.object) })) },
-      { section: 'prompts', items: promptsOf(agents, ofKind('PromptModule')).map((m) => ({ ...promptItem(m), ...at(m.object) })) },
-      { section: 'skills', items: skills.map((s) => ({ label: s.name, description: `order ${s.order}`, tooltip: lines(`Skill ${s.name}`, `Order: ${s.order}`, s.description), icon: 'mortar-board', ...at(s.object) })) },
-      { section: 'mcp', items: serversOf([...agents.map((a) => a.object as Obj), ...skills.map((s) => s.object as Obj)], ofKind('MCPServer'), at) },
+      { section: 'agents', items: agents.map((a) => ({ ...agentItem(a), ...declared(a.object) })) },
+      { section: 'prompts', items: promptsOf(agents, ofKind('PromptModule')).map((m) => ({ ...promptItem(m), ...(m.object ? declared(m.object) : at()) })) },
+      { section: 'skills', items: skills.map((s) => ({ label: s.name, description: `order ${s.order}`, tooltip: lines(`Skill ${s.name}`, `Order: ${s.order}`, s.description), icon: 'mortar-board', ...declared(s.object) })) },
+      { section: 'models', items: relatedItems(related.models) },
+      { section: 'rag', items: relatedItems(related.rag) },
+      { section: 'mcp', items: [...serversOf([...agents.map((a) => a.object as Obj), ...skills.map((s) => s.object as Obj)], ofKind('MCPServer'), declared), ...relatedItems(related.mcp)] },
+      { section: 'tools', items: toolItems(agents, at) },
+      { section: 'policies', items: relatedItems(related.policies) },
+      { section: 'notifications', items: relatedItems(related.notifications) },
       { section: 'fitness', items: [...(await scenariosOf(fitness, readText)), ...scripts.map(scriptItem)] },
     ],
   };
 }
 
+/** Kinds that are cluster infrastructure: a source names them but Kubemoot or the cluster's owner installs them. */
+const INSTALLED_ELSEWHERE = new Set(['ModelProvider', 'MootArchetype', 'KubemootConfig']);
+
+/** The objects a source relates to its crew, found among what it renders; everything it renders is its own. */
+function sourceRelated(located: Located[], crew: Manifest | undefined, agents: Obj[], skills: Obj[]) {
+  const pool = new Map<string, RelatedObj[]>();
+  for (const l of located.filter((x) => isKubemoot(x.manifest))) pool.set(l.manifest.kind, [...(pool.get(l.manifest.kind) ?? []), l.manifest as RelatedObj]);
+  const name = crew?.metadata.name ?? '';
+  // A render places every object in the namespace it renders for, the Crew too.
+  const namespace = crew?.metadata.namespace ?? '';
+  const servers = (pool.get('MCPServer') ?? []).map((m) => m.metadata.name);
+  const missing = (kind: string) => (INSTALLED_ELSEWHERE.has(kind) ? 'installed outside this source' : 'not in this source');
+  return relatedOf({ crew: name, namespace, agents, skills, servers, pool, own: () => true, missing });
+}
+
+/** A related object as the source tree shows it: declared here (opens at its line), or named and installed elsewhere. */
+function relatedItem(r: Related, declared: (m: Manifest) => Pick<DeclaredItem, 'file' | 'line' | 'object'>): DeclaredItem {
+  const facts = factsOf(r);
+  const head = `${r.kind} ${r.name}`;
+  if (!r.object) {
+    const shared = r.sharedBy !== undefined;
+    return {
+      label: r.name,
+      description: `${r.kind} · ${shared ? 'shared, installed elsewhere' : 'not in this source'}`,
+      tooltip: lines(head, `Why it is listed: ${r.reason}`, shared && sharedLine(r.sharedBy as string)),
+      icon: shared ? 'globe' : 'warning',
+      warn: !shared,
+      line: 0,
+    };
+  }
+  return { label: r.name, description: [r.kind, facts.description].filter(Boolean).join(' · '), tooltip: lines(head, `Why it is listed: ${r.reason}`, ...facts.lines), icon: facts.icon, ...declared(r.object) };
+}
+
+/** The tools the agents enable, each opening the first agent that enables it. */
+function toolItems(agents: AgentInfo[], at: (m?: Manifest) => Pick<DeclaredItem, 'file' | 'line'>): DeclaredItem[] {
+  return toolsOf(agents.map((a) => a.object as Obj)).map((t) => ({
+    label: t.name,
+    description: t.agents.join(', '),
+    tooltip: lines(`Tool ${t.name}`, `Enabled by: ${t.agents.join(', ')}`, 'Which MCP server offers it shows once the crew is deployed, under Tools in Deployed Crews.'),
+    icon: 'wrench',
+    ...at(agents.find((a) => a.name === t.agents[0])?.object),
+  }));
+}
 
 function agentItem(a: AgentInfo): Omit<DeclaredItem, 'line'> {
   return {
@@ -98,7 +154,7 @@ function promptItem(m: PromptModuleInfo): Omit<DeclaredItem, 'line'> {
 }
 
 /** The MCPServers the source declares, then those its agents or skills name that it does not. */
-function serversOf(members: Obj[], servers: Obj[], at: (m?: Manifest) => Pick<DeclaredItem, 'file' | 'line'>): DeclaredItem[] {
+function serversOf(members: Obj[], servers: Obj[], at: (m: Manifest) => Pick<DeclaredItem, 'file' | 'line' | 'object'>): DeclaredItem[] {
   const named = new Set(members.flatMap(serverRefs));
   const declared = servers.map((s): DeclaredItem => {
     const reason = named.has(s.metadata.name) ? 'declared here, named by an agent or skill' : 'declared here';

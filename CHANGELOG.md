@@ -17,8 +17,20 @@ generated from the conventional commits since the previous release.
   **Deploy to Namespace...**. A missing or old kmctl is named before anything is asked.
 - **View in CrewForge** on any file or folder inside a crew selects the matching item in
   Crew Sources (the object a manifest declares, or the crew) and opens its dashboard.
-- A crew source expands to what it declares: the Crew, Agents, PromptModules (ADL or
-  prose), Skills, MCP Servers, and Fitness Scenarios. Each opens its file at the object.
+- A crew, deployed or in a source, shows every part of it in one order: Agents, Prompts
+  (ADL or prose), Skills, Models and the ModelProviders they run on, RAG Sources and their
+  EmbeddingModels, MCP Servers with the gateway, quality policy, and catalogs, Tools,
+  Policies (the scheduling policy and its archetype), Notifications, Fitness, and
+  Deployment. An empty group says *none*; an object the crew shares is marked *shared*
+  with its owner. Hover a Model, RAG source, or policy for what matters about it. Each
+  opens its live YAML, or its file at the object.
+- A tool says which MCP server offers it, what it does, its inputs, and which agents
+  enable it, from the gateway's tool catalog; clicking it opens a read-only page.
+- **Add <Kind>...** on a group of a crew source writes a new Agent, PromptModule, Skill,
+  Model, RAGSource, EmbeddingModel, MCPServer, CrewSchedulingPolicy, or NotificationSink
+  in the shape of the source's own objects, opens it, and lints it. **Remove from
+  Source...** takes one out again after a confirmation.
+- The crew dashboard's Overview counts each group, and a group opens in the tree.
   Crew Sources follows the file system, and a chart that does not render shows the error
   as an item that opens the file and line.
 - A status bar item names the crew of the open file and where it stands: not deployed,

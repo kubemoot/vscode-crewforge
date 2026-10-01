@@ -2,10 +2,11 @@ import * as vscode from 'vscode';
 import { connect, type Connection } from '../connection';
 import { bundleObjects, loadCrewDetails } from '../crew/details';
 import { checkName } from '../k8s/paths';
-import { discoverKinds, objectPath, type KubemootKind } from '../source/live';
+import { clusterPath, discoverKinds, objectPath, type KubemootKind } from '../source/live';
 import { dumpYaml, KUBEMOOT_GROUP, toLiveYaml, type Manifest } from '../source/manifests';
 import { NORMALIZED_NOTE, normalizedYaml } from '../source/normalize';
-import type { ObjectRef } from './crewDetailsTree';
+import { toolDocument } from '../crew/toolCatalog';
+import type { DetailNode, ObjectRef } from './crewDetailsTree';
 import { errorText } from './errors';
 
 export const LIVE_SCHEME = 'crewforge-live';
@@ -15,7 +16,7 @@ export const LIVE_SCHEME = 'crewforge-live';
  * raw with all the server's metadata, or a crew's Crew, Agents, PromptModules, and
  * Skills together.
  */
-export type LiveTarget = { kind: 'object'; ref: ObjectRef; raw?: boolean } | { kind: 'bundle'; namespace: string; crew: string };
+export type LiveTarget = { kind: 'object'; ref: ObjectRef; raw?: boolean } | { kind: 'bundle'; namespace: string; crew: string } | { kind: 'text'; path: string; text: string; language: string };
 
 /** The Flux kinds a crew's Deployment section can name, and where the API server serves them. */
 const FLUX_PATHS: Record<string, string> = {
@@ -26,7 +27,7 @@ const FLUX_PATHS: Record<string, string> = {
 /** The API path of a live object: a Kubemoot kind the cluster serves, or a Flux kind. */
 export function livePath(ref: ObjectRef, kinds: Map<string, KubemootKind>): string {
   const kubemoot = kinds.get(ref.kind);
-  if (kubemoot) return objectPath(kubemoot, ref.namespace, ref.name);
+  if (kubemoot) return kubemoot.namespaced ? objectPath(kubemoot, ref.namespace, ref.name) : clusterPath(kubemoot, ref.name);
   const flux = FLUX_PATHS[ref.kind];
   if (!flux) throw new Error(`CrewForge cannot read ${ref.kind} objects`);
   return `/apis/${flux.replace('{ns}', checkName('namespace', ref.namespace))}/${encodeURIComponent(ref.name)}`;
@@ -39,9 +40,10 @@ export function liveUri(target: LiveTarget): vscode.Uri {
 /** Where a live document lives under the live scheme: `/<namespace>/<kind>/<name>[.raw].yaml`, or a bundle's file. */
 function documentPath(target: LiveTarget): string {
   if (target.kind === 'bundle') return `/${target.namespace}/${target.crew}.bundle.yaml`;
+  if (target.kind === 'text') return target.path;
   const { namespace, kind, name } = target.ref;
   const raw = target.raw ? '.raw' : '';
-  return `/${namespace}/${kind}/${name}${raw}.yaml`;
+  return `/${namespace || 'cluster'}/${kind}/${name}${raw}.yaml`;
 }
 
 /**
@@ -70,17 +72,18 @@ export class LiveDocuments implements vscode.TextDocumentContentProvider {
     return this.targets.get(uri.toString());
   }
 
-  /** Opens the live YAML of a target as a read-only YAML document. */
+  /** Opens the live YAML of a target, or a page of text such as a tool's details, as a read-only document. */
   async show(target: LiveTarget): Promise<void> {
     const uri = liveUri(target);
     this.targets.set(uri.toString(), target);
     this.changed.fire(uri);
     const document = await vscode.workspace.openTextDocument(uri);
-    await vscode.languages.setTextDocumentLanguage(document, 'yaml');
+    await vscode.languages.setTextDocumentLanguage(document, target.kind === 'text' ? target.language : 'yaml');
     await vscode.window.showTextDocument(document, { preview: true });
   }
 
   private async render(target: LiveTarget): Promise<string> {
+    if (target.kind === 'text') return target.text;
     const { client } = this.connectTo();
     const kinds = await discoverKinds(client);
     if (target.kind === 'bundle') {
@@ -92,4 +95,13 @@ export class LiveDocuments implements vscode.TextDocumentContentProvider {
     if (target.raw) return `# ${target.ref.kind}/${target.ref.name} as the API server holds it, with all its metadata and status.\n${dumpYaml(object)}`;
     return `${NORMALIZED_NOTE}\n# Show Live YAML (raw) shows everything.\n${normalizedYaml(object)}`;
   }
+}
+
+/** Opens a read-only page about a tool of a crew: where it comes from, what it does, who enables it, and its input schema. */
+export async function showToolDetails(documents: Pick<LiveDocuments, 'show'>, node?: { kind: string }): Promise<void> {
+  const member = node as DetailNode | undefined;
+  if (member?.kind !== 'member' || !member.view.tool) return;
+  const { info, catalog } = member.view.tool;
+  const { namespace, name } = member.crew;
+  await documents.show({ kind: 'text', path: `/${namespace}/${name}/tools/${encodeURIComponent(info.name)}.md`, text: toolDocument(info, catalog), language: 'markdown' });
 }

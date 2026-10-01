@@ -3,8 +3,7 @@ import type { AgentInfo, PromptModuleInfo } from './details';
 /** The given lines that have text, one per line: a tooltip. */
 export const lines = (...parts: (string | false | undefined)[]): string => parts.filter(Boolean).join('\n');
 
-/** A string that says something, or undefined for anything else. */
-export const text = (value: unknown): string | undefined => (typeof value === 'string' && value !== '' ? value : undefined);
+export { text } from './values';
 
 export const byName = <T extends { name: string }>(a: T, b: T): number => a.name.localeCompare(b.name);
 

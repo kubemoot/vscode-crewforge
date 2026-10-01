@@ -1,3 +1,4 @@
+import { GROUPS } from '../crew/groups';
 import { chartVersionBanner } from '../source/normalize';
 import { tabBar, type CrewTab } from './crewTabs';
 import { agentsByRole, type CrewVitals } from './crewVitals';
@@ -5,7 +6,7 @@ import { badge, banner, buttons, escape, facts, note, section, SELECT_CONTEXT_BU
 
 /** The crew dashboard's page body: the header, the buttons, the tabs, and the shown tab (the overview unless `body` is given). */
 export function renderCrewPage(v: CrewVitals, tab: CrewTab = 'overview', body?: string): string {
-  const shown = body ?? [sourceSection(v), deploymentSection(v), agentsSection(v), statusSection(v), conversationsSection(v), kubemootSection(v)].join('');
+  const shown = body ?? [sourceSection(v), deploymentSection(v), contentsSection(v), agentsSection(v), statusSection(v), conversationsSection(v), kubemootSection(v)].join('');
   return [header(v), buttons(crewButtons(v)), tabBar(tab), shown].join('');
 }
 
@@ -118,6 +119,18 @@ function agentState(a: { ready?: boolean; phase?: string }): string {
 
 function modelLabel(m: { name: string; model?: string }): string {
   return m.model ? `${m.name} (${m.model})` : m.name;
+}
+
+/** Every group of the crew with how many objects it holds, on one line; a group's name selects it in the tree. */
+function contentsSection(v: CrewVitals): string {
+  if (v.contentsFrom === 'none') return '';
+  const from = v.contentsFrom === 'live' ? 'From the cluster; a group opens it in Deployed Crews.' : 'Declared in the source; a group opens it in Crew Sources.';
+  const links = v.contents.map(({ group, count }) => {
+    const label = GROUPS[group].label;
+    const shown = group === 'deployment' && v.contentsFrom === 'live' ? label : `${label} ${count}`;
+    return `<button type="button" class="link" data-action="group" data-arg="${group}" title="Show the ${escape(label)} group in the tree">${escape(shown)}</button>`;
+  });
+  return section('Contents', `<p>${links.join(' · ')}</p>${note(from)}`);
 }
 
 function statusSection(v: CrewVitals): string {

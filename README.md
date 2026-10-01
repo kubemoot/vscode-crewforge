@@ -7,7 +7,7 @@ and run its fitness scenarios, all from the editor.
 It works through your kubeconfig, the same way `kmctl` does: any cluster your `kubectl` can
 reach works, no crew needs a public address, and no extra credential is involved.
 
-![The Kubemoot view in VS Code: Deployed Crews lists the helpdesk crew with its agents and prompt modules, and Crew Sources lists the helpdesk chart in the workspace, deployed and in sync.](docs/screenshots/views.png)
+![The Kubemoot view in VS Code: Deployed Crews lists the helpdesk crew's groups with its Models open, including the shared ollama ModelProvider, and Crew Sources lists the helpdesk chart in the workspace, deployed and in sync, with the same groups.](docs/screenshots/views.png)
 
 ## Install
 
@@ -32,12 +32,17 @@ setting, else `KUBECONFIG`, else `~/.kube/config`.
    crew charts and bundles in your workspace.
 2. Choose **Ask** on a deployed crew. A chat opens; type a question and press Enter. Each
    agent reports as it works, then the crew's answer follows, with how long it took.
-3. Click a crew, deployed or in your workspace, for its dashboard: **Overview**,
-   **Source**, **Live**, and **Diff** tabs.
+3. Expand a crew to see every part of it: Agents, Prompts, Skills, Models, RAG Sources,
+   MCP Servers, Tools, Policies, Notifications, Fitness, and Deployment. Objects the crew
+   shares with others, such as a cluster's ModelProvider, are marked *shared*. Click a
+   crew, deployed or in your workspace, for its dashboard: **Overview**, **Source**,
+   **Live**, and **Diff** tabs.
 4. Right-click a folder in the Explorer and choose **New Kubemoot Crew Here** to scaffold
    a crew with `kmctl create --chart`.
-5. Edit it. The status bar says where it stands against its deployment: not deployed, in
-   sync, or changed. **Lint** checks the chart against your cluster's schemas.
+5. Edit it, or use **Add <Kind>...** on a group in Crew Sources to add an Agent, a
+   PromptModule, a Model, a RAG source, an MCP server, and more. The status bar says where
+   it stands against its deployment: not deployed, in sync, or changed. **Lint** checks
+   the chart against your cluster's schemas.
 6. Choose **Deploy to Namespace...** to run it with Helm, then **Ask**, **Run Fitness**,
    and **Redeploy** after each edit.
 

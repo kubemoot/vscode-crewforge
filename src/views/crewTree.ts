@@ -1,6 +1,8 @@
 import * as vscode from 'vscode';
 import { connect, namespaceFilter, type Connection } from '../connection';
 import { loadCrewDetails, type CrewDetails } from '../crew/details';
+import type { Group } from '../crew/groups';
+import { readToolCatalog, type ToolCatalog } from '../crew/toolCatalog';
 import { listCrews, type CrewSummary } from '../k8s/crews';
 import { channelOf } from '../source/deployments';
 import { discoverKinds, type KubemootKind } from '../source/live';
@@ -27,6 +29,8 @@ export class CrewTreeProvider implements vscode.TreeDataProvider<CrewNode> {
   private crews: CrewSummary[] = [];
   private kinds?: Promise<Map<string, KubemootKind>>;
   private readonly details = new Map<string, CrewDetails>();
+  /** The tool catalog read for a crew's details, once per read of them. */
+  private readonly catalogs = new WeakMap<CrewDetails, Promise<ToolCatalog>>();
   connection?: Connection;
   /** The first item: what the view is connected to, which opens the Crews Overview; none until set. */
   connectionItem: () => { label: string; tooltip: string } | undefined = () => undefined;
@@ -57,12 +61,28 @@ export class CrewTreeProvider implements vscode.TreeDataProvider<CrewNode> {
     if (!node) return this.reading.track(() => this.loadRoot());
     if (node.kind === 'namespace') return node.group.crews.map((crew) => ({ kind: 'crew', crew }));
     if (node.kind === 'crew') return this.reading.track(() => this.loadCrew(node.crew));
-    if (node.kind === 'section') return membersOf(node);
+    if (node.kind === 'section') return node.section === 'tools' && node.details.tools.length ? this.reading.track(() => this.toolMembers(node)) : membersOf(node);
     return [];
   }
 
-  /** A crew's namespace, so a crew can be revealed; namespaces and messages are roots. */
+  /** The tools of a crew, with where each comes from, after reading the gateway's tool catalog. */
+  private async toolMembers(node: Extract<DetailNode, { kind: 'section' }>): Promise<CrewNode[]> {
+    let catalog = this.catalogs.get(node.details);
+    if (!catalog) {
+      catalog = readToolCatalog((this.connection ?? this.connectTo()).client, node.details.gateway);
+      this.catalogs.set(node.details, catalog);
+    }
+    return membersOf({ ...node, catalog: await catalog });
+  }
+
+  /** A group of a crew as its node, reading the crew's details, so the group can be revealed. */
+  async sectionNode(crew: CrewSummary, section: Group): Promise<CrewNode> {
+    return { kind: 'section', crew, section, details: await this.detailsOf(crew) };
+  }
+
+  /** A crew's namespace, so a crew can be revealed, and a group's crew; namespaces and messages are roots. */
   getParent(node: CrewNode): CrewNode | undefined {
+    if (node.kind === 'section') return { kind: 'crew', crew: node.crew };
     if (node.kind !== 'crew') return undefined;
     const group = groupByNamespace(this.crews).find((g) => g.namespace === node.crew.namespace);
     return group && { kind: 'namespace', group };

@@ -12,6 +12,7 @@
  *
  *   --out <dir>     where the PNG files go (default .vscode-test/screenshots/out)
  *   VSCODE_VERSION  the VS Code to download ("stable" by default)
+ *   CREWFORGE_SHOTS_PORT  the debugging port VS Code listens on (9333 by default)
  */
 import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
@@ -29,7 +30,8 @@ const repo = path.resolve(__dirname, '..', '..');
 const CREW = 'helpdesk';
 const NAMESPACE = 'crew-helpdesk';
 const CONTEXT = 'kind-dev';
-const DEBUG_PORT = '9333';
+// Another program may hold the default port; CREWFORGE_SHOTS_PORT picks another.
+const DEBUG_PORT = process.env.CREWFORGE_SHOTS_PORT ?? '9333';
 const REPO_URL = 'https://git.example.org/team/crews.git';
 
 function outDir(): string {
@@ -65,9 +67,18 @@ function deployedCrew(chart: string): FakeCluster {
     doc.metadata.namespace = NAMESPACE;
     if (doc.kind === 'Crew') markDeployed(doc);
     if (doc.kind === 'Agent') doc.status = { ready: true, phase: 'Running' };
+    if (doc.kind === 'Model') doc.status = { ready: true, state: 'Available' };
     cluster.add(doc);
   }
-  return cluster.add(...fitnessRuns());
+  return cluster.add(...fitnessRuns(), ...sharedInfrastructure());
+}
+
+/** What the cluster shares with every crew: the ModelProvider the Models run on, and the consent-3 archetype. */
+function sharedInfrastructure(): Manifest[] {
+  const provider = obj('ModelProvider', 'ollama', 'kubemoot', { type: 'ollama', endpoint: 'http://ollama.kubemoot:11434' });
+  provider.status = { ready: true, phase: 'Ready' };
+  const archetype: Manifest = { apiVersion: 'kubemoot.ai/v1alpha1', kind: 'MootArchetype', metadata: { name: 'consent-3' }, spec: { phases: [{ name: 'triage' }, { name: 'mulling' }, { name: 'synthesis' }] } };
+  return [provider, archetype];
 }
 
 function markDeployed(crew: Manifest): void {

@@ -76,7 +76,7 @@ describe('CrewTreeProvider', () => {
     expect(String(crewItem.tooltip)).not.toContain('Archetype');
 
     const sections = await tree.getChildren(crewNode);
-    expect(sections.map((n) => String(tree.getTreeItem(n).label))).toEqual(['Agents', 'PromptModules', 'Skills', 'MCP Servers', 'Tools', 'Deployment']);
+    expect(sections.map((n) => String(tree.getTreeItem(n).label))).toEqual(['Agents', 'Prompts', 'Skills', 'Models', 'RAG Sources', 'MCP Servers', 'Tools', 'Policies', 'Notifications', 'Fitness', 'Deployment']);
     expect(String(tree.getTreeItem(crewNode).tooltip)).toContain('Archetype: consent-3');
     const agents = await tree.getChildren(sections[0]);
     expect(agents.map((n) => tree.getTreeItem(n).label)).toEqual(['coordinator', 'k8s']);

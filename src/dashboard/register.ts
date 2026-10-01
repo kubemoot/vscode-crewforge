@@ -3,6 +3,7 @@ import { dashboardBase, namespaceFilter, type Connection } from '../connection';
 import { checkName } from '../k8s/paths';
 import { ConnectionStatus, showConnectionInfo } from '../connectionInfo';
 import type { CrewDetails } from '../crew/details';
+import { isGroup, type Group } from '../crew/groups';
 import { KubeTools } from '../deploy/deployer';
 import { liveDeployment, sourceForCrew } from '../deploy/liveCrew';
 import { ControlsReader, RunControls, type FitnessActivity } from '../fitness/controls';
@@ -35,13 +36,15 @@ export interface DashboardParts {
   crewforgeVersion: string;
   connect: () => Connection;
   sources: Pick<SourceTreeProvider, 'known' | 'loadDeployments'>;
-  service: Pick<SourceService, 'located' | 'kinds'>;
+  service: Pick<SourceService, 'located' | 'kinds' | 'declarations'>;
   details: (crew: CrewSummary) => Promise<CrewDetails>;
   store: ConversationStore;
   memory: Pick<LoopMemory, 'redeployNamespace'>;
   exec: Exec;
   activity: FitnessActivity;
   api?: DashboardApi;
+  /** Selects a group of a crew in a tree: the live crew's, else its source's. */
+  revealGroup?: (where: { crew?: CrewSummary; entry?: SourceEntry }, group: Group) => Promise<void>;
 }
 
 /** How often each page reads again while it is visible. */
@@ -125,6 +128,7 @@ export class Dashboards implements vscode.Disposable {
       liveCrew: async (namespace, name) => (await listCrews(parts.connect().client, [namespace])).find((c) => c.name === name),
       located: (entry) => parts.service.located(entry),
       liveDetails: parts.details,
+      declarations: (entry) => parts.service.declarations(entry),
       helm: async (release, namespace) => {
         const connection = parts.connect();
         const result = await new KubeTools(parts.exec, connection.source, connection.context).helm(['status', release, '--namespace', namespace, '-o', 'json']);
@@ -134,6 +138,12 @@ export class Dashboards implements vscode.Disposable {
       kubemoot: (namespace, crew) => this.api.threads(parts.connect().client, namespace, crew),
       fitnessRunning: (namespace, crew) => parts.activity.isBusy(namespace, crew),
     };
+  }
+
+  /** Selects a group of the crew a dashboard shows: in Deployed Crews when it is deployed, else in Crew Sources. */
+  async revealGroup(target: CrewTarget, vitals: CrewVitals | undefined, group: unknown): Promise<void> {
+    if (!isGroup(group) || !this.parts.revealGroup) return;
+    await this.parts.revealGroup({ crew: vitals?.deployment?.crew, entry: target.entry }, group);
   }
 
   /** One row of the overview. */
@@ -269,6 +279,7 @@ class CrewDashboard implements PageModel {
     openAt: (arg) => this.openAt(arg),
     openDiff: (arg) => this.openDiff(arg),
     openSourceFolder: () => addSourceFolder(),
+    group: (arg) => this.dashboards.revealGroup(this.target, this.vitals, arg),
   };
 
   private async openAt(index?: string): Promise<void> {

@@ -270,7 +270,8 @@ export async function run(): Promise<void> {
   const source = await until('the crew source', async () => (await api.sources.getChildren()).find((n) => n.kind === 'source' && n.entry.source.root.endsWith(crew)));
   await showFile('templates/crew.yaml');
   await widenSideBar();
-  await api.crewsView.reveal(live, { expand: 2, select: false, focus: false });
+  await api.crewsView.reveal(live, { expand: true, select: false, focus: false });
+  await api.crewsView.reveal(await api.crews.sectionNode(live.crew, 'models'), { expand: true, select: false, focus: false });
   await api.sourcesView.reveal(source, { expand: true, select: false, focus: false });
   await clearNotifications();
   await sleep(2500);

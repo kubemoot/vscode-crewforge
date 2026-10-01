@@ -38,6 +38,41 @@ describe('CrewForge views and commands in a real VS Code', () => {
     assert.match(String(demo.description), /source open$/);
   });
 
+  it('a live crew shows every group in order, a shared Model marked so, and where a tool comes from', async () => {
+    const crew = await liveCrew(api, 'team-a', 'lab-ops');
+    const sections = await api.crews.getChildren(crew);
+    const labels = sections.map((n) => String(api.crews.getTreeItem(n).label));
+    assert.deepEqual(labels, ['Agents', 'Prompts', 'Skills', 'Models', 'RAG Sources', 'MCP Servers', 'Tools', 'Policies', 'Notifications', 'Fitness', 'Deployment']);
+    const models = await api.crews.getChildren(sections[3]);
+    const shared = models.map((n) => api.crews.getTreeItem(n)).find((i) => i.label === 'big');
+    assert.match(String(shared?.description), /^Model · shared · qwen3:32b/);
+    assert.equal(shared?.contextValue, 'liveObject-shared');
+    const tools = await api.crews.getChildren(sections[6]);
+    const pods = tools.find((n) => api.crews.getTreeItem(n).label === 'pods_list');
+    assert.ok(pods, 'pods_list is listed');
+    assert.equal(api.crews.getTreeItem(pods).description, 'from kubernetes · k8s');
+    await vscode.commands.executeCommand('crewforge.showToolDetails', pods);
+    await editorShowing('crewforge-live', ['# Tool pods_list', 'List pods', '"namespace"']);
+  });
+
+  it('Add Skill writes a new object into a bundle source, opens it, and shows it in Crew Sources', async () => {
+    const source = await sourceNode(api, 'demo/crew');
+    const skills = (await api.sources.getChildren(source)).find((n) => n.kind === 'declSection' && n.section === 'skills');
+    assert.ok(skills, 'the source has a Skills group');
+    await vscode.commands.executeCommand('crewforge.addSkill', skills, { name: 'restart', description: 'Restart a crashing pod', order: '10' });
+    await editorShowing('file', ['kind: Skill', 'name: restart', 'namespace: somewhere']);
+    await until(
+      'the new Skill in Crew Sources',
+      async () => {
+        const fresh = await sourceNode(api, 'demo/crew');
+        const group = (await api.sources.getChildren(fresh)).find((n) => n.kind === 'declSection' && n.section === 'skills');
+        const items = group ? await api.sources.getChildren(group) : [];
+        return items.find((n) => n.kind === 'declared' && n.item.label === 'restart');
+      },
+      () => api.sources.known.map((e) => e.source.root),
+    );
+  });
+
   it('Crew Sources lists the source by its crew name, where it stands, and its deployment', async () => {
     const source = await sourceNode(api, 'demo/crew');
     const item = api.sources.getTreeItem(source);

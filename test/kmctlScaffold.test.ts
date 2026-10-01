@@ -55,7 +55,7 @@ describe('an undeployed kmctl scaffold in Crew Sources', () => {
     const [source] = await provider.getChildren();
     expect(provider.getTreeItem(source).description).toBe('helm');
     const children = await provider.getChildren(source);
-    expect(labels(provider, children)).toEqual(['test', 'Agents', 'PromptModules', 'Skills', 'Fitness Scenarios', 'Not deployed in dev']);
+    expect(labels(provider, children)).toEqual(['test', 'Agents', 'Prompts', 'Skills', 'Models', 'RAG Sources', 'MCP Servers', 'Tools', 'Policies', 'Notifications', 'Fitness Scenarios', 'Not deployed in dev']);
     const agents = await provider.getChildren(children[1]);
     expect(labels(provider, agents)).toEqual(['test-coordinator', 'test-tooler-1', 'test-tooler-2']);
     const click = provider.getTreeItem(agents[1]).command!;
@@ -63,7 +63,18 @@ describe('an undeployed kmctl scaffold in Crew Sources', () => {
     expect((click.arguments![0] as { fsPath: string }).fsPath).toBe(path.join(SCAFFOLD, 'templates', 'agents.yaml'));
     expect((click.arguments![1] as { selection: { startLine: number } }).selection.startLine).toBe(20);
     expect(await provider.getChildren(children[2])).toHaveLength(7);
-    expect(labels(provider, await provider.getChildren(children[4]))).toEqual(['smoke-hello', 'general-knowledge', 'honest-no-fabrication']);
+    const models = (await provider.getChildren(children[4])).map((n) => provider.getTreeItem(n));
+    expect(models.map((i) => `${String(i.label)}|${String(i.description)}`)).toEqual([
+      'qwen-14b-ollama|Model · qwen3:14b · medium tier · 40960 context',
+      'qwen-32b-ollama|Model · qwen3:32b · high tier · 40960 context',
+      'qwen-8b-ollama|Model · qwen3:8b · low tier · 40960 context',
+      'ollama|ModelProvider · shared, installed elsewhere',
+    ]);
+    expect(models[0].contextValue).toBe('declared-object');
+    expect(models[3].contextValue).toBe('declared');
+    expect(labels(provider, await provider.getChildren(children[8]))).toEqual(['test-scheduling', 'consent-3']);
+    expect(provider.getTreeItem(children[5]).description).toBe('none');
+    expect(labels(provider, await provider.getChildren(children[10]))).toEqual(['smoke-hello', 'general-knowledge', 'honest-no-fabrication']);
     const crewItem = provider.getTreeItem(children[0]);
     expect((crewItem.command!.arguments![0] as { fsPath: string }).fsPath).toBe(path.join(SCAFFOLD, 'templates', 'crew.yaml'));
   });

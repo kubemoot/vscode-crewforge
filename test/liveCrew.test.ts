@@ -1,3 +1,4 @@
+import { noRelated } from '../src/crew/related';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { CrewDetails } from '../src/crew/details';
 import { liveDeployment, LiveCrewActions, noSource, sourceForCrew, type LiveCrewDeps } from '../src/deploy/liveCrew';
@@ -22,6 +23,7 @@ const DETAILS: CrewDetails = {
   mcpServers: [],
   tools: [],
   problems: [],
+  related: noRelated(),
 };
 
 let calls: string[];

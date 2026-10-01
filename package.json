@@ -288,6 +288,71 @@
         "icon": "$(play)"
       },
       {
+        "command": "crewforge.addAgent",
+        "title": "Add Agent...",
+        "category": "CrewForge",
+        "icon": "$(add)"
+      },
+      {
+        "command": "crewforge.addPromptModule",
+        "title": "Add PromptModule...",
+        "category": "CrewForge",
+        "icon": "$(add)"
+      },
+      {
+        "command": "crewforge.addSkill",
+        "title": "Add Skill...",
+        "category": "CrewForge",
+        "icon": "$(add)"
+      },
+      {
+        "command": "crewforge.addModel",
+        "title": "Add Model...",
+        "category": "CrewForge",
+        "icon": "$(add)"
+      },
+      {
+        "command": "crewforge.addRAGSource",
+        "title": "Add RAGSource...",
+        "category": "CrewForge",
+        "icon": "$(add)"
+      },
+      {
+        "command": "crewforge.addEmbeddingModel",
+        "title": "Add EmbeddingModel...",
+        "category": "CrewForge",
+        "icon": "$(add)"
+      },
+      {
+        "command": "crewforge.addMCPServer",
+        "title": "Add MCPServer...",
+        "category": "CrewForge",
+        "icon": "$(add)"
+      },
+      {
+        "command": "crewforge.addCrewSchedulingPolicy",
+        "title": "Add CrewSchedulingPolicy...",
+        "category": "CrewForge",
+        "icon": "$(add)"
+      },
+      {
+        "command": "crewforge.addNotificationSink",
+        "title": "Add NotificationSink...",
+        "category": "CrewForge",
+        "icon": "$(add)"
+      },
+      {
+        "command": "crewforge.removeFromSource",
+        "title": "Remove from Source... (file to trash, or its document out of the file)",
+        "category": "CrewForge"
+      },
+      {
+        "command": "crewforge.showToolDetails",
+        "title": "Show Tool Details",
+        "category": "CrewForge",
+        "icon": "$(info)"
+      },
+      {
         "command": "crewforge.viewInCrewForge",
         "title": "View in CrewForge",
         "category": "CrewForge",
@@ -428,7 +493,7 @@
         },
         {
           "command": "crewforge.showLiveYaml",
-          "when": "view == crewforge.crews && viewItem == liveObject",
+          "when": "view == crewforge.crews && viewItem =~ /^liveObject/",
           "group": "inline"
         },
         {
@@ -488,7 +553,7 @@
         },
         {
           "command": "crewforge.showLiveYamlRaw",
-          "when": "view == crewforge.crews && (viewItem == liveObject || viewItem =~ /^crew(-flux)?(-running)?$/)",
+          "when": "view == crewforge.crews && (viewItem =~ /^liveObject/ || viewItem =~ /^crew(-flux)?(-running)?$/)",
           "group": "yaml@3"
         },
         {
@@ -560,6 +625,101 @@
           "command": "crewforge.deleteScenario",
           "when": "view == crewforge.sources && viewItem == declared-scenario",
           "group": "scenario@9"
+        },
+        {
+          "command": "crewforge.addAgent",
+          "when": "view == crewforge.sources && viewItem == declSection-agents",
+          "group": "define@1"
+        },
+        {
+          "command": "crewforge.addAgent",
+          "when": "view == crewforge.sources && viewItem == declSection-agents",
+          "group": "inline"
+        },
+        {
+          "command": "crewforge.addPromptModule",
+          "when": "view == crewforge.sources && viewItem == declSection-prompts",
+          "group": "define@1"
+        },
+        {
+          "command": "crewforge.addPromptModule",
+          "when": "view == crewforge.sources && viewItem == declSection-prompts",
+          "group": "inline"
+        },
+        {
+          "command": "crewforge.addSkill",
+          "when": "view == crewforge.sources && viewItem == declSection-skills",
+          "group": "define@1"
+        },
+        {
+          "command": "crewforge.addSkill",
+          "when": "view == crewforge.sources && viewItem == declSection-skills",
+          "group": "inline"
+        },
+        {
+          "command": "crewforge.addModel",
+          "when": "view == crewforge.sources && viewItem == declSection-models",
+          "group": "define@1"
+        },
+        {
+          "command": "crewforge.addModel",
+          "when": "view == crewforge.sources && viewItem == declSection-models",
+          "group": "inline"
+        },
+        {
+          "command": "crewforge.addRAGSource",
+          "when": "view == crewforge.sources && viewItem == declSection-rag",
+          "group": "define@1"
+        },
+        {
+          "command": "crewforge.addRAGSource",
+          "when": "view == crewforge.sources && viewItem == declSection-rag",
+          "group": "inline"
+        },
+        {
+          "command": "crewforge.addEmbeddingModel",
+          "when": "view == crewforge.sources && viewItem == declSection-rag",
+          "group": "define@1"
+        },
+        {
+          "command": "crewforge.addMCPServer",
+          "when": "view == crewforge.sources && viewItem == declSection-mcp",
+          "group": "define@1"
+        },
+        {
+          "command": "crewforge.addMCPServer",
+          "when": "view == crewforge.sources && viewItem == declSection-mcp",
+          "group": "inline"
+        },
+        {
+          "command": "crewforge.addCrewSchedulingPolicy",
+          "when": "view == crewforge.sources && viewItem == declSection-policies",
+          "group": "define@1"
+        },
+        {
+          "command": "crewforge.addCrewSchedulingPolicy",
+          "when": "view == crewforge.sources && viewItem == declSection-policies",
+          "group": "inline"
+        },
+        {
+          "command": "crewforge.addNotificationSink",
+          "when": "view == crewforge.sources && viewItem == declSection-notifications",
+          "group": "define@1"
+        },
+        {
+          "command": "crewforge.addNotificationSink",
+          "when": "view == crewforge.sources && viewItem == declSection-notifications",
+          "group": "inline"
+        },
+        {
+          "command": "crewforge.removeFromSource",
+          "when": "view == crewforge.sources && viewItem == declared-object",
+          "group": "define@9"
+        },
+        {
+          "command": "crewforge.showToolDetails",
+          "when": "view == crewforge.crews && viewItem == tool",
+          "group": "inline"
         }
       ],
       "editor/context": [
@@ -665,6 +825,50 @@
         {
           "command": "crewforge.viewInCrewForge",
           "when": "resourceDirname in crewforge.crewRoots"
+        },
+        {
+          "command": "crewforge.addAgent",
+          "when": "false"
+        },
+        {
+          "command": "crewforge.addPromptModule",
+          "when": "false"
+        },
+        {
+          "command": "crewforge.addSkill",
+          "when": "false"
+        },
+        {
+          "command": "crewforge.addModel",
+          "when": "false"
+        },
+        {
+          "command": "crewforge.addRAGSource",
+          "when": "false"
+        },
+        {
+          "command": "crewforge.addEmbeddingModel",
+          "when": "false"
+        },
+        {
+          "command": "crewforge.addMCPServer",
+          "when": "false"
+        },
+        {
+          "command": "crewforge.addCrewSchedulingPolicy",
+          "when": "false"
+        },
+        {
+          "command": "crewforge.addNotificationSink",
+          "when": "false"
+        },
+        {
+          "command": "crewforge.removeFromSource",
+          "when": "false"
+        },
+        {
+          "command": "crewforge.showToolDetails",
+          "when": "false"
         }
       ],
       "explorer/context": [

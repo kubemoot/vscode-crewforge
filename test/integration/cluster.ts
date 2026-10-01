@@ -1,12 +1,13 @@
-import { FakeCluster, obj, seedCrew } from '../fakeCluster';
+import { FakeCluster, obj, seedCrew, seedInfrastructure } from '../fakeCluster';
 
 /**
- * The cluster the integration run talks to: the chart-installed crew "lab-ops" in team-a,
+ * The cluster the integration run talks to: the chart-installed crew "lab-ops" in team-a
+ * with the Models, RAG sources, gateway, policies, and sinks it uses,
  * and the bundle crew "demo" in "somewhere", deployed from the workspace's demo source
  * with a changed description so its drift shows, and one finished fitness run.
  */
 export function integrationCluster(): FakeCluster {
-  const cluster = seedCrew(new FakeCluster());
+  const cluster = seedInfrastructure(seedCrew(new FakeCluster()));
   cluster.namespaces.add('team-a').add('somewhere');
   const demo = obj('Crew', 'demo', 'somewhere', { description: 'A demo crew, changed in the cluster' }, { 'kubemoot.ai/crew': 'demo' });
   demo.status = { ready: true, phase: 'Ready', agentCount: 0 };

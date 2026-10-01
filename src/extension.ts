@@ -14,7 +14,10 @@ import { LiveCrewActions, sourceForCrew } from './deploy/liveCrew';
 import { registerLoop } from './loop/register';
 import { agentSourceMap } from './source/declared';
 import { readAvailability } from './discussion/availability';
-import { LIVE_SCHEME, LiveDocuments } from './views/liveDocuments';
+import { LIVE_SCHEME, LiveDocuments, showToolDetails } from './views/liveDocuments';
+import { SourceDefinitions } from './source/defineCommands';
+import { DEFINITIONS } from './source/defineKinds';
+import type { Answers } from './source/templates';
 import { execProgram, listScripts, readText, readYamlFiles } from './source/nodeDeps';
 import { connectionLines } from './connectionInfo';
 import { Dashboards } from './dashboard/register';
@@ -123,6 +126,20 @@ export function activate(context: vscode.ExtensionContext): CrewForgeApi {
     memory: new LoopMemory(context.workspaceState),
     exec: execProgram,
     activity,
+    revealGroup: async ({ crew, entry }, group) => {
+      if (crew) return view.reveal(await tree.sectionNode(crew, group), { select: true, focus: true, expand: true });
+      const node = entry && (await sources.sectionNode(entry.source.root, group));
+      if (node) await sourcesView.reveal(node, { select: true, focus: true, expand: true });
+    },
+  });
+  const definitions = new SourceDefinitions({
+    service,
+    readText,
+    reload: () => sources.reload(),
+    reveal: async (file) => {
+      const node = await sources.nodeForPath(file);
+      if (node) await sourcesView.reveal(node, { select: true, focus: false });
+    },
   });
   tree.connectionItem = () => {
     const info = dashboards.status.latest;
@@ -221,6 +238,15 @@ export function activate(context: vscode.ExtensionContext): CrewForgeApi {
     vscode.workspace.registerTextDocumentContentProvider(LIVE_SCHEME, liveDocuments),
     vscode.commands.registerCommand('crewforge.showLiveYaml', (target?: YamlTarget) => guard(() => yaml.showLive(target))),
     vscode.commands.registerCommand('crewforge.showCrewBundleYaml', (node?: CrewNode) => guard(() => showCrewBundleYaml(liveDocuments, node))),
+    vscode.commands.registerCommand('crewforge.showToolDetails', (node?: CrewNode) => guard(() => showToolDetails(liveDocuments, node))),
+    ...Object.keys(DEFINITIONS).map((kind) =>
+      vscode.commands.registerCommand(`crewforge.add${kind}`, (node?: SourceNode, answers?: Answers) =>
+        guard(async () => {
+          await definitions.add(kind, node, answers);
+        }),
+      ),
+    ),
+    vscode.commands.registerCommand('crewforge.removeFromSource', (node?: SourceNode) => guard(() => definitions.remove(node))),
     vscode.commands.registerCommand('crewforge.refreshCrews', () => tree.refresh()),
     vscode.commands.registerCommand('crewforge.askCrew', (node?: CrewNode) => commands.askCrew(node)),
     vscode.commands.registerCommand('crewforge.askAboutSelection', () => commands.askAboutSelection()),

@@ -1,3 +1,5 @@
+import { noRelated } from '../src/crew/related';
+import type { Declarations } from '../src/source/declared';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -47,7 +49,7 @@ function deps(over: Partial<VitalsDeps> = {}): VitalsDeps {
     deploymentOf: async (e) => ({ kind: 'deployment', entry: e, deployment: { namespace: 'crew-demo', crew: crew(), channel: 'helm', release: 'demo', linked: true } }),
     liveCrew: async () => crew({ phase: 'Reconciling', ready: false }),
     located: async () => located,
-    liveDetails: async () => ({ crew: obj('Crew', 'demo', 'crew-demo'), agents: [toAgent(agentObj('demo-coordinator', 'coordinator', true)), toAgent(agentObj('demo-tooler', 'tooler', false))], skills: [], promptModules: [], mcpServers: [], tools: [], problems: [] }),
+    liveDetails: async () => ({ crew: obj('Crew', 'demo', 'crew-demo'), agents: [toAgent(agentObj('demo-coordinator', 'coordinator', true)), toAgent(agentObj('demo-tooler', 'tooler', false))], skills: [], promptModules: [], mcpServers: [], tools: [], related: noRelated(), problems: [] }),
     helm: async () => ({ firstDeployed: '2026-09-29T10:00:00Z', lastDeployed: '2026-09-30T10:00:00Z', revision: 3, status: 'deployed' }),
     conversations: async () => ({ total: 2, turns: 5, active: 'Which nodes?', errors: [{ at: '2026-09-30T10:05:00Z', text: 'Agent k8s failed' }] }),
     kubemoot: async () => ({ threads: 7, failures: 1, recentFailures: ['k8s: tool timed out'], messages: 120 }),
@@ -129,6 +131,41 @@ describe('gatherVitals', () => {
     await gatherVitals({ entry }, deps({ helm, deploymentOf: async (e) => ({ kind: 'deployment', entry: e, deployment: { namespace: 'n', crew: crew(), channel: 'helm', linked: true } }) }));
     expect(asked).toBe(0);
     expect(agentsByRole([toAgent(obj('Agent', 'a', 'n')), toAgent(obj('Agent', 'b', 'n'))])).toEqual([['no role', 2]]);
+  });
+});
+
+describe('the Contents of a crew', () => {
+  const declarations = async (): Promise<Declarations> => ({ sections: [{ section: 'agents', items: [{ label: 'a', tooltip: '', icon: 'x', line: 0 }] }, { section: 'models', items: [] }] });
+
+  it("counts every group of the live crew, and links each to the tree", async () => {
+    const v = await gatherVitals({ entry }, deps({ declarations }));
+    expect(v.contentsFrom).toBe('live');
+    expect(v.contents.map((c) => `${c.group}:${c.count}`)).toEqual(['agents:2', 'prompts:0', 'skills:0', 'models:0', 'rag:0', 'mcp:0', 'tools:0', 'policies:0', 'notifications:0', 'fitness:0', 'deployment:1']);
+    const html = renderCrewPage(v);
+    expect(html).toContain('<h2>Contents</h2>');
+    expect(html).toContain('data-action="group" data-arg="rag" title="Show the RAG Sources group in the tree">RAG Sources 0</button>');
+    expect(html).toContain('>Agents 2</button> · ');
+    expect(html).toContain('>Deployment</button>');
+    expect(html).toContain('From the cluster; a group opens it in Deployed Crews.');
+  });
+
+  it('counts what an undeployed source declares, and leaves the section out when nothing can be counted', async () => {
+    const v = await gatherVitals({ entry }, deps({ declarations, deploymentOf: async () => undefined }));
+    expect(v).toMatchObject({ contentsFrom: 'source', contents: [{ group: 'agents', count: 1 }, { group: 'models', count: 0 }] });
+    expect(renderCrewPage(v)).toContain('Declared in the source; a group opens it in Crew Sources.');
+    expect(renderCrewPage(v)).toContain('>Models 0</button>');
+    const failed = await gatherVitals(
+      { entry },
+      deps({
+        deploymentOf: async () => undefined,
+        declarations: async () => {
+          throw new Error('render failed');
+        },
+      }),
+    );
+    expect(failed).toMatchObject({ contentsFrom: 'none', contents: [] });
+    expect(renderCrewPage(failed)).not.toContain('<h2>Contents</h2>');
+    expect((await gatherVitals({ entry }, deps({ deploymentOf: async () => undefined }))).contentsFrom).toBe('none');
   });
 });
 

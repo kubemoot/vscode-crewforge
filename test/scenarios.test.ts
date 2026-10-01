@@ -263,7 +263,7 @@ describe('Run Scenario', () => {
     fs.writeFileSync(path.join(root, 'fitness', 'weather.adl'), '');
     fs.writeFileSync(path.join(root, 'fitness', 'prose.md'), '');
     fs.writeFileSync(path.join(root, 'fitness', 'README.md'), '');
-    const [, , , , fitness] = (await service().declarations({ ...entryAt(root), rendered: undefined })).sections;
+    const fitness = (await service().declarations({ ...entryAt(root), rendered: undefined })).sections.find((s) => s.section === 'fitness')!;
     expect(fitness.items.map((i) => [i.label, i.description, i.scenario?.kind])).toEqual([
       ['smoke-hello', 'suite test-starter', 'suite-script'],
       ['general-knowledge', 'suite test-starter', 'suite-script'],

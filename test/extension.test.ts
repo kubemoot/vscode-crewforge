@@ -8,6 +8,7 @@ import { newConversation } from '../src/store/conversation';
 import { ConversationStore } from '../src/store/conversations';
 import { startFakeApi, type FakeApi } from './fakeApiServer';
 import { CrewTreeProvider } from '../src/views/crewTree';
+import { FakeCluster, seedCrew, seedInfrastructure } from './fakeCluster';
 import { recorded, resetFake, Uri, workspaceState, type FakeTreeView } from './vscodeFake';
 
 const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8')) as {
@@ -355,6 +356,61 @@ describe('the inner loop in the extension', () => {
     await tick();
     const states = recorded.panels[0].webview.posted as { type: string; links?: { agents: string[] } }[];
     expect(states.at(-1)?.links?.agents).toEqual([]);
+  });
+});
+
+describe('defining a crew in the extension', () => {
+  const FIXTURE = path.join(__dirname, 'fixtures', 'sources', 'bundles', 'demo', 'crew');
+  type Node = { kind: string; section?: string; item?: { label: string }; entry?: unknown };
+  const provider = () => recorded.treeViews[1].options.treeDataProvider as { getChildren: (n?: Node) => Promise<Node[]> };
+
+  it('adds an object to a bundle from its group, removes it again, and reveals a group from the dashboard', async () => {
+    const dir = path.join(storage, 'demo');
+    fs.cpSync(FIXTURE, dir, { recursive: true });
+    recorded.files.set('**/*.{yaml,yml}', [path.join(dir, '02-crew.yaml')]);
+    const [source] = await provider().getChildren();
+    const sinks = (await provider().getChildren(source)).find((n) => n.kind === 'declSection' && n.section === 'notifications')!;
+    recorded.inputs.push('pager', 'https://ntfy.example.com/lab');
+    await run('crewforge.addNotificationSink', sinks);
+    const file = path.join(dir, 'notificationsink-pager.yaml');
+    expect(fs.readFileSync(file, 'utf8')).toContain('kind: NotificationSink');
+    expect(recorded.executed.map((e) => e.id)).toEqual(['vscode.open', 'crewforge.lintCrew']);
+    expect(recorded.revealed.at(-1)).toMatchObject({ view: 'crewforge.sources', node: { kind: 'declared', item: { label: 'pager' } } });
+
+    const [reloaded] = await provider().getChildren();
+    const group = (await provider().getChildren(reloaded)).find((n) => n.kind === 'declSection' && n.section === 'notifications')!;
+    const [pager] = await provider().getChildren(group);
+    recorded.warningAnswers.push('Remove');
+    await run('crewforge.removeFromSource', pager);
+    expect(recorded.trashed).toEqual([`${file} (trash)`]);
+
+    await run('crewforge.openCrewDashboard', reloaded);
+    expect(await exported.press(`crew:${dir}`, 'group', 'models')).toBe(true);
+    expect(recorded.revealed.at(-1)).toMatchObject({ view: 'crewforge.sources', node: { kind: 'declSection', section: 'models' }, options: { expand: true } });
+    await exported.press(`crew:${dir}`, 'group', 'deployment');
+    expect(recorded.revealed.at(-1)).toMatchObject({ node: { kind: 'source' } });
+    const count = recorded.revealed.length;
+    await exported.press(`crew:${dir}`, 'group', 'not-a-group');
+    expect(recorded.revealed).toHaveLength(count);
+  });
+
+  it("reveals a live crew's group in Deployed Crews, and shows a tool's details", async () => {
+    const cluster = seedInfrastructure(seedCrew(new FakeCluster()));
+    const live = await startFakeApi({ cluster });
+    try {
+      recorded.settings.set('crewforge.kubeconfig', live.kubeconfig);
+      const crew = { name: 'lab-ops', namespace: 'team-a', ready: true, phase: 'Ready' };
+      await run('crewforge.openCrewDashboard', { kind: 'crew', crew });
+      // The first press reads the crew, as the page does when its script starts.
+      await exported.press('crew:team-a/lab-ops', 'refresh');
+      await exported.press('crew:team-a/lab-ops', 'group', 'rag');
+      expect(recorded.revealed.at(-1)).toMatchObject({ view: 'crewforge.crews', node: { kind: 'section', section: 'rag' }, options: { select: true, expand: true } });
+      const tool = { kind: 'member', crew, view: { label: 't', tooltip: '', icon: 'wrench', tool: { info: { name: 't', agents: ['k8s'] } } } };
+      await run('crewforge.showToolDetails', tool);
+      expect(recorded.shownDocuments.at(-1)).toBe('crewforge-live:/team-a/lab-ops/tools/t.md (markdown)');
+    } finally {
+      await live.close();
+    }
   });
 });
 

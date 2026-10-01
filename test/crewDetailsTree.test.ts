@@ -1,7 +1,9 @@
+import { noRelated } from '../src/crew/related';
 import { describe, expect, it } from 'vitest';
 import { loadCrewDetails, type CrewDetails } from '../src/crew/details';
 import type { CrewSummary } from '../src/k8s/crews';
 import { discoverKinds } from '../src/source/live';
+import { GROUP_ORDER } from '../src/crew/groups';
 import { agentView, memberItem, membersOf, promptView, sectionItem, sectionsOf, serverView, skillView, type DetailNode } from '../src/views/crewDetailsTree';
 import { FakeCluster, obj, seedCrew } from './fakeCluster';
 import { ThemeIcon, TreeItemCollapsibleState } from './vscodeFake';
@@ -23,19 +25,31 @@ type Section = Extract<DetailNode, { kind: 'section' }>;
 type Member = Extract<DetailNode, { kind: 'member' }>;
 
 describe('crew sections', () => {
-  it('lists agents, prompts, skills, MCP servers, tools, and deployment, each with a summary', async () => {
+  it('lists every group in order, each with a summary, an id, and its relationship rule', async () => {
     const sections = sectionsOf(summary, await details()) as Section[];
-    expect(sections.map((s) => s.section)).toEqual(['agents', 'prompts', 'skills', 'mcp', 'tools', 'deployment']);
+    expect(sections.map((s) => s.section)).toEqual([...GROUP_ORDER]);
     const items = sections.map(sectionItem);
-    expect(items.map((i) => `${i.label}|${i.description ?? ''}`)).toEqual(['Agents|1 of 2 ready', 'PromptModules|4, 1 ADL', 'Skills|1', 'MCP Servers|2', 'Tools|2', 'Deployment|']);
-    expect(items.every((i) => i.collapsibleState === TreeItemCollapsibleState.Collapsed)).toBe(true);
-    expect(items[0].contextValue).toBe('crewSection-agents');
+    expect(items.map((i) => `${i.label}|${i.description ?? ''}`)).toEqual([
+      'Agents|1 of 2 ready',
+      'Prompts|4, 1 ADL',
+      'Skills|1',
+      'Models|none',
+      'RAG Sources|none',
+      'MCP Servers|2',
+      'Tools|2',
+      'Policies|2',
+      'Notifications|none',
+      'Fitness|none',
+      'Deployment|',
+    ]);
+    expect(items[0]).toMatchObject({ contextValue: 'crewSection-agents', id: 'section:team-a/lab-ops:agents', collapsibleState: TreeItemCollapsibleState.Collapsed });
+    expect(items[3]).toMatchObject({ collapsibleState: TreeItemCollapsibleState.None, tooltip: expect.stringContaining('scheduler may bind') });
   });
 
-  it('leaves out MCP servers and tools when there are none, and marks empty sections', () => {
-    const empty: CrewDetails = { crew: obj('Crew', 'x', 'n'), agents: [], skills: [], promptModules: [], mcpServers: [], tools: [], problems: [] };
+  it('shows an empty group as none, not as an empty folder', () => {
+    const empty: CrewDetails = { crew: obj('Crew', 'x', 'n'), agents: [], skills: [], promptModules: [], mcpServers: [], tools: [], related: noRelated(), problems: [] };
     const sections = sectionsOf(summary, empty) as Section[];
-    expect(sections.map((s) => s.section)).toEqual(['agents', 'prompts', 'skills', 'deployment']);
+    expect(sections).toHaveLength(GROUP_ORDER.length);
     const skills = sectionItem(sections[2]);
     expect(skills.collapsibleState).toBe(TreeItemCollapsibleState.None);
     expect(skills.description).toBe('none');
@@ -62,12 +76,12 @@ describe('crew sections', () => {
     expect((prompts[3].iconPath as ThemeIcon).id).toBe('symbol-text');
 
     expect(leaves(2).map((i) => `${i.label}|${i.description}`)).toEqual(['runbook|order 10']);
-    expect(leaves(3).map((i) => `${i.label}|${i.description}`)).toEqual(['kubernetes|ready · 2 tools', 'web|undefined']);
-    const tools = leaves(4);
-    expect(tools.map((i) => `${i.label}|${i.description}`)).toEqual(['helm_list|k8s', 'pods_list|k8s']);
-    expect(tools[0].command).toBeUndefined();
+    expect(leaves(5).map((i) => `${i.label}|${i.description}`)).toEqual(['kubernetes|ready · 2 tools', 'web|undefined']);
+    const tools = leaves(6);
+    expect(tools.map((i) => `${i.label}|${i.description}`)).toEqual(['helm_list|from kubernetes · k8s', 'pods_list|from kubernetes · k8s']);
+    expect(tools[0]).toMatchObject({ contextValue: 'tool', command: { command: 'crewforge.showToolDetails' } });
 
-    const deployment = (membersOf(sections[5]) as Member[]).map((m) => m.view);
+    const deployment = (membersOf(sections[10]) as Member[]).map((m) => m.view);
     expect(deployment.map((v) => `${v.label}: ${v.description}`)).toEqual(['Channel: GitOps (Flux)', 'Chart: lab-crew 0.4.0', 'Flux HelmRelease: flux-system/lab']);
     expect(deployment[0].ref).toEqual({ kind: 'Crew', name: 'lab-ops', namespace: 'team-a' });
     expect(deployment[2].ref).toEqual({ kind: 'HelmRelease', name: 'lab', namespace: 'flux-system' });

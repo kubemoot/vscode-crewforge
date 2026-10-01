@@ -27,6 +27,12 @@ export function objectPath(kind: KubemootKind, namespace: string, name?: string)
   return name === undefined ? collection : `${collection}/${encodeURIComponent(name)}`;
 }
 
+/** The API path of one cluster-scoped Kubemoot object, or of its collection when name is omitted. */
+export function clusterPath(kind: KubemootKind, name?: string): string {
+  const collection = `${GROUP_VERSION_PATH}/${kind.plural}`;
+  return name === undefined ? collection : `${collection}/${encodeURIComponent(name)}`;
+}
+
 /**
  * The live objects that belong to a crew deployment: every object of the rendered
  * Kubemoot kinds in the namespace that the source renders by name, or that carries the

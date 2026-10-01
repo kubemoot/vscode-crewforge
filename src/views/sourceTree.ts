@@ -6,6 +6,7 @@ import { summarize, type ResourceDrift } from '../source/drift';
 import { DRIFT_STATES } from '../source/driftStates';
 import { isRunning, runSummary, type FitnessRun } from '../fitness/fitness';
 import { fluxSummary, type FluxState } from '../gitops/flux';
+import { GROUPS, type GroupInfo } from '../crew/groups';
 import type { DeclaredItem, DeclaredSection } from '../source/declared';
 import { locationOf } from '../source/render';
 import { sourceOf, type SourceEntry, type SourceService } from '../source/service';
@@ -152,6 +153,15 @@ export class SourceTreeProvider implements vscode.TreeDataProvider<SourceNode> {
     return declared.find((n) => n.kind === 'declared' && n.item.file === fsPath) ?? source;
   }
 
+  /** The node of a source's group, for revealing it; the source itself for a group the source tree does not have, such as deployment. */
+  async sectionNode(root: string, section: string): Promise<SourceNode | undefined> {
+    await this.entries();
+    const source = this.roots.find((n) => n.kind === 'source' && n.entry.source.root === root);
+    if (!source) return undefined;
+    const children = await this.getChildren(source);
+    return children.find((n) => n.kind === 'declSection' && n.section === section) ?? source;
+  }
+
   getTreeItem(node: SourceNode): vscode.TreeItem {
     switch (node.kind) {
       case 'source':
@@ -211,9 +221,8 @@ export class SourceTreeProvider implements vscode.TreeDataProvider<SourceNode> {
   private async loadDeclarations(entry: SourceEntry): Promise<SourceNode[]> {
     try {
       const { crew, sections } = await this.service.declarations(entry);
-      const shown = sections.filter((s) => s.items.length > 0 || s.section !== 'mcp');
       const crewNode: SourceNode[] = crew ? [{ kind: 'declared', entry, item: crew }] : [];
-      return [...crewNode, ...shown.map((s): SourceNode => ({ kind: 'declSection', entry, ...s }))];
+      return [...crewNode, ...sections.map((s): SourceNode => ({ kind: 'declSection', entry, ...s }))];
     } catch (err) {
       return errorNodes(err);
     }
@@ -313,19 +322,17 @@ function runItem(node: Extract<SourceNode, { kind: 'run' }>): vscode.TreeItem {
   return item;
 }
 
-const SECTIONS: Record<DeclaredSection, [string, string]> = {
-  agents: ['Agents', 'organization'],
-  prompts: ['PromptModules', 'note'],
-  skills: ['Skills', 'mortar-board'],
-  mcp: ['MCP Servers', 'server-process'],
-  fitness: ['Fitness Scenarios', 'beaker'],
-};
+/** A group's label and icon in Crew Sources; its fitness group holds scenarios, apart from the runs under each deployment. */
+function sectionInfo(section: DeclaredSection): GroupInfo {
+  return section === 'fitness' ? { ...GROUPS.fitness, label: 'Fitness Scenarios', rule: 'The fitness scenarios the source declares: its suites, and the scripts in its fitness folder.' } : GROUPS[section];
+}
 
 function declSectionItem(node: Extract<SourceNode, { kind: 'declSection' }>): vscode.TreeItem {
-  const [title, icon] = SECTIONS[node.section];
+  const { label, icon, rule } = sectionInfo(node.section);
   const empty = node.items.length === 0;
-  const item = new vscode.TreeItem(title, empty ? vscode.TreeItemCollapsibleState.None : vscode.TreeItemCollapsibleState.Collapsed);
+  const item = new vscode.TreeItem(label, empty ? vscode.TreeItemCollapsibleState.None : vscode.TreeItemCollapsibleState.Collapsed);
   item.description = empty ? 'none' : String(node.items.length);
+  item.tooltip = rule;
   item.iconPath = new vscode.ThemeIcon(icon);
   item.id = `declSection:${node.entry.source.root}:${node.section}`;
   item.contextValue = `declSection-${node.section}`;
@@ -339,9 +346,15 @@ function declaredItem(declared: DeclaredItem, root: string): vscode.TreeItem {
   item.description = declared.description;
   item.tooltip = declared.file ? `${declared.tooltip}\n${declared.file}:${declared.line + 1}` : declared.tooltip;
   item.iconPath = new vscode.ThemeIcon(declared.icon, declared.warn ? new vscode.ThemeColor('list.warningForeground') : undefined);
-  item.contextValue = declared.scenario ? 'declared-scenario' : 'declared';
+  item.contextValue = declaredContext(declared);
   if (declared.file) item.command = openAt(declared.file, declared.line);
   return item;
+}
+
+/** A scenario has its own menu; an object the source declares in a file can be removed from it. */
+function declaredContext(declared: DeclaredItem): string {
+  if (declared.scenario) return 'declared-scenario';
+  return declared.object && declared.file ? 'declared-object' : 'declared';
 }
 
 /** The command that opens a file with the cursor at the start of a line. */

@@ -1,4 +1,6 @@
 import { toAgent, type AgentInfo, type CrewDetails } from '../crew/details';
+import { liveCounts, type GroupCount } from '../crew/groups';
+import type { Declarations } from '../source/declared';
 import { liveDeployment } from '../deploy/liveCrew';
 import type { CrewSummary } from '../k8s/crews';
 import type { ThreadStats } from '../kubemoot/dashboardApi';
@@ -56,6 +58,9 @@ export interface CrewVitals {
   agentsError?: string;
   /** The Model objects the source declares: name and model. */
   models: { name: string; model?: string }[];
+  /** How many objects each group holds: the live crew's, else what the source declares. */
+  contents: GroupCount[];
+  contentsFrom: 'live' | 'source' | 'none';
   conversations: ConversationStats;
   kubemoot?: ThreadStats | { unavailable: string };
   fitnessRunning: boolean;
@@ -69,6 +74,8 @@ export interface VitalsDeps {
   liveCrew(namespace: string, name: string): Promise<CrewSummary | undefined>;
   located(entry: SourceEntry): Promise<Located[]>;
   liveDetails(crew: CrewSummary): Promise<CrewDetails>;
+  /** What a source declares, by group; absent where no source can be read. */
+  declarations?(entry: SourceEntry): Promise<Declarations>;
   helm(release: string, namespace: string): Promise<HelmInfo | undefined>;
   conversations(context: string, namespace: string, crew: string): Promise<ConversationStats>;
   kubemoot(namespace: string, crew: string): Promise<ThreadStats | { unavailable: string }>;
@@ -95,6 +102,7 @@ export async function gatherVitals(target: CrewTarget, deps: VitalsDeps): Promis
     agents: declared.agents,
     agentsFrom: declared.agents.length ? 'source' : 'none',
     models: declared.models,
+    ...(await declaredContents(target.entry, deps)),
     conversations: NO_CONVERSATIONS,
     fitnessRunning: false,
   };
@@ -150,6 +158,17 @@ async function declaredOf(entry: SourceEntry | undefined, deps: VitalsDeps): Pro
   };
 }
 
+/** How many objects each group of a source declares; the deployment group counts its deployment, unknown here. */
+async function declaredContents(entry: SourceEntry | undefined, deps: VitalsDeps): Promise<Pick<CrewVitals, 'contents' | 'contentsFrom'>> {
+  if (!entry?.crewName || !deps.declarations) return { contents: [], contentsFrom: 'none' };
+  try {
+    const { sections } = await deps.declarations(entry);
+    return { contents: sections.map((s) => ({ group: s.section, count: s.items.length })), contentsFrom: 'source' };
+  } catch {
+    return { contents: [], contentsFrom: 'none' };
+  }
+}
+
 /** Adds what only the cluster knows: the live agents, the Helm release, conversations, discussions, and fitness. */
 async function withLive(vitals: CrewVitals, deployment: Deployment, deps: VitalsDeps): Promise<CrewVitals> {
   const { crew, namespace } = deployment;
@@ -159,13 +178,13 @@ async function withLive(vitals: CrewVitals, deployment: Deployment, deps: Vitals
     deps.conversations(vitals.context, namespace, crew.name).catch(() => NO_CONVERSATIONS),
     deps.kubemoot(namespace, crew.name).catch((err: unknown) => ({ unavailable: errorText(err) })),
   ]);
-  const live = 'agents' in agents ? { agents: agents.agents, agentsFrom: 'live' as const } : { agentsError: agents.error };
+  const live = 'details' in agents ? { agents: agents.details.agents, agentsFrom: 'live' as const, contents: liveCounts(agents.details), contentsFrom: 'live' as const } : { agentsError: agents.error };
   return { ...vitals, ...live, helm, conversations, kubemoot, fitnessRunning: deps.fitnessRunning(namespace, crew.name) };
 }
 
-async function liveAgents(crew: CrewSummary, deps: VitalsDeps): Promise<{ agents: AgentInfo[] } | { error: string }> {
+async function liveAgents(crew: CrewSummary, deps: VitalsDeps): Promise<{ details: CrewDetails } | { error: string }> {
   try {
-    return { agents: (await deps.liveDetails(crew)).agents };
+    return { details: await deps.liveDetails(crew) };
   } catch (err) {
     return { error: errorText(err) };
   }
