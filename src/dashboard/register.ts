@@ -9,7 +9,7 @@ import { ControlsReader, RunControls, type FitnessActivity } from '../fitness/co
 import { isRunning, listIterations, listRuns, type FitnessRun } from '../fitness/fitness';
 import { listCrews, type CrewSummary } from '../k8s/crews';
 import { DashboardApi } from '../kubemoot/dashboardApi';
-import { devDeployment, type LoopMemory } from '../loop/state';
+import { redeployTarget, type LoopMemory } from '../loop/state';
 import { ChatPanel } from '../panels/chatPanel';
 import type { Deployment } from '../source/deployments';
 import { provenanceOf } from '../source/provenance';
@@ -34,7 +34,7 @@ export interface DashboardParts {
   service: Pick<SourceService, 'located' | 'kinds'>;
   details: (crew: CrewSummary) => Promise<CrewDetails>;
   store: ConversationStore;
-  memory: Pick<LoopMemory, 'devNamespace'>;
+  memory: Pick<LoopMemory, 'redeployNamespace'>;
   exec: Exec;
   activity: FitnessActivity;
   api?: DashboardApi;
@@ -105,7 +105,7 @@ export class Dashboards implements vscode.Disposable {
         const nodes = loaded.filter((n): n is DeploymentNode => n.kind === 'deployment');
         const failed = loaded.find((n) => n.kind === 'message' && n.icon !== 'circle-slash');
         if (!nodes.length && failed?.kind === 'message') throw new Error(failed.detail ?? failed.text);
-        return devDeployment(nodes, parts.memory.devNamespace(entry.source.root));
+        return redeployTarget(nodes, parts.memory.redeployNamespace(entry.source.root));
       },
       liveCrew: async (namespace, name) => (await listCrews(parts.connect().client, [namespace])).find((c) => c.name === name),
       located: (entry) => parts.service.located(entry),
@@ -217,8 +217,8 @@ class CrewDashboard implements PageModel {
   }
 
   readonly actions: PageModel['actions'] = {
-    deploy: () => run('crewforge.deployDev', this.sourceNode),
-    redeploy: () => run('crewforge.redeployDev', this.sourceNode),
+    deploy: () => run('crewforge.deployToNamespace', this.sourceNode),
+    redeploy: () => run('crewforge.redeploy', this.sourceNode),
     undeploy: () => run('crewforge.removeDeployment', this.deploymentNode),
     ask: () => run('crewforge.askCrew', this.vitals?.deployment && { kind: 'crew', crew: this.vitals.deployment.crew }),
     fitness: () => run('crewforge.runFitness', this.deploymentNode),

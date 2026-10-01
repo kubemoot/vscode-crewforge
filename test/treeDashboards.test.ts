@@ -85,8 +85,8 @@ describe('Crew Sources and dashboards', () => {
   });
 });
 
-describe('DevLoop.devDeploymentOf', () => {
-  it('finds the dev deployment of a node\'s source, or says why there is none', async () => {
+describe('DevLoop.redeployTargetOf', () => {
+  it('finds the deployment Redeploy goes to for a node\'s source, or says why there is none', async () => {
     const node = { kind: 'deployment' as const, entry, deployment, drift: [] };
     let nodes: SourceNode[] = [node];
     const deps = {
@@ -96,10 +96,10 @@ describe('DevLoop.devDeploymentOf', () => {
       connectTo: () => ({ source: '/k', context: 'lab', client: new FakeCluster() as unknown as KubeClient }),
     } as unknown as DevLoopDeps;
     const loop = new DevLoop(deps);
-    expect(await loop.devDeploymentOf({ kind: 'source', entry })).toBe(node);
+    expect(await loop.redeployTargetOf({ kind: 'source', entry })).toBe(node);
     nodes = [{ kind: 'message', text: 'Not deployed in lab', icon: 'circle-slash' }];
-    expect(await loop.devDeploymentOf({ kind: 'source', entry })).toBeUndefined();
+    expect(await loop.redeployTargetOf({ kind: 'source', entry })).toBeUndefined();
     expect(recorded.info.at(-1)).toMatch(/^demo is not deployed in lab/);
-    expect(await loop.devDeploymentOf({ kind: 'source', entry: { ...entry, crewName: undefined } })).toBeUndefined();
+    expect(await loop.redeployTargetOf({ kind: 'source', entry: { ...entry, crewName: undefined } })).toBeUndefined();
   });
 });

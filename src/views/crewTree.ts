@@ -31,6 +31,8 @@ export class CrewTreeProvider implements vscode.TreeDataProvider<CrewNode> {
   connectionItem: () => { label: string; tooltip: string } | undefined = () => undefined;
   /** Whether a crew has a fitness run in progress; its item then hides Run Fitness. */
   fitnessBusy: (namespace: string, crew: string) => boolean = () => false;
+  /** Whether a workspace source renders a crew, shown on its line; unknown (nothing shown) until set. */
+  sourceOpen?: (crew: CrewSummary) => boolean;
 
   constructor(private readonly connectTo: () => Connection = () => connect()) {}
 
@@ -72,7 +74,7 @@ export class CrewTreeProvider implements vscode.TreeDataProvider<CrewNode> {
       case 'namespace':
         return namespaceItem(node.group);
       case 'crew':
-        return crewItem(node.crew, this.details.get(crewKey(node.crew))?.archetype, this.fitnessBusy(node.crew.namespace, node.crew.name));
+        return crewItem(node.crew, this.details.get(crewKey(node.crew))?.archetype, this.fitnessBusy(node.crew.namespace, node.crew.name), this.sourceOpen?.(node.crew));
       case 'section':
         return sectionItem(node);
       case 'member':
@@ -163,14 +165,20 @@ export function crewContext(crew: CrewSummary): string {
   return channelOf(crew) === 'flux' ? 'crew-flux' : 'crew';
 }
 
-function crewItem(crew: CrewSummary, archetype: string | undefined, busy: boolean): vscode.TreeItem {
+/** A live crew's counterpart in the workspace, in a few words. */
+export function sourceText(open: boolean | undefined): string {
+  if (open === undefined) return '';
+  return open ? ' · source open' : ' · no local source';
+}
+
+function crewItem(crew: CrewSummary, archetype: string | undefined, busy: boolean, sourceOpen: boolean | undefined): vscode.TreeItem {
   const item = new vscode.TreeItem(crew.name, vscode.TreeItemCollapsibleState.Collapsed);
   item.id = `crew:${crew.namespace}/${crew.name}`;
-  item.description = crewDescription(crew);
+  item.description = `${crewDescription(crew)}${sourceText(sourceOpen)}`;
   item.tooltip = crewTooltip(crew, archetype);
   item.contextValue = `${crewContext(crew)}${busy ? '-running' : ''}`;
   const { icon, color } = readyIcon(crew.ready);
   item.iconPath = new vscode.ThemeIcon(icon, color ? new vscode.ThemeColor(color) : undefined);
-  item.command = { command: 'crewforge.openCrewDashboard', title: 'Open Crew Dashboard', arguments: [{ kind: 'crew', crew }] };
+  item.command = { command: 'crewforge.openCrewDashboard', title: 'Open Dashboard', arguments: [{ kind: 'crew', crew }] };
   return item;
 }

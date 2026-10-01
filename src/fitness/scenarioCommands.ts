@@ -8,8 +8,8 @@ import type { ScenarioFiles } from './scenarios';
 export interface ScenarioCommandDeps {
   files: ScenarioFiles;
   fitness: Pick<FitnessCommands, 'runScenario'>;
-  /** The dev deployment of a source, or undefined after saying why there is none. */
-  devDeployment: (node: SourceNode) => Promise<DeploymentNode | undefined>;
+  /** The deployment of a source Redeploy goes to, or undefined after saying why there is none. */
+  redeployTarget: (node: SourceNode) => Promise<DeploymentNode | undefined>;
   readText: (file: string) => Promise<string>;
   /** Reloads Crew Sources after a scenario file changes. */
   reload: () => Promise<unknown>;
@@ -44,7 +44,7 @@ export function registerScenarioCommands(deps: ScenarioCommandDeps): vscode.Disp
     command('crewforge.deleteScenario', edit((s) => deps.files.delete(s))),
     command('crewforge.runScenario', async (node) => {
       const scenario = scenarioOf(node);
-      const deployment = scenario && node && (await deps.devDeployment(node));
+      const deployment = scenario && node && (await deps.redeployTarget(node));
       if (scenario && deployment) await deps.fitness.runScenario(deployment, scenario, deps.readText);
     }),
   ];

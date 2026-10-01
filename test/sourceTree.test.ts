@@ -122,7 +122,7 @@ describe('SourceTreeProvider', () => {
     );
     const tree = provider();
     const [source] = await tree.getChildren();
-    expect(tree.getTreeItem(source)).toMatchObject({ label: 'demo-crew', description: 'crew demo · helm', contextValue: 'source-helm' });
+    expect(tree.getTreeItem(source)).toMatchObject({ label: 'demo', description: 'helm in demo-crew', contextValue: 'source-helm' });
     expect(tree.known).toHaveLength(1);
     const deployments = await live(tree, source);
     const items = deployments.map((d) => tree.getTreeItem(d));

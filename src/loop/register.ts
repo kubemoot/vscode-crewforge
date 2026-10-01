@@ -7,7 +7,7 @@ import type { Exec, RenderDeps } from '../source/render';
 import type { SourceService } from '../source/service';
 import type { SourceTreeProvider } from '../views/sourceTree';
 import { DevLoop, type ChatActions, type LoopTarget } from './devLoop';
-import { stateText, LoopMemory, LoopStates } from './state';
+import { readEveryState, stateText, LoopMemory, LoopStates } from './state';
 import { CrewStatusBar } from './statusBar';
 
 export interface LoopParts {
@@ -26,7 +26,7 @@ export interface LoopParts {
 }
 
 /**
- * Wires the inner loop into VS Code: Lint Crew with its diagnostics, Deploy to Dev Namespace and
+ * Wires the inner loop into VS Code: Lint with its diagnostics, Deploy to Namespace and
  * Redeploy, Ask and Run Fitness from a source, the status bar item, and the on-save lint.
  */
 export function registerLoop(context: vscode.ExtensionContext, parts: LoopParts): DevLoop {
@@ -61,12 +61,15 @@ export function registerLoop(context: vscode.ExtensionContext, parts: LoopParts)
       sources.refreshSource(root);
       statusBar.stateChanged(root);
     }),
-    sources.onDidLoadSources(() => statusBar.update(activeFile())),
+    sources.onDidLoadSources(() => {
+      statusBar.update(activeFile());
+      void readEveryState(sources.known, states, (entry) => loop.refreshState(entry));
+    }),
     vscode.window.onDidChangeActiveTextEditor((editor) => statusBar.update(editor?.document.uri.fsPath)),
     vscode.workspace.onDidSaveTextDocument((document) => loop.onSaved(document.uri.fsPath)),
     command('crewforge.lintCrew', (target) => loop.lint(target)),
-    command('crewforge.deployDev', (target) => loop.deployDev(target)),
-    command('crewforge.redeployDev', (target) => loop.deployDev(target)),
+    command('crewforge.deployToNamespace', (target) => loop.deployToNamespace(target)),
+    command('crewforge.redeploy', (target) => loop.redeploy(target)),
     command('crewforge.askSource', (target) => loop.ask(target)),
     command('crewforge.crewActions', (target) => loop.actions(target)),
   );

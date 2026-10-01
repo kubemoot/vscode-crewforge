@@ -57,7 +57,7 @@ function deps(over: Partial<VitalsDeps> = {}): VitalsDeps {
 }
 
 describe('gatherVitals', () => {
-  it('joins the source, its dev deployment, the live agents, Helm, conversations, and discussions', async () => {
+  it('joins the source, the deployment Redeploy goes to, the live agents, Helm, conversations, and discussions', async () => {
     const v = await gatherVitals({ entry }, deps());
     expect(v).toMatchObject({ name: 'demo', description: 'source text', context: 'lab', agentsFrom: 'live', fitnessRunning: false, sourceAt: { file: '/w/demo/templates/crew.yaml', line: 0 } });
     expect(v.deployment?.namespace).toBe('crew-demo');
@@ -150,7 +150,7 @@ describe('renderCrewPage', () => {
     for (const text of ['<h1>demo <span class="badge good">Ready</span></h1>', 'crew-demo in lab', 'Chart version differs: source 0.2.2, deployed 0.46.0-rc.0', '/w/demo', 'Helm chart', '2026-09-29T10:00:00Z', 'me@example.com', '1 coordinator, 1 tooler', 'AgentsReady', 'Which nodes?', 'Agent k8s failed', 'Threads', 'k8s: tool timed out', 'qwen-8b (qwen3:8b), bare']) {
       expect(html).toContain(text);
     }
-    expect(enabled(v)).toEqual(['redeploy', 'undeploy', 'ask', 'fitness', 'fitnessDashboard', 'lint', 'yaml', 'refresh']);
+    expect(enabled(v)).toEqual(['deploy', 'redeploy', 'undeploy', 'ask', 'fitness', 'fitnessDashboard', 'lint', 'yaml', 'refresh']);
   });
 
   it('offers Deploy for an undeployed source, and names why the other buttons are off', async () => {

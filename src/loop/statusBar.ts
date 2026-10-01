@@ -4,7 +4,7 @@ import { stateText, type CrewState, type LoopStates } from './state';
 
 /**
  * The status bar item of the inner loop: while the active file belongs to a crew source,
- * it names the crew and where it stands against its dev deployment (not deployed,
+ * it names the crew and where it stands against its deployment (not deployed,
  * deployed and in sync, changed since deploy). Clicking it offers the next steps.
  */
 export class CrewStatusBar implements vscode.Disposable {
@@ -38,8 +38,8 @@ export class CrewStatusBar implements vscode.Disposable {
   private draw(entry: SourceEntry, state?: CrewState): void {
     const words = state ? stateText(state) : 'checking...';
     this.item.text = `$(${state?.kind === 'changed' ? 'diff' : 'organization'}) ${entry.crewName}: ${words}`;
-    this.item.tooltip = `CrewForge: crew ${entry.crewName} from ${entry.source.root}\n${words}\nClick for the next steps.`;
-    this.item.command = { command: 'crewforge.crewActions', title: 'Crew Actions', arguments: [{ kind: 'source', entry }] };
+    this.item.tooltip = `CrewForge: ${entry.crewName} from ${entry.source.root}\n${words}\nClick for the next steps.`;
+    this.item.command = { command: 'crewforge.crewActions', title: 'Next Steps', arguments: [{ kind: 'source', entry }] };
     this.item.show();
   }
 

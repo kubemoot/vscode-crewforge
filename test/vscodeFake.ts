@@ -142,6 +142,10 @@ export class Uri {
     const p = [base.fsPath, ...parts].join('/');
     return new Uri(p, `file://${p}`);
   }
+  /** The URI's path: for a file, its file system path with forward slashes. */
+  get path(): string {
+    return this.fsPath.replaceAll('\\', '/');
+  }
   toString(): string {
     return this.text;
   }
@@ -182,6 +186,10 @@ export const recorded = {
   documentProviders: new Map<string, { provideTextDocumentContent(uri: Uri): string }>(),
   /** Answers for information messages with actions, in order; undefined dismisses. */
   infoAnswers: [] as (string | undefined)[],
+  /** The value each input box offered, in order. */
+  inputOffers: [] as (string | undefined)[],
+  /** Context keys set with setContext, by name. */
+  contexts: new Map<string, unknown>(),
   /** Answers to error messages that offer an action, in order. */
   errorAnswers: [] as (string | undefined)[],
   /** Options each showTextDocument call got, in order. */
@@ -234,6 +242,8 @@ export function resetFake(): void {
   recorded.cancel = undefined;
   recorded.activeEditor = undefined;
   recorded.infoAnswers = [];
+  recorded.contexts = new Map();
+  recorded.inputOffers = [];
   recorded.errorAnswers = [];
   recorded.shownOptions = [];
   recorded.diagnostics = [];
@@ -389,7 +399,8 @@ export const window = {
     const choice = recorded.quickPicks.shift();
     return Promise.resolve(typeof choice === 'function' ? (choice as (i: unknown[]) => unknown)(items) : choice);
   },
-  showInputBox(options: { validateInput?: (v: string) => string | undefined }) {
+  showInputBox(options: { value?: string; validateInput?: (v: string) => string | undefined }) {
+    recorded.inputOffers.push(options.value);
     const value = recorded.inputs.shift();
     if (value !== undefined && options.validateInput?.(value)) return Promise.resolve(undefined);
     return Promise.resolve(value);
@@ -513,7 +524,8 @@ export const commands = {
     return { dispose: () => recorded.commands.delete(id) };
   },
   executeCommand(id: string, ...args: unknown[]) {
-    recorded.executed.push({ id, args });
+    if (id === 'setContext') recorded.contexts.set(args[0] as string, args[1]);
+    else recorded.executed.push({ id, args });
     return Promise.resolve(undefined);
   },
 };

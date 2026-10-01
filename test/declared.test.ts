@@ -272,6 +272,28 @@ describe('sourceOf', () => {
   });
 });
 
+describe('the node for a path of a crew source', () => {
+  const tree = () => new SourceTreeProvider(new SourceService(deps()), () => ({ source: 'fake', context: 'lab', client: new FakeCluster() as never }));
+
+  it('is the object a manifest declares first, the source for its folder or any other file, and none outside', async () => {
+    resetFake();
+    const provider = tree();
+    const crew = await provider.nodeForPath(`${ROOT}/templates/crew.yaml`);
+    expect(crew?.kind === 'declared' && crew.item.label).toBe('demo');
+    expect(provider.getParent(crew!)).toMatchObject({ kind: 'source' });
+    const agent = await provider.nodeForPath(`${ROOT}/templates/agents.yaml`);
+    expect(agent?.kind === 'declared' && agent.item.label).toBe('demo-coordinator');
+    expect(provider.getParent(agent!)).toMatchObject({ kind: 'declSection', section: 'agents' });
+    expect(provider.getTreeItem(provider.getParent(agent!)!).id).toBe(`declSection:${ROOT}:agents`);
+    expect(provider.getTreeItem(agent!).id).toMatch(new RegExp(`^declared:${ROOT}:`));
+    expect(await provider.nodeForPath(ROOT)).toMatchObject({ kind: 'source' });
+    expect(await provider.nodeForPath(`${ROOT}/templates`)).toMatchObject({ kind: 'source' });
+    expect(await provider.nodeForPath(`${ROOT}/values.yaml`)).toMatchObject({ kind: 'source' });
+    expect(await provider.nodeForPath('/elsewhere/x.yaml')).toBeUndefined();
+    expect(sourceOf(provider.known, ROOT)?.source.root).toBe(ROOT);
+  });
+});
+
 describe('Crew Sources declarations', () => {
   const tree = (d: SourceDeps = deps()) => new SourceTreeProvider(new SourceService(d), () => ({ source: 'fake', context: 'lab', client: new FakeCluster() as never }));
 
@@ -293,11 +315,12 @@ describe('Crew Sources declarations', () => {
     const gone = provider.getTreeItem(prompts[1]);
     expect(gone.command).toBeUndefined();
     expect((gone.iconPath as { color?: { id: string } }).color?.id).toBe('list.warningForeground');
-    expect(provider.getParent(tooler)).toEqual({ kind: 'source', entry: (source as Extract<SourceNode, { kind: 'source' }>).entry });
+    expect(provider.getParent(tooler)).toMatchObject({ kind: 'declSection', section: 'agents' });
+    expect(provider.getParent({ ...tooler })).toEqual({ kind: 'source', entry: (source as Extract<SourceNode, { kind: 'source' }>).entry });
     expect(provider.getParent(source)).toBeUndefined();
     expect(await provider.getChildren(tooler)).toEqual([]);
-    provider.stateOf = () => ({ text: 'changed since deploy (crew-demo)', changed: true });
-    expect(provider.getTreeItem(source)).toMatchObject({ description: 'crew demo · helm · changed since deploy (crew-demo)', contextValue: 'source-helm-changed' });
+    provider.stateOf = () => ({ text: 'deployed in crew-demo, changed', changed: true });
+    expect(provider.getTreeItem(source)).toMatchObject({ description: 'deployed in crew-demo, changed · helm', contextValue: 'source-helm-changed' });
     const redrawn: unknown[] = [];
     provider.onDidChangeTreeData((n) => redrawn.push(n));
     provider.refreshSource(ROOT);

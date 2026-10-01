@@ -55,7 +55,7 @@
       },
       {
         "view": "crewforge.sources",
-        "contents": "No crew charts or bundles found in this workspace.\n[Create Crew](command:crewforge.createCrew)\nOr right-click a folder in the Explorer and choose New Crew Here, or open a folder that holds a crew's Helm chart or manifests."
+        "contents": "No crew charts or bundles found in this workspace.\n[Create Crew](command:crewforge.createCrew)\nOr right-click a folder in the Explorer and choose New Kubemoot Crew Here, or open a folder that holds a crew's Helm chart or manifests."
       }
     ],
     "commands": [
@@ -67,7 +67,7 @@
       },
       {
         "command": "crewforge.askCrew",
-        "title": "Ask Crew",
+        "title": "Ask",
         "category": "CrewForge",
         "icon": "$(comment-discussion)"
       },
@@ -84,7 +84,7 @@
       },
       {
         "command": "crewforge.askAboutSelection",
-        "title": "Ask Crew about Selection",
+        "title": "Ask a Crew about the Selection",
         "category": "CrewForge"
       },
       {
@@ -117,13 +117,13 @@
       },
       {
         "command": "crewforge.deploySource",
-        "title": "Deploy to a Namespace... (Helm, bundle, or Flux)",
+        "title": "Deploy with a Channel... (Helm, bundle, or Flux)",
         "category": "CrewForge",
         "icon": "$(cloud-upload)"
       },
       {
         "command": "crewforge.updateDeployment",
-        "title": "Redeploy from Source (helm upgrade or kubectl apply)",
+        "title": "Redeploy",
         "category": "CrewForge",
         "icon": "$(sync)"
       },
@@ -135,7 +135,7 @@
       },
       {
         "command": "crewforge.removeDeployment",
-        "title": "Undeploy (Remove Deployment)",
+        "title": "Undeploy",
         "category": "CrewForge",
         "icon": "$(trash)"
       },
@@ -147,37 +147,37 @@
       },
       {
         "command": "crewforge.newCrewHere",
-        "title": "New Crew Here",
+        "title": "New Kubemoot Crew Here",
         "category": "CrewForge",
         "icon": "$(add)"
       },
       {
         "command": "crewforge.lintCrew",
-        "title": "Lint Crew (helm lint and schema check)",
+        "title": "Lint (helm lint and schema check)",
         "category": "CrewForge",
         "icon": "$(checklist)"
       },
       {
-        "command": "crewforge.deployDev",
-        "title": "Deploy to Dev Namespace",
+        "command": "crewforge.deployToNamespace",
+        "title": "Deploy to Namespace...",
         "category": "CrewForge",
         "icon": "$(rocket)"
       },
       {
-        "command": "crewforge.redeployDev",
-        "title": "Redeploy to Dev Namespace (helm upgrade)",
+        "command": "crewforge.redeploy",
+        "title": "Redeploy",
         "category": "CrewForge",
         "icon": "$(sync)"
       },
       {
         "command": "crewforge.askSource",
-        "title": "Ask Crew",
+        "title": "Ask",
         "category": "CrewForge",
         "icon": "$(comment-discussion)"
       },
       {
         "command": "crewforge.crewActions",
-        "title": "Crew Actions (next steps)",
+        "title": "Next Steps...",
         "category": "CrewForge"
       },
       {
@@ -211,7 +211,7 @@
       },
       {
         "command": "crewforge.showCrewBundleYaml",
-        "title": "Show Crew Bundle YAML",
+        "title": "Show Bundle YAML",
         "category": "CrewForge",
         "icon": "$(files)"
       },
@@ -229,19 +229,19 @@
       },
       {
         "command": "crewforge.deleteSource",
-        "title": "Delete Crew Source (move folder to trash)",
+        "title": "Delete Source... (move folder to trash)",
         "category": "CrewForge",
         "icon": "$(trash)"
       },
       {
         "command": "crewforge.renameCrew",
-        "title": "Rename Crew",
+        "title": "Rename...",
         "category": "CrewForge",
         "icon": "$(edit)"
       },
       {
         "command": "crewforge.openCrewDashboard",
-        "title": "Open Crew Dashboard",
+        "title": "Open Dashboard",
         "category": "CrewForge",
         "icon": "$(dashboard)"
       },
@@ -265,27 +265,33 @@
       },
       {
         "command": "crewforge.addScenario",
-        "title": "Add Fitness Scenario (ADL or prose file)",
+        "title": "Add Fitness Scenario... (ADL or prose file)",
         "category": "CrewForge",
         "icon": "$(add)"
       },
       {
         "command": "crewforge.renameScenario",
-        "title": "Rename Fitness Scenario",
+        "title": "Rename Fitness Scenario...",
         "category": "CrewForge",
         "icon": "$(edit)"
       },
       {
         "command": "crewforge.deleteScenario",
-        "title": "Delete Fitness Scenario (to trash, or out of its suite)",
+        "title": "Delete Fitness Scenario... (to trash, or out of its suite)",
         "category": "CrewForge",
         "icon": "$(trash)"
       },
       {
         "command": "crewforge.runScenario",
-        "title": "Run This Scenario Only (one iteration, dev namespace)",
+        "title": "Run This Scenario Only (one iteration)",
         "category": "CrewForge",
         "icon": "$(play)"
+      },
+      {
+        "command": "crewforge.viewInCrewForge",
+        "title": "View in CrewForge",
+        "category": "CrewForge",
+        "icon": "$(eye)"
       }
     ],
     "menus": {
@@ -336,12 +342,12 @@
       ],
       "view/item/context": [
         {
-          "command": "crewforge.deployDev",
+          "command": "crewforge.deployToNamespace",
           "when": "view == crewforge.sources && viewItem =~ /^source-(helm|bundle)(-running)?$/",
           "group": "inline@1"
         },
         {
-          "command": "crewforge.redeployDev",
+          "command": "crewforge.redeploy",
           "when": "view == crewforge.sources && viewItem =~ /^source-.*-changed/",
           "group": "inline@1"
         },
@@ -351,7 +357,7 @@
           "group": "inline@2"
         },
         {
-          "command": "crewforge.deployDev",
+          "command": "crewforge.deployToNamespace",
           "when": "view == crewforge.sources && viewItem =~ /^source-/",
           "group": "loop@1"
         },
@@ -486,7 +492,7 @@
           "group": "yaml@3"
         },
         {
-          "command": "crewforge.redeployDev",
+          "command": "crewforge.redeploy",
           "when": "view == crewforge.sources && viewItem =~ /^source-/",
           "group": "loop@1"
         },
@@ -655,13 +661,22 @@
         {
           "command": "crewforge.runScenario",
           "when": "false"
+        },
+        {
+          "command": "crewforge.viewInCrewForge",
+          "when": "resourceDirname in crewforge.crewRoots"
         }
       ],
       "explorer/context": [
         {
           "command": "crewforge.newCrewHere",
-          "when": "explorerResourceIsFolder",
+          "when": "explorerResourceIsFolder && !(resourcePath in crewforge.crewRoots)",
           "group": "crewforge@1"
+        },
+        {
+          "command": "crewforge.viewInCrewForge",
+          "when": "(explorerResourceIsFolder && resourcePath in crewforge.crewRoots) || (!explorerResourceIsFolder && resourceDirname in crewforge.crewRoots)",
+          "group": "crewforge@2"
         }
       ],
       "editor/title": [

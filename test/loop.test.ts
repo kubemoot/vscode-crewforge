@@ -3,7 +3,7 @@ import type { KubeClient } from '../src/k8s/request';
 import type { CrewSummary } from '../src/k8s/crews';
 import { DevLoop, nextActions, type DevLoopDeps } from '../src/loop/devLoop';
 import { readiness, waitUntilReady } from '../src/loop/ready';
-import { devDeployment, LoopMemory, LoopStates, stateFrom, stateText, type CrewState } from '../src/loop/state';
+import { type CrewState, LoopMemory, LoopStates, readEveryState, redeployTarget, stateFrom, stateText } from '../src/loop/state';
 import { CrewStatusBar } from '../src/loop/statusBar';
 import { ANNOTATIONS, type Deployment } from '../src/source/deployments';
 import type { ResourceDrift } from '../src/source/drift';
@@ -70,13 +70,13 @@ describe('waitUntilReady', () => {
 });
 
 describe('loop state', () => {
-  it('picks the dev deployment: the dev namespace, else a linked one, else the first', () => {
+  it('picks the deployment Redeploy goes to: its namespace, else a linked one, else the first', () => {
     const a = node('a', [], { linked: false });
     const b = node('b');
-    expect(devDeployment([a, b], 'a')).toBe(a);
-    expect(devDeployment([a, b], 'zz')).toBe(b);
-    expect(devDeployment([a], undefined)).toBe(a);
-    expect(devDeployment([], 'a')).toBeUndefined();
+    expect(redeployTarget([a, b], 'a')).toBe(a);
+    expect(redeployTarget([a, b], 'zz')).toBe(b);
+    expect(redeployTarget([a], undefined)).toBe(a);
+    expect(redeployTarget([], 'a')).toBeUndefined();
   });
 
   it('tells in sync, changed, not deployed, and unknown apart', () => {
@@ -87,7 +87,7 @@ describe('loop state', () => {
     expect(stateFrom([{ kind: 'message', text: 'Forbidden', detail: 'Forbidden: crews' }])).toEqual({ kind: 'unknown', reason: 'Forbidden: crews' });
     expect(stateFrom([{ kind: 'message', text: 'Forbidden' }])).toEqual({ kind: 'unknown', reason: 'Forbidden' });
     expect(stateFrom([])).toEqual({ kind: 'not-deployed' });
-    expect(stateText(stateFrom([node('crew-demo', [changed])]))).toBe('changed since deploy (crew-demo)');
+    expect(stateText(stateFrom([node('crew-demo', [changed])]))).toBe('deployed in crew-demo, changed');
     expect(stateText({ kind: 'not-deployed' })).toBe('not deployed');
   });
 
@@ -106,14 +106,31 @@ describe('loop state', () => {
     expect(fired).toEqual([ROOT, ROOT, ROOT]);
   });
 
-  it('remembers the dev namespace and the last fitness per source', async () => {
+  it('remembers the namespace Redeploy goes to and the last fitness per source', async () => {
     resetFake();
     const memory = new LoopMemory(workspaceState as never);
-    expect(memory.devNamespace(ROOT)).toBeUndefined();
-    await memory.setDevNamespace(ROOT, 'crew-demo');
+    expect(memory.redeployNamespace(ROOT)).toBeUndefined();
+    await memory.setRedeployNamespace(ROOT, 'crew-demo');
     await memory.setLastFitness(ROOT, 'demo-starter');
-    expect([memory.devNamespace(ROOT), memory.lastFitness(ROOT)]).toEqual(['crew-demo', 'demo-starter']);
+    expect([memory.redeployNamespace(ROOT), memory.lastFitness(ROOT)]).toEqual(['crew-demo', 'demo-starter']);
     expect(nextActions({ kind: 'changed', deployment: node('ns') })[0]).toBe('redeploy');
+  });
+});
+
+describe('reading every source\'s state', () => {
+  it('reads each source that renders a crew and has no state yet, and survives a read that fails', async () => {
+    const states = new LoopStates();
+    const a = { ...entry, source: { ...entry.source, root: '/w/a' } };
+    const b = { ...entry, source: { ...entry.source, root: '/w/b' } };
+    const known = { ...entry, source: { ...entry.source, root: '/w/known' } };
+    const none = { ...entry, crewName: undefined, source: { ...entry.source, root: '/w/none' } };
+    states.set('/w/known', { kind: 'not-deployed' });
+    const read: string[] = [];
+    await readEveryState([a, b, known, none], states, async (e) => {
+      read.push(e.source.root);
+      if (e === b) throw new Error('cluster down');
+    });
+    expect(read).toEqual(['/w/a', '/w/b']);
   });
 });
 
@@ -208,9 +225,9 @@ describe('DevLoop', () => {
   it('deploys to crew-<name> after asking once, waits for ready, reveals the crew, and offers Ask', async () => {
     recorded.inputs.push('crew-demo');
     recorded.infoAnswers.push('Ask');
-    await loop().deployDev(source);
+    await loop().redeploy(source);
     expect(calls.slice(0, 2)).toEqual(['apply crew-demo helm ', 'reveal crew-demo']);
-    expect(memory.devNamespace(ROOT)).toBe('crew-demo');
+    expect(memory.redeployNamespace(ROOT)).toBe('crew-demo');
     expect(recorded.info).toEqual(['demo in crew-demo is ready.']);
     expect(recorded.progress.at(-1)).toBe('Crew ready; 1 of 1 agents ready');
     expect(states.get(ROOT)?.kind).toBe('in-sync');
@@ -218,8 +235,24 @@ describe('DevLoop', () => {
     expect(calls.at(-1)).toBe('ask crew-demo');
   });
 
+  it('deploys to a namespace it asks for every time, offering the last one, and remembers it for Redeploy', async () => {
+    await memory.setRedeployNamespace(ROOT, 'crew-demo');
+    recorded.inputs.push('team-two');
+    onApply = () => liveCrew('team-two');
+    const l = loop();
+    await l.deployToNamespace(source);
+    expect(recorded.inputOffers).toEqual(['crew-demo']);
+    expect(calls[0]).toBe('apply team-two helm ');
+    expect(memory.redeployNamespace(ROOT)).toBe('team-two');
+    recorded.inputs.push(undefined);
+    await l.deployToNamespace(source);
+    expect(calls.filter((c) => c.startsWith('apply'))).toHaveLength(1);
+    await l.deployToNamespace({ kind: 'source', entry: { ...entry, crewName: undefined } });
+    expect(calls.filter((c) => c.startsWith('apply'))).toHaveLength(1);
+  });
+
   it('redeploys without a question, then offers to ask again and rerun the last fitness', async () => {
-    await memory.setDevNamespace(ROOT, 'crew-demo');
+    await memory.setRedeployNamespace(ROOT, 'crew-demo');
     await memory.setLastFitness(ROOT, 'demo-starter');
     cluster.namespaces.add('crew-demo');
     const live = liveCrew('crew-demo', { ready: true, phase: 'Ready', agentCount: 1, revisions: [{ deployedAt: 'T1' }] }, { [ANNOTATIONS.deployedAt]: 'T1', [ANNOTATIONS.source]: 'local:demo', 'meta.helm.sh/release-name': 'demo' });
@@ -231,44 +264,44 @@ describe('DevLoop', () => {
     };
     recorded.infoAnswers.push('Re-ask last question');
     const l = loop();
-    await l.deployDev(source);
+    await l.redeploy(source);
     expect(recorded.inputs).toEqual([]);
     expect(recorded.progress).toContain('Waiting for the operator to see this deploy');
     expect(recorded.info).toEqual(['demo in crew-demo is redeployed and ready.']);
     await tick();
     expect(calls).toEqual(['apply crew-demo helm demo', 'reveal crew-demo', 'reask crew-demo']);
     recorded.infoAnswers.push('Rerun fitness');
-    await l.deployDev(source);
+    await l.redeploy(source);
     await tick();
     expect(calls.at(-1)).toBe('fitness crew-demo');
     expect(lastPreferred).toBe('demo-starter');
     recorded.infoAnswers.push(undefined);
-    await l.deployDev(source);
+    await l.redeploy(source);
     await tick();
     expect(calls.at(-1)).toBe('reveal crew-demo');
   });
 
   it('says when the crew does not come up, when the wait is stopped, and when it is still not ready', async () => {
-    await memory.setDevNamespace(ROOT, 'crew-demo');
+    await memory.setRedeployNamespace(ROOT, 'crew-demo');
     onApply = () => liveCrew('crew-demo', { ready: false, phase: 'Failed', message: 'no Models' });
-    await loop().deployDev(source);
+    await loop().redeploy(source);
     expect(recorded.errors).toEqual(['demo in crew-demo did not come up: Crew demo is Failed: no Models. See its agents in the Deployed Crews view.']);
     cluster = new FakeCluster();
     onApply = () => liveCrew('crew-demo', { ready: false, phase: 'Pending' });
     onSleep = () => recorded.cancel?.();
-    await loop().deployDev(source);
+    await loop().redeploy(source);
     expect(recorded.info.at(-1)).toBe('Stopped waiting. demo in crew-demo keeps deploying; the Deployed Crews view shows its state.');
     expect(calls.filter((c) => c.startsWith('reveal'))).toEqual([]);
   });
 
   it('reports a gave-up wait as a warning', async () => {
-    await memory.setDevNamespace(ROOT, 'crew-demo');
+    await memory.setRedeployNamespace(ROOT, 'crew-demo');
     onApply = () => liveCrew('crew-demo', { ready: false, phase: 'Pending' });
     const clock = vi.spyOn(Date, 'now');
     let t = 0;
     clock.mockImplementation(() => (t += 10 * 60_000));
     try {
-      await loop().deployDev(source);
+      await loop().redeploy(source);
     } finally {
       clock.mockRestore();
     }
@@ -276,27 +309,27 @@ describe('DevLoop', () => {
   });
 
   it('refuses a namespace another channel owns, and asks before replacing a crew from another source', async () => {
-    await memory.setDevNamespace(ROOT, 'crew-demo');
+    await memory.setRedeployNamespace(ROOT, 'crew-demo');
     cluster.namespaces.add('crew-demo');
     const flux = obj('Crew', 'demo', 'crew-demo', {}, { 'helm.toolkit.fluxcd.io/name': 'demo' });
     cluster.add(flux);
-    await loop().deployDev(source);
+    await loop().redeploy(source);
     expect(recorded.info[0]).toMatch(/^demo cannot go to crew-demo with one click: Flux manages demo in crew-demo/);
     cluster.objects = [];
     const other = obj('Crew', 'demo', 'crew-demo', {}, { 'app.kubernetes.io/managed-by': 'Helm' });
     other.metadata.annotations = { [ANNOTATIONS.source]: 'github.com/else//demo' };
     cluster.add(other);
-    await loop().deployDev(source);
+    await loop().redeploy(source);
     expect(recorded.warnings[0]).toContain('came from github.com/else//demo');
     expect(calls).toEqual([]);
   });
 
   it('stops when the namespace question is cancelled, and says why a source without a Crew cannot deploy', async () => {
     recorded.inputs.push(undefined);
-    await loop().deployDev(source);
-    await loop().deployDev({ kind: 'source', entry: { ...entry, crewName: undefined, error: 'helm template failed' } });
+    await loop().redeploy(source);
+    await loop().redeploy({ kind: 'source', entry: { ...entry, crewName: undefined, error: 'helm template failed' } });
     expect(recorded.errors).toEqual(['CrewForge: demo cannot be deployed: helm template failed.']);
-    await loop().deployDev({ kind: 'source', entry: { ...entry, crewName: undefined } });
+    await loop().redeploy({ kind: 'source', entry: { ...entry, crewName: undefined } });
     expect(recorded.errors[1]).toContain('it renders no Crew');
     expect(calls).toEqual([]);
   });
@@ -318,7 +351,7 @@ describe('DevLoop', () => {
     expect(offered[0].description).toBe('helm');
   });
 
-  it('asks and runs fitness against the dev deployment, and says when there is none', async () => {
+  it('asks and runs fitness against the deployment Redeploy goes to, and says when there is none', async () => {
     liveCrew('crew-demo');
     const l = loop();
     await l.ask(source);
@@ -327,10 +360,10 @@ describe('DevLoop', () => {
     expect(lastPreferred).toBeUndefined();
     expect(memory.lastFitness(ROOT)).toBe('demo-starter');
     cluster.objects = [];
-    recorded.infoAnswers.push('Deploy to Dev Namespace');
+    recorded.infoAnswers.push('Deploy to Namespace...');
     recorded.inputs.push(undefined);
     await l.ask(source);
-    expect(recorded.info[0]).toBe('demo is not deployed in lab. Deploy it to a dev namespace first.');
+    expect(recorded.info[0]).toBe('demo is not deployed in lab. Deploy it to a namespace first.');
     await tick();
     const blind = loop({ sources: { entries: async () => [entry], known: [entry], loadDeployments: async () => [{ kind: 'message', text: 'Forbidden' }], refresh: () => undefined } });
     await blind.runFitness(source);
@@ -352,14 +385,14 @@ describe('DevLoop', () => {
     let offered: string[] = [];
     recorded.quickPicks.push((items: { label: string }[]) => ((offered = items.map((i) => i.label)), undefined));
     await l.actions(source);
-    expect(offered.map((o) => o.replace(/^\$\([a-z-]+\) /, ''))).toEqual(['Deploy to Dev Namespace', 'Lint Crew', 'Change the dev namespace']);
-    recorded.quickPicks.push(pick('Lint Crew'));
+    expect(offered.map((o) => o.replace(/^\$\([a-z-]+\) /, ''))).toEqual(['Deploy to Namespace...', 'Lint', 'Change the Namespace Redeploy Uses...']);
+    recorded.quickPicks.push(pick('Lint'));
     await l.actions(source);
-    recorded.quickPicks.push(pick('Change the dev namespace'));
+    recorded.quickPicks.push(pick('Change the Namespace Redeploy Uses...'));
     recorded.inputs.push('team-demo');
     await l.actions(source);
-    expect(memory.devNamespace(ROOT)).toBe('team-demo');
-    recorded.quickPicks.push(pick('Change the dev namespace'));
+    expect(memory.redeployNamespace(ROOT)).toBe('team-demo');
+    recorded.quickPicks.push(pick('Change the Namespace Redeploy Uses...'));
     recorded.inputs.push(undefined);
     await l.actions(source);
     liveCrew('team-demo');
@@ -377,7 +410,7 @@ describe('DevLoop', () => {
     recorded.quickPicks.push(pick('Check the state again'));
     await l.actions(source);
     expect(states.get(ROOT)?.kind).toBe('changed');
-    recorded.quickPicks.push(pick('Deploy to Dev Namespace'));
+    recorded.quickPicks.push(pick('Deploy to Namespace...'));
     states.set(ROOT, { kind: 'not-deployed' });
     await l.actions(source);
     await l.actions({ kind: 'source', entry: { ...entry, crewName: undefined } });
@@ -414,13 +447,13 @@ describe('DevLoop', () => {
   it('reports a failure in a follow-up step as an error', async () => {
     recorded.inputs.push('crew-demo');
     recorded.infoAnswers.push('Ask');
-    await loop({ chat: { ask: async () => Promise.reject(new Error('no gateway')), reaskLast: async () => undefined } }).deployDev(source);
+    await loop({ chat: { ask: async () => Promise.reject(new Error('no gateway')), reaskLast: async () => undefined } }).redeploy(source);
     await tick();
     expect(recorded.errors).toEqual(['CrewForge: no gateway']);
     recorded.inputs.push('crew-demo');
     recorded.infoAnswers.push('Ask');
     cluster = new FakeCluster();
-    await loop({ chat: { ask: async () => Promise.reject('odd'), reaskLast: async () => undefined } }).deployDev(source);
+    await loop({ chat: { ask: async () => Promise.reject('odd'), reaskLast: async () => undefined } }).redeploy(source);
     await tick();
     expect(recorded.errors[1]).toBe('CrewForge: odd');
   });
@@ -428,7 +461,7 @@ describe('DevLoop', () => {
   it('reads agents only when the cluster serves them', async () => {
     recorded.inputs.push('crew-demo');
     onApply = () => liveCrew('crew-demo', { ready: true, phase: 'Ready' });
-    await loop({ service: { kinds: async () => new Map() } }).deployDev(source);
+    await loop({ service: { kinds: async () => new Map() } }).redeploy(source);
     expect(recorded.info).toEqual(['demo in crew-demo is ready.']);
     expect(recorded.progress.at(-1)).toBe('Crew ready');
     expect(readiness({ crew: crew({ ready: false, phase: 'Pending' }) }).message).toBe('Crew Pending');
@@ -449,7 +482,7 @@ describe('CrewStatusBar', () => {
     expect(refreshed).toEqual([ROOT]);
     states.set(ROOT, { kind: 'changed', deployment: node('crew-demo') });
     bar.stateChanged(ROOT);
-    expect(item.text).toBe('$(diff) demo: changed since deploy (crew-demo)');
+    expect(item.text).toBe('$(diff) demo: deployed in crew-demo, changed');
     expect(item.tooltip).toContain('Click for the next steps.');
     bar.stateChanged('/other');
     bar.update(`${ROOT}/values.yaml`);

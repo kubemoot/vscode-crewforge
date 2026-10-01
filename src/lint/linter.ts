@@ -14,7 +14,7 @@ const SEVERITY: Record<Severity, vscode.DiagnosticSeverity> = {
 export const SAVE_DEBOUNCE_MS = 750;
 
 /**
- * Lint Crew in the editor: runs the lint for one source and shows its findings in the
+ * Lint in the editor: runs the lint for one source and shows its findings in the
  * Problems panel, replacing that source's earlier findings. On save it lints the crew of
  * the saved file once the saves settle.
  */
@@ -36,7 +36,7 @@ export class CrewLinter implements vscode.Disposable {
     if (!result) return;
     const count = result.findings.filter((f) => f.severity !== 'info').length;
     const found = count === 0 ? 'no problems' : `${count} ${count === 1 ? 'problem' : 'problems'}; see the Problems panel`;
-    void vscode.window.showInformationMessage([`Lint Crew: ${entry.source.label} has ${found}.`, ...result.notes].join(' '));
+    void vscode.window.showInformationMessage([`Lint: ${entry.crewName ?? entry.source.label} has ${found}.`, ...result.notes].join(' '));
   }
 
   /** Lints the saved file's crew once saves settle; `after` runs when it has. */
@@ -65,7 +65,7 @@ export class CrewLinter implements vscode.Disposable {
   }
 
   private report(err: unknown, loud: boolean): void {
-    this.output.appendLine(`Lint Crew: ${errorText(err)}`);
+    this.output.appendLine(`Lint: ${errorText(err)}`);
     if (!(err instanceof MissingToolError)) {
       if (loud) void showError(err);
       return;

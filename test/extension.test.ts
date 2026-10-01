@@ -279,21 +279,39 @@ describe('the inner loop in the extension', () => {
   };
   const tick = () => new Promise((r) => setTimeout(r, 30));
 
+  it('marks the crew folders for the Explorer menu, and View in CrewForge selects the Crew and opens the dashboard', async () => {
+    await loadBundle();
+    await tick();
+    expect(recorded.contexts.get('crewforge.crewRoots')).toMatchObject({ [BUNDLE]: true });
+    await run('crewforge.viewInCrewForge', Uri.file(path.join(BUNDLE, '02-crew.yaml')));
+    expect(recorded.revealed.at(-1)).toMatchObject({ view: 'crewforge.sources', node: { kind: 'declared', item: { label: 'demo' } }, options: { select: true, expand: false } });
+    expect(recorded.panels.map((p) => p.title)).toEqual(['demo']);
+    await run('crewforge.viewInCrewForge', Uri.file(BUNDLE));
+    expect(recorded.revealed.at(-1)).toMatchObject({ node: { kind: 'source' }, options: { expand: true } });
+  });
+
+  it('says on a live crew whether its source is open', async () => {
+    await loadBundle();
+    const tree = recorded.treeViews[0].options.treeDataProvider as CrewTreeProvider;
+    expect(tree.sourceOpen?.({ name: 'demo', namespace: 'somewhere', ready: true, phase: 'Ready' })).toBe(true);
+    expect(tree.sourceOpen?.({ name: 'other', namespace: 'somewhere', ready: true, phase: 'Ready' })).toBe(false);
+  });
+
   it('adds a status bar item and the Problems collection, and follows the active editor and saves', async () => {
     expect(recorded.statusBarItems).toHaveLength(2);
     expect(recorded.statusBarItems[1].command).toMatchObject({ command: 'crewforge.selectContext' });
     expect(recorded.diagnostics.map((d) => d.name)).toEqual(['crewforge']);
     await loadBundle();
     const source = await loadBundle();
-    const provider = recorded.treeViews[1].options.treeDataProvider as { getTreeItem: (n: unknown) => { description?: string; contextValue?: string }; onDidChangeTreeData: (l: (n: unknown) => void) => void };
-    const redrawn: unknown[] = [];
-    provider.onDidChangeTreeData((n) => redrawn.push(n));
+    const provider = recorded.treeViews[1].options.treeDataProvider as { getTreeItem: (n: unknown) => { description?: string; contextValue?: string } };
+    await tick();
+    // Every source's state is read when the sources load, before any of its files is open.
+    expect(provider.getTreeItem(source)).toMatchObject({ description: 'not deployed · bundle in crew' });
     recorded.editorListeners.forEach((l) => l({ document: { uri: Uri.file(path.join(BUNDLE, '02-crew.yaml')) } }));
     expect(recorded.statusBarItems[0]).toMatchObject({ visible: true, text: expect.stringContaining('demo: ') });
     await tick();
     expect(recorded.statusBarItems[0].text).toBe('$(organization) demo: not deployed');
-    expect(provider.getTreeItem(source)).toMatchObject({ description: 'crew demo · bundle · not deployed', contextValue: 'source-bundle' });
-    expect(redrawn).toContain(source);
+    expect(provider.getTreeItem(source)).toMatchObject({ description: 'not deployed · bundle in crew', contextValue: 'source-bundle' });
     recorded.editorListeners.forEach((l) => l(undefined));
     expect(recorded.statusBarItems[0].visible).toBe(false);
     recorded.saveListeners.forEach((l) => l({ uri: Uri.file('/nowhere/x.yaml') }));
@@ -303,16 +321,16 @@ describe('the inner loop in the extension', () => {
   it('lints a bundle source from its node, without helm', async () => {
     const source = await loadBundle();
     await run('crewforge.lintCrew', source);
-    expect(recorded.info.at(-1)).toMatch(/^Lint Crew: crew has /);
+    expect(recorded.info.at(-1)).toMatch(/^Lint: demo has /);
   });
 
-  it('asks for the dev namespace on the first deploy, and says when the crew is not deployed for Ask and Run Fitness', async () => {
+  it('asks for the namespace on the first deploy, and says when the crew is not deployed for Ask and Run Fitness', async () => {
     const source = await loadBundle();
-    await run('crewforge.deployDev', source);
-    await run('crewforge.redeployDev', source);
+    await run('crewforge.deployToNamespace', source);
+    await run('crewforge.redeploy', source);
     await run('crewforge.askSource', source);
     await run('crewforge.runFitness', source);
-    expect(recorded.info.filter((m) => m === 'demo is not deployed in fake. Deploy it to a dev namespace first.')).toHaveLength(2);
+    expect(recorded.info.filter((m) => m === 'demo is not deployed in fake. Deploy it to a namespace first.')).toHaveLength(2);
     recorded.quickPicks.push(undefined);
     await run('crewforge.crewActions', source);
     expect(recorded.errors).toEqual([]);

@@ -59,7 +59,7 @@ export interface CrewVitals {
 /** Where a crew dashboard reads from; each is a read-only call. */
 export interface VitalsDeps {
   context(): string;
-  /** The dev deployment of a source (or the one it names), with a fresh read of the cluster. */
+  /** The deployment of a source Redeploy goes to (or the one it names), with a fresh read of the cluster. */
   deploymentOf(entry: SourceEntry): Promise<DeploymentNode | undefined>;
   liveCrew(namespace: string, name: string): Promise<CrewSummary | undefined>;
   located(entry: SourceEntry): Promise<Located[]>;

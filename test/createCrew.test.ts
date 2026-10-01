@@ -107,7 +107,7 @@ describe('createCrewCommand', () => {
     expect(recorded.warnings).toEqual(['warning: check models']);
   });
 
-  it('creates in the Explorer folder of New Crew Here without asking for a folder', async () => {
+  it('creates in the Explorer folder of New Kubemoot Crew Here without asking for a folder', async () => {
     recorded.inputs.push('demo');
     recorded.quickPicks.push(first, first);
     await run('/w/crews/team');
@@ -219,9 +219,9 @@ describe('showCreatedCrew', () => {
     expect(revealed).toEqual([nodes[2]]);
     expect(recorded.shownDocuments).toEqual(['/w/demo/README.md', '/w/demo/templates/crew.yaml']);
     expect(recorded.shownOptions[1]).toEqual({ viewColumn: -2, preview: false });
-    expect(recorded.info[0]).toContain('Next: deploy it to a dev namespace');
+    expect(recorded.info[0]).toContain('Next: deploy it to a namespace');
     await new Promise((r) => setTimeout(r, 0));
-    expect(recorded.executed).toEqual([{ id: 'crewforge.deployDev', args: [nodes[2]] }]);
+    expect(recorded.executed).toEqual([{ id: 'crewforge.deployToNamespace', args: [nodes[2]] }]);
   });
 
   it('does nothing more when the offer is dismissed, and says when the crew is outside the workspace', async () => {

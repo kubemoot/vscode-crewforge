@@ -18,6 +18,7 @@ import { confirmModal } from '../views/confirm';
 import type { DeploymentNode, SourceNode, SourceTreeProvider } from '../views/sourceTree';
 import { waitUntilReady, type CrewReadiness, type WaitOutcome } from './ready';
 import { showError } from '../views/notify';
+import { pickSource } from '../views/pickSource';
 import { stateFrom, stateText, type CrewState, type LoopMemory, type LoopStates } from './state';
 
 /** The chat, as the inner loop uses it: ask a crew, or ask its last question again. */
@@ -59,13 +60,13 @@ const NEXT: Record<CrewState['kind'], ActionId[]> = {
 };
 
 const LABELS: Record<ActionId, string> = {
-  deploy: '$(cloud-upload) Deploy to Dev Namespace',
-  redeploy: '$(sync) Redeploy to Dev Namespace',
+  deploy: '$(cloud-upload) Deploy to Namespace...',
+  redeploy: '$(sync) Redeploy',
   ask: '$(comment-discussion) Ask',
   fitness: '$(beaker) Run Fitness',
   reveal: '$(eye) Show in the Deployed Crews view',
-  lint: '$(checklist) Lint Crew',
-  namespace: '$(edit) Change the dev namespace',
+  lint: '$(checklist) Lint',
+  namespace: '$(edit) Change the Namespace Redeploy Uses...',
   refresh: '$(refresh) Check the state again',
 };
 
@@ -77,10 +78,10 @@ const ASK = 'Ask';
 const RUN = 'Run Fitness';
 const REASK = 'Re-ask last question';
 const RERUN = 'Rerun fitness';
-const DEPLOY = 'Deploy to Dev Namespace';
+const DEPLOY = 'Deploy to Namespace...';
 
 /**
- * The inner loop: deploy a source to its dev namespace with one click, wait until the
+ * The inner loop: deploy a source to a namespace, redeploy it there with one click, wait until the
  * crew is ready, and ask it or run its fitness; on save, lint the crew and mark it
  * changed since deploy; redeploy, then ask again or rerun fitness. It never touches git.
  */
@@ -97,13 +98,28 @@ export class DevLoop {
     const entries = await this.deps.sources.entries();
     const file = target instanceof vscode.Uri ? target.fsPath : vscode.window.activeTextEditor?.document.uri.fsPath;
     const found = file ? sourceOf(entries, file) : undefined;
-    return found ?? pickSource(entries);
+    return found ?? pickSource(entries, 'Which crew source?', 'No crew charts or bundles in this workspace');
   }
 
-  /** Deploys to the source's dev namespace (asked once, then remembered) and waits until the crew is ready. */
-  async deployDev(target?: LoopTarget): Promise<void> {
+  /**
+   * Deploys to a namespace the developer picks (the last one, else `crew-<name>`, is
+   * offered), remembers it for Redeploy, and waits until the crew is ready. A crew already
+   * deployed may go to another namespace too; each deployment shows under its source.
+   */
+  deployToNamespace(target?: LoopTarget): Promise<void> {
+    return this.shipTo(target, (entry, last) => askNamespace(entry, this.connectTo().context, last));
+  }
+
+  /** Redeploys to the namespace the source was last deployed to from here (asked when there is none) and waits until the crew is ready. */
+  redeploy(target?: LoopTarget): Promise<void> {
+    return this.shipTo(target, async (entry, last) => last ?? (await askNamespace(entry, this.connectTo().context)));
+  }
+
+  /** Deploys the target's source to the namespace `pick` settles on, given the one Redeploy goes to; none stops. */
+  private async shipTo(target: LoopTarget | undefined, pick: (entry: Deployable, last?: string) => Promise<string | undefined>): Promise<void> {
     const entry = deployable(await this.entryFor(target));
-    if (entry) await this.ship(entry);
+    const namespace = entry && (await pick(entry, this.deps.memory.redeployNamespace(entry.source.root)));
+    if (entry && namespace) await this.ship(entry, namespace);
   }
 
   /** Lints the source's chart and every object it renders; findings go to the Problems panel. */
@@ -112,20 +128,20 @@ export class DevLoop {
     if (entry) await this.deps.linter.lintCommand(entry);
   }
 
-  /** Opens the chat with the source's dev deployment. */
+  /** Opens the chat with the source's deployment (the one Redeploy goes to). */
   async ask(target?: LoopTarget): Promise<void> {
     const entry = deployable(await this.entryFor(target));
     const node = entry && (await this.deploymentOf(entry));
     if (node) await this.deps.chat.ask(node.deployment.crew);
   }
 
-  /** The dev deployment of the target's source, or undefined after saying why there is none. */
-  async devDeploymentOf(target?: LoopTarget): Promise<DeploymentNode | undefined> {
+  /** The target source's deployment Redeploy goes to, or undefined after saying why there is none. */
+  async redeployTargetOf(target?: LoopTarget): Promise<DeploymentNode | undefined> {
     const entry = deployable(await this.entryFor(target));
     return entry && this.deploymentOf(entry);
   }
 
-  /** Runs a fitness definition against the dev deployment; `rerun` starts the last one again without asking. */
+  /** Runs a fitness definition against the source's deployment; `rerun` starts the last one again without asking. */
   async runFitness(target?: LoopTarget, rerun = false): Promise<void> {
     const entry = deployable(await this.entryFor(target));
     const node = entry && (await this.deploymentOf(entry));
@@ -150,8 +166,8 @@ export class DevLoop {
   private run(id: ActionId, entry: Deployable, state: CrewState): Promise<void> {
     const node: SourceNode = { kind: 'source', entry };
     const handlers: Record<ActionId, () => Promise<unknown>> = {
-      deploy: () => this.deployDev(node),
-      redeploy: () => this.deployDev(node),
+      deploy: () => this.deployToNamespace(node),
+      redeploy: () => this.redeploy(node),
       ask: () => this.ask(node),
       fitness: () => this.runFitness(node),
       reveal: () => ('deployment' in state ? this.deps.revealLive(state.deployment.deployment.crew) : Promise.resolve()),
@@ -165,7 +181,7 @@ export class DevLoop {
   /** Reads the source's deployments and drift again and records where it stands. */
   async refreshState(entry: SourceEntry): Promise<CrewState> {
     const nodes = await this.deps.sources.loadDeployments(entry);
-    const state = stateFrom(nodes, this.deps.memory.devNamespace(entry.source.root));
+    const state = stateFrom(nodes, this.deps.memory.redeployNamespace(entry.source.root));
     this.deps.states.set(entry.source.root, state);
     return state;
   }
@@ -182,13 +198,13 @@ export class DevLoop {
   }
 
   private async changeNamespace(entry: Deployable): Promise<void> {
-    const namespace = await askNamespace(entry, this.connectTo().context, this.deps.memory.devNamespace(entry.source.root));
+    const namespace = await askNamespace(entry, this.connectTo().context, this.deps.memory.redeployNamespace(entry.source.root));
     if (!namespace) return;
-    await this.deps.memory.setDevNamespace(entry.source.root, namespace);
+    await this.deps.memory.setRedeployNamespace(entry.source.root, namespace);
     await this.refreshState(entry);
   }
 
-  /** The dev deployment of a source, or a message saying why there is none. */
+  /** The source's deployment Redeploy goes to, or a message saying why there is none. */
   private async deploymentOf(entry: Deployable): Promise<DeploymentNode | undefined> {
     const state = await this.refreshState(entry);
     if ('deployment' in state) return state.deployment;
@@ -196,20 +212,18 @@ export class DevLoop {
       void vscode.window.showErrorMessage(`CrewForge cannot tell where ${entry.crewName} is deployed: ${state.reason}`);
       return undefined;
     }
-    void vscode.window.showInformationMessage(`${entry.crewName} is not deployed in ${this.connectTo().context}. Deploy it to a dev namespace first.`, DEPLOY).then((choice) => {
-      if (choice === DEPLOY) void this.deployDev({ kind: 'source', entry });
+    void vscode.window.showInformationMessage(`${entry.crewName} is not deployed in ${this.connectTo().context}. Deploy it to a namespace first.`, DEPLOY).then((choice) => {
+      if (choice === DEPLOY) void this.deployToNamespace({ kind: 'source', entry });
     });
     return undefined;
   }
 
-  private async ship(entry: Deployable): Promise<void> {
+  private async ship(entry: Deployable, namespace: string): Promise<void> {
     const connection = this.connectTo();
-    const namespace = this.deps.memory.devNamespace(entry.source.root) ?? (await askNamespace(entry, connection.context));
-    if (!namespace) return;
     const target = await readTarget(connection.client, namespace);
     const request = await this.request(entry, target);
     if (!request) return;
-    await this.deps.memory.setDevNamespace(entry.source.root, namespace);
+    await this.deps.memory.setRedeployNamespace(entry.source.root, namespace);
     const redeploy = existingCrew(target, entry.crewName) !== undefined;
     try {
       await this.deps.deploy.apply(connection, request, false);
@@ -221,12 +235,12 @@ export class DevLoop {
     await this.report(entry, namespace, result, redeploy);
   }
 
-  /** The deploy request, after checking the dev namespace can take this crew and confirming anything to confirm. */
+  /** The deploy request, after checking the namespace can take this crew and confirming anything to confirm. */
   private async request(entry: Deployable, target: TargetState): Promise<DeployRequest | undefined> {
     const channel = entry.source.kind === 'helm' ? 'helm' : 'bundle';
     const option = channelOptions(entry.source, entry.crewName, target).find((o) => o.channel === channel);
     if (!option?.enabled) {
-      void vscode.window.showInformationMessage(`${entry.crewName} cannot go to ${target.namespace} with one click: ${option?.reason}. Change the dev namespace from the status bar, or use Deploy to a Namespace.`);
+      void vscode.window.showInformationMessage(`${entry.crewName} cannot go to ${target.namespace} with one click: ${option?.reason}. Pick another namespace with Deploy to Namespace..., or use Deploy with a Channel....`);
       return undefined;
     }
     const identity = await identify(entry.source, this.deps.exec);
@@ -297,19 +311,12 @@ function deployable(entry?: SourceEntry): Deployable | undefined {
   return undefined;
 }
 
-async function pickSource(entries: SourceEntry[]): Promise<SourceEntry | undefined> {
-  const choice = await vscode.window.showQuickPick(
-    entries.map((entry) => ({ label: entry.source.label, description: entry.crewName ? `crew ${entry.crewName}` : entry.source.kind, detail: entry.source.root, entry })),
-    { placeHolder: entries.length ? 'Which crew source?' : 'No crew charts or bundles in this workspace' },
-  );
-  return choice?.entry;
-}
 
-/** Asks for the dev namespace, `crew-<name>` by default; CrewForge remembers it for the source. */
+/** Asks for the namespace to deploy to, the last one or `crew-<name>` by default; CrewForge remembers it for Redeploy. */
 async function askNamespace(entry: Deployable, context: string, current?: string): Promise<string | undefined> {
   const value = await vscode.window.showInputBox({
-    title: `Dev namespace for ${entry.crewName}`,
-    prompt: `Namespace in ${context}. CrewForge remembers it for ${entry.source.label} and deploys there with one click.`,
+    title: `Deploy ${entry.crewName} to which namespace?`,
+    prompt: `A namespace in ${context}. CrewForge remembers it, and Redeploy goes there.`,
     value: current ?? `crew-${entry.crewName}`,
     validateInput: (v) => nameProblem('namespace', v),
   });

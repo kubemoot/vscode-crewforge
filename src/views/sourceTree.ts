@@ -7,7 +7,7 @@ import { isRunning, runSummary, type FitnessRun } from '../fitness/fitness';
 import { fluxSummary, type FluxState } from '../gitops/flux';
 import type { DeclaredItem, DeclaredSection } from '../source/declared';
 import { locationOf } from '../source/render';
-import type { SourceEntry, SourceService } from '../source/service';
+import { sourceOf, type SourceEntry, type SourceService } from '../source/service';
 import { errorItems, errorText, type MessageNode } from './errors';
 
 export type SourceNode =
@@ -43,6 +43,8 @@ export class SourceTreeProvider implements vscode.TreeDataProvider<SourceNode> {
   connection?: Connection;
   /** The source nodes of the last load, so one source's line can be redrawn alone. */
   private roots: SourceNode[] = [];
+  /** Each listed node's parent, so a node deep in a source can be revealed. */
+  private readonly parents = new WeakMap<SourceNode, SourceNode>();
   /** The root nodes a reload just made, which the view's next read of the root takes instead of loading again. */
   private fresh?: SourceNode[];
   /** Where each source stands, by folder, shown on its line; set by the inner loop. */
@@ -101,6 +103,12 @@ export class SourceTreeProvider implements vscode.TreeDataProvider<SourceNode> {
 
   async getChildren(node?: SourceNode): Promise<SourceNode[]> {
     if (!node) return this.takeFresh() ?? this.loadRoot();
+    const children = await this.childrenOf(node);
+    for (const child of children) this.parents.set(child, node);
+    return children;
+  }
+
+  private childrenOf(node: SourceNode): Promise<SourceNode[]> | SourceNode[] {
     if (node.kind === 'source') return this.loadSource(node.entry);
     if (node.kind === 'deployment') return deploymentChildren(node);
     if (node.kind === 'fitness') return this.loadRuns(node);
@@ -108,9 +116,25 @@ export class SourceTreeProvider implements vscode.TreeDataProvider<SourceNode> {
     return [];
   }
 
-  /** A node's source, so a source can be revealed; sources are the roots. */
+  /** A node's parent as the view listed it, so any node can be revealed; else its source. Sources are the roots. */
   getParent(node: SourceNode): SourceNode | undefined {
-    return node.kind === 'source' || node.kind === 'message' ? undefined : { kind: 'source', entry: node.entry };
+    return this.parents.get(node) ?? (node.kind === 'source' || node.kind === 'message' ? undefined : { kind: 'source', entry: node.entry });
+  }
+
+  /**
+   * The node that stands for a file or folder of a crew source: the object a manifest file
+   * declares first (the Crew when the file holds it), else the source itself. Undefined
+   * when the path is in no crew source.
+   */
+  async nodeForPath(fsPath: string): Promise<SourceNode | undefined> {
+    const entry = sourceOf(await this.entries(), fsPath);
+    const source = entry && this.roots.find((n) => n.kind === 'source' && n.entry.source.root === entry.source.root);
+    if (!source) return undefined;
+    if (fsPath === entry.source.root) return source;
+    const top = await this.getChildren(source);
+    const sections = top.filter((n) => n.kind === 'declSection');
+    const declared = [...top, ...(await Promise.all(sections.map((n) => this.getChildren(n)))).flat()];
+    return declared.find((n) => n.kind === 'declared' && n.item.file === fsPath) ?? source;
   }
 
   getTreeItem(node: SourceNode): vscode.TreeItem {
@@ -128,7 +152,7 @@ export class SourceTreeProvider implements vscode.TreeDataProvider<SourceNode> {
       case 'declSection':
         return declSectionItem(node);
       case 'declared':
-        return declaredItem(node.item);
+        return declaredItem(node.item, node.entry.source.root);
       default:
         return messageItem(node);
     }
@@ -283,13 +307,15 @@ function declSectionItem(node: Extract<SourceNode, { kind: 'declSection' }>): vs
   const item = new vscode.TreeItem(title, empty ? vscode.TreeItemCollapsibleState.None : vscode.TreeItemCollapsibleState.Collapsed);
   item.description = empty ? 'none' : String(node.items.length);
   item.iconPath = new vscode.ThemeIcon(icon);
+  item.id = `declSection:${node.entry.source.root}:${node.section}`;
   item.contextValue = `declSection-${node.section}`;
   return item;
 }
 
 /** One declared object; clicking it opens its file at the object. */
-function declaredItem(declared: DeclaredItem): vscode.TreeItem {
+function declaredItem(declared: DeclaredItem, root: string): vscode.TreeItem {
   const item = new vscode.TreeItem(declared.label, vscode.TreeItemCollapsibleState.None);
+  item.id = `declared:${root}:${declared.icon}:${declared.label}:${declared.file ?? ''}`;
   item.description = declared.description;
   item.tooltip = declared.file ? `${declared.tooltip}\n${declared.file}:${declared.line + 1}` : declared.tooltip;
   item.iconPath = new vscode.ThemeIcon(declared.icon, declared.warn ? new vscode.ThemeColor('list.warningForeground') : undefined);
@@ -306,15 +332,16 @@ export function openAt(file: string, line: number): vscode.Command {
 
 function sourceItem(node: Extract<SourceNode, { kind: 'source' }>, state: SourceState | undefined, busy: boolean): vscode.TreeItem {
   const { entry } = node;
-  const item = new vscode.TreeItem(entry.source.label, vscode.TreeItemCollapsibleState.Collapsed);
+  const item = new vscode.TreeItem(entry.crewName ?? entry.source.label, vscode.TreeItemCollapsibleState.Collapsed);
   item.id = `source:${entry.source.root}`;
-  const what = entry.crewName ? `crew ${entry.crewName} · ${entry.source.kind}` : entry.source.kind;
-  item.description = state ? `${what} · ${state.text}` : what;
+  const folder = entry.crewName && entry.crewName !== entry.source.label ? ` in ${entry.source.label}` : '';
+  const what = `${entry.source.kind}${folder}`;
+  item.description = state ? `${state.text} · ${what}` : what;
   const lines = [entry.source.root, entry.identity.id, entry.identity.revision ? `revision ${entry.identity.revision}` : '', 'Click for the crew dashboard; expand for what it declares and where it runs.'];
   item.tooltip = lines.filter(Boolean).join('\n');
   item.iconPath = new vscode.ThemeIcon(entry.source.kind === 'helm' ? 'package' : 'files');
   item.contextValue = `source-${entry.source.kind}${state?.changed ? '-changed' : ''}${running(busy)}`;
-  item.command = { command: 'crewforge.openCrewDashboard', title: 'Open Crew Dashboard', arguments: [node] };
+  item.command = { command: 'crewforge.openCrewDashboard', title: 'Open Dashboard', arguments: [node] };
   return item;
 }
 

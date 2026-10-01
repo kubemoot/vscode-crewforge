@@ -19,11 +19,10 @@ function header(v: CrewVitals): string {
 const blocked = (...reasons: (string | undefined)[]) => reasons.find((r) => r !== undefined);
 
 /** Why each kind of action does not apply to this crew now; undefined where it does. */
-function reasons(v: CrewVitals): { noSource?: string; notDeployed?: string; deployed?: string; flux?: string; running?: string; nothingToShow?: string } {
+function reasons(v: CrewVitals): { noSource?: string; notDeployed?: string; flux?: string; running?: string; nothingToShow?: string } {
   return {
     noSource: v.source?.crewName ? undefined : 'No workspace source renders this crew; open its folder to deploy or lint it.',
     notDeployed: v.deployment ? undefined : `${v.name} is not deployed in ${v.context}.`,
-    deployed: v.deployment && 'Already deployed; use Redeploy.',
     flux: v.deployment?.channel === 'flux' ? 'Flux manages this crew; change it through git.' : undefined,
     running: v.fitnessRunning ? 'A fitness run for this crew is in progress.' : undefined,
     nothingToShow: v.sourceAt || v.deployment ? undefined : 'Nothing to show yet.',
@@ -35,13 +34,13 @@ export function crewButtons(v: CrewVitals): ButtonSpec[] {
   const r = reasons(v);
   const deployed = v.deployment !== undefined;
   return [
-    { action: 'deploy', label: 'Deploy (dev)', title: 'Deploy to the dev namespace (helm upgrade --install)', disabled: blocked(r.noSource, r.deployed), primary: !deployed },
-    { action: 'redeploy', label: 'Redeploy', title: 'Redeploy from source to the dev namespace (helm upgrade)', disabled: blocked(r.noSource, r.notDeployed, r.flux) },
+    { action: 'deploy', label: 'Deploy to Namespace...', title: 'Deploy to a namespace you pick (helm upgrade --install, or kubectl apply for a bundle)', disabled: r.noSource, primary: !deployed },
+    { action: 'redeploy', label: 'Redeploy', title: 'Redeploy from source to the namespace it was last deployed to (helm upgrade)', disabled: blocked(r.noSource, r.notDeployed, r.flux) },
     { action: 'undeploy', label: 'Undeploy', title: 'Remove the deployment (helm uninstall, or delete its Kubemoot objects)', disabled: blocked(r.notDeployed, r.flux) },
     { action: 'ask', label: 'Ask', title: 'Open the chat with this crew', disabled: r.notDeployed, primary: deployed },
     { action: 'fitness', label: 'Run Fitness', title: 'Run one of its fitness definitions', disabled: blocked(r.notDeployed, r.noSource, r.running) },
     { action: 'fitnessDashboard', label: 'Fitness Runs', title: 'Open the fitness dashboard for this deployment', disabled: r.notDeployed },
-    { action: 'lint', label: 'Lint', title: 'Lint Crew (helm lint and schema check)', disabled: r.noSource },
+    { action: 'lint', label: 'Lint', title: 'Lint (helm lint and schema check)', disabled: r.noSource },
     { action: 'yaml', label: 'Show YAML', title: v.sourceAt ? "Open the Crew's source file at the Crew" : 'Show the live Crew YAML', disabled: r.nothingToShow },
     { action: 'refresh', label: 'Refresh', title: 'Read everything again' },
     ...(v.deploymentError ? [SELECT_CONTEXT_BUTTON] : []),

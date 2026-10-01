@@ -11,7 +11,7 @@ const MODEL_FAMILIES = ['qwen', 'gemma', 'llama', 'mistral'];
 
 /**
  * Checks kmctl first, then asks for a name, a size, and a model family, and scaffolds
- * the crew as a chart in `folder` (New Crew Here in the Explorer) or in a folder the
+ * the crew as a chart in `folder` (New Kubemoot Crew Here in the Explorer) or in a folder the
  * developer picks. A missing or old kmctl, or a failed scaffold, is a modal error, so it
  * is seen before or instead of a toast that fades. `afterCreate` gets the new chart's folder.
  */
@@ -41,12 +41,12 @@ export interface CreatedDeps {
   reveal: (node: SourceNode) => Thenable<void>;
 }
 
-export const DEPLOY_NEXT = 'Deploy to a dev namespace';
+export const DEPLOY_NEXT = 'Deploy to Namespace...';
 
 /**
  * After scaffolding: selects the new crew in Crew Sources, opens its README with
  * `templates/crew.yaml` beside it, and offers the loop's next step, deploying it to a
- * dev namespace.
+ * namespace.
  */
 export async function showCreatedCrew(root: string, deps: CreatedDeps): Promise<void> {
   const node = (await deps.reload()).find((n) => n.kind === 'source' && n.entry.source.root === root);
@@ -57,8 +57,8 @@ export async function showCreatedCrew(root: string, deps: CreatedDeps): Promise<
     void vscode.window.showInformationMessage(`Created ${root}. It is outside this workspace's folders, so Crew Sources does not list it; add its folder to the workspace to deploy it from there.`);
     return;
   }
-  void vscode.window.showInformationMessage(`Created the crew ${path.basename(root)}. Next: deploy it to a dev namespace and ask it something.`, DEPLOY_NEXT).then((choice) => {
-    if (choice === DEPLOY_NEXT) void vscode.commands.executeCommand('crewforge.deployDev', node);
+  void vscode.window.showInformationMessage(`Created the crew ${path.basename(root)}. Next: deploy it to a namespace and ask it something.`, DEPLOY_NEXT).then((choice) => {
+    if (choice === DEPLOY_NEXT) void vscode.commands.executeCommand('crewforge.deployToNamespace', node);
   });
 }
 

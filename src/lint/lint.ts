@@ -8,7 +8,7 @@ import { errorText } from '../views/errors';
 
 export type Severity = 'error' | 'warning' | 'info';
 
-/** One problem Lint Crew found, at a file and line (0-based). */
+/** One problem Lint found, at a file and line (0-based). */
 export interface Finding {
   file: string;
   line: number;
@@ -30,7 +30,7 @@ export interface LintDeps extends RenderDeps {
   schema: () => Promise<string>;
 }
 
-/** Thrown when a tool Lint Crew needs is not on the PATH. */
+/** Thrown when a tool Lint needs is not on the PATH. */
 export class MissingToolError extends Error {}
 
 export const HELM_INSTALL = 'https://helm.sh/docs/intro/install/';
@@ -60,7 +60,7 @@ export async function lintSource(source: CrewSource, deps: LintDeps, namespace =
 /** Runs `helm lint` on a chart and reads its findings. */
 async function helmLint(root: string, exec: Exec): Promise<Finding[]> {
   const result = await exec('helm', ['lint', root], { cwd: path.dirname(root) });
-  if (result.code === 127) throw new MissingToolError(`Lint Crew needs helm on your PATH to lint a Helm chart, and none was found. Install it from ${HELM_INSTALL}`);
+  if (result.code === 127) throw new MissingToolError(`Lint needs helm on your PATH to lint a Helm chart, and none was found. Install it from ${HELM_INSTALL}`);
   const findings = parseHelmLint(root, `${result.stdout}\n${result.stderr}`);
   if (result.code !== 0 && !findings.some((f) => f.severity === 'error')) {
     findings.push({ file: path.join(root, 'Chart.yaml'), line: 0, severity: 'error', message: `helm lint failed: ${(result.stderr || result.stdout).trim()}`, source: 'helm lint' });

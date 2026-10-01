@@ -56,9 +56,9 @@ export async function readChart(root: string, readText: ReadText): Promise<Chart
   }
 }
 
-/** The crew source a file belongs to: the innermost source folder that holds it. */
+/** The crew source a file or folder belongs to: the innermost source folder that is it or holds it. */
 export function sourceOf(entries: SourceEntry[], file: string): SourceEntry | undefined {
-  const holding = entries.filter((e) => file.startsWith(e.source.root + path.sep));
+  const holding = entries.filter((e) => file === e.source.root || file.startsWith(e.source.root + path.sep));
   return holding.sort((a, b) => b.source.root.length - a.source.root.length)[0];
 }
 

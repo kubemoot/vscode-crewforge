@@ -141,15 +141,15 @@ describe('CrewLinter', () => {
     expect([...collection.entries.keys()].sort()).toEqual([`file://${ROOT}/Chart.yaml`, `file://${ROOT}/templates/agents.yaml`]);
     const [first] = collection.entries.get(`file://${ROOT}/templates/agents.yaml`)!;
     expect(first).toMatchObject({ severity: 0, source: 'CrewForge (schema)', range: { startLine: 6 } });
-    expect(recorded.info[0]).toBe('Lint Crew: demo has 2 problems; see the Problems panel.');
+    expect(recorded.info[0]).toBe('Lint: demo has 2 problems; see the Problems panel.');
     templateAnswer = { code: 0, stdout: '', stderr: '' };
     lintAnswer = { code: 0, stdout: '[WARNING] Chart.yaml: odd', stderr: '' };
     await l.lintCommand(entry);
     expect([...collection.entries.keys()]).toEqual([`file://${ROOT}/Chart.yaml`]);
-    expect(recorded.info[1]).toBe('Lint Crew: demo has 1 problem; see the Problems panel.');
+    expect(recorded.info[1]).toBe('Lint: demo has 1 problem; see the Problems panel.');
     lintAnswer = { code: 0, stdout: '', stderr: '' };
     await linter(deps('{}')).lintCommand(entry);
-    expect(recorded.info[2]).toBe('Lint Crew: demo has no problems. The Kubemoot schema check was skipped: CrewForge could not read the schemas from the cluster.');
+    expect(recorded.info[2]).toBe('Lint: demo has no problems. The Kubemoot schema check was skipped: CrewForge could not read the schemas from the cluster.');
   });
 
   it('says once when helm is missing on save, every time on the command, and reports other failures', async () => {
@@ -166,7 +166,7 @@ describe('CrewLinter', () => {
     expect(recorded.errors).toEqual([]);
     await failing.lintCommand(entry);
     expect(recorded.errors).toEqual(['CrewForge: no cluster']);
-    expect(recorded.output.filter((l) => l.startsWith('Lint Crew: '))).toHaveLength(5);
+    expect(recorded.output.filter((l) => l.startsWith('Lint: '))).toHaveLength(5);
   });
 
   it('lints on save once the saves settle, and stops waiting when disposed', async () => {

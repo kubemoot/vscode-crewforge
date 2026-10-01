@@ -238,7 +238,7 @@ describe('Run Scenario', () => {
     expect(scriptFitness('test', 'weather', 'ASSERT(x)')).toMatchObject({ kind: 'CrewFitness', metadata: { name: 'test-weather' }, spec: { crewRef: 'test', testRef: 'weather', testContent: 'ASSERT(x)' } });
   });
 
-  it('starts one scenario against the dev deployment, and refuses while a run of the crew is going', async () => {
+  it('starts one scenario against the deployment Redeploy goes to, and refuses while a run of the crew is going', async () => {
     const root = copyScaffold();
     fs.writeFileSync(path.join(root, 'fitness', 'weather.adl'), 'ASSERT(x)');
     const cluster = new FakeCluster();
@@ -294,9 +294,9 @@ describe('the scenario commands', () => {
     const files = { add: vi.fn(async () => '/w/fitness/b.adl' as string | undefined), rename: vi.fn(async () => undefined), delete: vi.fn(async () => undefined) };
     const fitness = { runScenario: vi.fn(async () => 'run') };
     const deployment: DeploymentNode = { kind: 'deployment', entry, deployment: { namespace: 'n', crew: { name: 'test', namespace: 'n', ready: true, phase: 'Ready' }, channel: 'helm', linked: true } };
-    const devDeployment = vi.fn(async (): Promise<DeploymentNode | undefined> => deployment);
+    const redeployTarget = vi.fn(async (): Promise<DeploymentNode | undefined> => deployment);
     const reload = vi.fn(async () => []);
-    registerScenarioCommands({ files: files as never, fitness, devDeployment, readText: async () => '', reload, guard: async (a) => a() });
+    registerScenarioCommands({ files: files as never, fitness, redeployTarget, readText: async () => '', reload, guard: async (a) => a() });
     const run = (id: string, node?: SourceNode) => recorded.commands.get(id)!(node) as Promise<void>;
     await run('crewforge.addScenario', { kind: 'fitness', entry, deployment: deployment.deployment });
     files.add.mockResolvedValueOnce(undefined);
@@ -308,7 +308,7 @@ describe('the scenario commands', () => {
     expect(reload).toHaveBeenCalledTimes(3);
     await run('crewforge.runScenario', declared);
     expect(fitness.runScenario).toHaveBeenCalledWith(deployment, scenario, expect.any(Function));
-    devDeployment.mockResolvedValueOnce(undefined);
+    redeployTarget.mockResolvedValueOnce(undefined);
     await run('crewforge.runScenario', declared);
     await run('crewforge.runScenario', { kind: 'message', text: 'x' });
     expect(fitness.runScenario).toHaveBeenCalledTimes(1);

@@ -75,7 +75,7 @@ beforeEach(async () => {
     service: { located: async () => located, kinds: discoverKinds },
     details: async (crew) => loadCrewDetails(cluster, await discoverKinds(cluster), crew.namespace, crew.name),
     store,
-    memory: { devNamespace: () => undefined },
+    memory: { redeployNamespace: () => undefined },
     exec: async (cmd, args) => (cmd === 'helm' && args.includes('status') ? { code: 0, stdout: '{"version":2,"info":{"first_deployed":"F","last_deployed":"L"}}', stderr: '' } : { code: 1, stdout: '', stderr: '' }),
     activity: new FitnessActivity(),
     api: {
@@ -109,13 +109,13 @@ describe('the crew dashboard', () => {
     expect(panel.title).toBe('demo');
     for (const action of ['redeploy', 'undeploy', 'ask', 'fitness', 'lint', 'yaml', 'refresh', 'deploy']) await press(panel, action);
     expect(recorded.executed.map((e) => e.id)).toEqual([
-      'crewforge.redeployDev',
+      'crewforge.redeploy',
       'crewforge.removeDeployment',
       'crewforge.askCrew',
       'crewforge.runFitness',
       'crewforge.lintCrew',
       'vscode.open',
-      'crewforge.deployDev',
+      'crewforge.deployToNamespace',
     ]);
     expect(recorded.executed[1].args[0]).toMatchObject({ kind: 'deployment', entry });
     await press(panel, 'fitnessDashboard');

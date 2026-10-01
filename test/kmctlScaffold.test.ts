@@ -53,7 +53,7 @@ describe('an undeployed kmctl scaffold in Crew Sources', () => {
     if (!run) return;
     const provider = tree(exec);
     const [source] = await provider.getChildren();
-    expect(provider.getTreeItem(source).description).toBe('crew test · helm');
+    expect(provider.getTreeItem(source).description).toBe('helm');
     const children = await provider.getChildren(source);
     expect(labels(provider, children)).toEqual(['test', 'Agents', 'PromptModules', 'Skills', 'Fitness Scenarios', 'Not deployed in dev']);
     const agents = await provider.getChildren(children[1]);

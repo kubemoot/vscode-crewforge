@@ -14,6 +14,7 @@ import { keyOf, objectKey, type Manifest } from '../source/manifests';
 import { listRevisions, materialize } from '../revisions/revisions';
 import { Deployer, isDeployable, KubeTools, type DeployChannel, type DeployRequest } from './deployer';
 import { channelOptions, ownershipWarnings, releaseOf, type ChannelOption } from './plan';
+import { pickSource } from '../views/pickSource';
 import { readTarget } from './target';
 
 const CHANNEL_LABELS: Record<Channel, string> = {
@@ -161,13 +162,8 @@ export class DeployCommands {
     return new Deployer(new KubeTools(this.deps.exec, connection.source, connection.context), connection.client, this.deps);
   }
 
-  private async pickSource(): Promise<SourceEntry | undefined> {
-    const deployable = this.sources.known.filter((e) => e.crewName);
-    const choice = await vscode.window.showQuickPick(
-      deployable.map((entry) => ({ label: entry.source.label, description: `crew ${entry.crewName} · ${entry.source.kind}`, entry })),
-      { placeHolder: deployable.length ? 'Deploy which crew source?' : 'No crew sources loaded; open the Crew Sources view first' },
-    );
-    return choice?.entry;
+  private pickSource(): Promise<SourceEntry | undefined> {
+    return pickSource(this.sources.known.filter((e) => e.crewName), 'Deploy which crew source?', 'No crew sources loaded; open the Crew Sources view first');
   }
 }
 
