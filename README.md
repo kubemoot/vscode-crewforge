@@ -361,6 +361,13 @@ npm run typecheck
 npm run package     # builds dist/ and crewforge-<version>.vsix
 ```
 
+Before you push, run `npm run lint`, `npm run typecheck`, and `npm run test:coverage`.
+SonarQube judges the code, and `npm run lint` runs the same TypeScript rules on `src/`
+first: the `eslint-plugin-sonarjs` rules of the Sonar way profile, plus the
+typescript-eslint and unicorn rules Sonar runs under its own keys (see
+`eslint.config.mjs`). A finding there is very likely one SonarQube would report after
+the push; the server stays the authority.
+
 With this repository open in VS Code, F5 starts a second VS Code window (the Extension
 Development Host) running your local build.
 
