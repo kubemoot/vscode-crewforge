@@ -746,7 +746,8 @@
     "package": "node esbuild.mjs --production && vsce package --no-dependencies",
     "vscode:prepublish": "node esbuild.mjs --production",
     "test:coverage": "vitest run --coverage",
-    "test:integration": "node esbuild.mjs --integration && node .vscode-test/out/runTest.js"
+    "test:integration": "node esbuild.mjs --integration && node .vscode-test/out/runTest.js",
+    "screenshots": "node scripts/screenshots/build.mjs && node .vscode-test/screenshots/run.js"
   },
   "dependencies": {
     "@kubernetes/client-node": "^2.0.0",
