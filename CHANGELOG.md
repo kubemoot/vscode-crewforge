@@ -10,8 +10,10 @@ generated from the conventional commits since the previous release.
 - The whole inner loop runs in VS Code, without GitOps: create, understand, edit, lint,
   deploy to a namespace, ask, debug, redeploy, and retest. CrewForge never commits or
   pushes. See [Develop a crew in VS Code](https://kubemoot.org/docs/ecosystem/crewforge/develop-a-crew/).
-- **New Kubemoot Crew Here** on a folder in the Explorer scaffolds a crew with
-  `kmctl create --chart` (kmctl 0.12.0 or later). The **+** on Crew Sources asks for the
+- **New Kubemoot Crew Here** on a folder in the Explorer scaffolds kmctl's starter crew
+  with `kmctl create --chart` (kmctl 0.14.0 or later): a working, read-only guide to its own
+  namespace with 1 to 5 specialists (workloads, events, networking, config, and a reviewer),
+  each size described in the picker. The **+** on Crew Sources asks for the
   folder, starting with the active file's folder. Afterwards the crew is selected in Crew
   Sources, `templates/crew.yaml` opens beside the README, and a notification offers
   **Deploy to Namespace...**. A missing or old kmctl is named before anything is asked.

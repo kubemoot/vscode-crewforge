@@ -10,7 +10,7 @@ import { FakeCluster } from './fakeCluster';
 import { resetFake } from './vscodeFake';
 
 /**
- * A crew scaffolded by `kmctl create test --chart --members 2 --model-family qwen --providers ollama`,
+ * A crew scaffolded by `kmctl create test --chart --members 2 --model-family qwen --providers ollama --no-input`,
  * and what `helm template test <chart> --namespace default` renders from it.
  */
 const SCAFFOLD = path.join(__dirname, 'fixtures', 'kmctl', 'test');
@@ -57,11 +57,11 @@ describe('an undeployed kmctl scaffold in Crew Sources', () => {
     const children = await provider.getChildren(source);
     expect(labels(provider, children)).toEqual(['test', 'Agents', 'Prompts', 'Skills', 'Models', 'RAG Sources', 'MCP Servers', 'Tools', 'Policies', 'Notifications', 'Fitness Scenarios', 'Not deployed in dev']);
     const agents = await provider.getChildren(children[1]);
-    expect(labels(provider, agents)).toEqual(['test-coordinator', 'test-tooler-1', 'test-tooler-2']);
+    expect(labels(provider, agents)).toEqual(['test-coordinator', 'test-events', 'test-workloads']);
     const click = provider.getTreeItem(agents[1]).command!;
     expect(click.command).toBe('vscode.open');
     expect((click.arguments![0] as { fsPath: string }).fsPath).toBe(path.join(SCAFFOLD, 'templates', 'agents.yaml'));
-    expect((click.arguments![1] as { selection: { startLine: number } }).selection.startLine).toBe(20);
+    expect((click.arguments![1] as { selection: { startLine: number } }).selection.startLine).toBe(48);
     expect(await provider.getChildren(children[2])).toHaveLength(7);
     const models = (await provider.getChildren(children[4])).map((n) => provider.getTreeItem(n));
     expect(models.map((i) => `${String(i.label)}|${String(i.description)}`)).toEqual([
@@ -74,7 +74,11 @@ describe('an undeployed kmctl scaffold in Crew Sources', () => {
     expect(models[3].contextValue).toBe('declared');
     expect(labels(provider, await provider.getChildren(children[8]))).toEqual(['test-scheduling', 'consent-3']);
     expect(provider.getTreeItem(children[5]).description).toBe('none');
-    expect(labels(provider, await provider.getChildren(children[10]))).toEqual(['smoke-hello', 'general-knowledge', 'honest-no-fabrication']);
+    const servers = (await provider.getChildren(children[6])).map((n) => provider.getTreeItem(n));
+    expect(servers.map((i) => `${String(i.label)}|${String(i.description)}`)).toEqual(['test-kubernetes-mcp|declared here', 'test-gateway|MCPGateway · kubemoot']);
+    expect(provider.getTreeItem(children[7]).description).toBe('6');
+    expect(labels(provider, await provider.getChildren(children[7]))).toEqual(['events_list', 'pods_get', 'pods_list_in_namespace', 'pods_log', 'resources_get', 'resources_list']);
+    expect(labels(provider, await provider.getChildren(children[10]))).toEqual(['pods-in-namespace', 'coordinator-deployment', 'refuse-delete', 'warnings-and-restarts']);
     const crewItem = provider.getTreeItem(children[0]);
     expect((crewItem.command!.arguments![0] as { fsPath: string }).fsPath).toBe(path.join(SCAFFOLD, 'templates', 'crew.yaml'));
   });

@@ -1,0 +1,111 @@
+# Read access for the crew's Kubernetes MCP server: get, list, and watch on the
+# namespace's resources and nothing else. Secrets are left out: Kubernetes cannot
+# grant their names without their data, so the crew names Secrets from the
+# references in pod specs instead.
+# Set access.clusterWide in values.yaml to grant the same read access in every
+# namespace.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: test-kubernetes-mcp
+  labels:
+    kubemoot.ai/crew: test
+---
+{{- if .Values.access.clusterWide }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ .Release.Namespace }}-test-kubernetes-mcp
+  labels:
+    kubemoot.ai/crew: test
+rules:
+  - apiGroups: [""]
+    resources: [pods, pods/log, services, endpoints, configmaps, serviceaccounts, events, persistentvolumeclaims]
+    verbs: [get, list, watch]
+  - apiGroups: [apps]
+    resources: [deployments, replicasets, statefulsets, daemonsets]
+    verbs: [get, list, watch]
+  - apiGroups: [batch]
+    resources: [jobs, cronjobs]
+    verbs: [get, list, watch]
+  - apiGroups: [discovery.k8s.io]
+    resources: [endpointslices]
+    verbs: [get, list, watch]
+  - apiGroups: [events.k8s.io]
+    resources: [events]
+    verbs: [get, list, watch]
+  - apiGroups: [networking.k8s.io]
+    resources: [ingresses, networkpolicies]
+    verbs: [get, list, watch]
+  - apiGroups: [gateway.networking.k8s.io]
+    resources: [httproutes, gateways]
+    verbs: [get, list, watch]
+  - apiGroups: [kubemoot.ai]
+    resources: [crews, agents, promptmodules, models, mcpservers, mcpgateways]
+    verbs: [get, list, watch]
+  - apiGroups: [""]
+    resources: [namespaces]
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ .Release.Namespace }}-test-kubernetes-mcp
+  labels:
+    kubemoot.ai/crew: test
+subjects:
+  - kind: ServiceAccount
+    name: test-kubernetes-mcp
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ .Release.Namespace }}-test-kubernetes-mcp
+{{- else }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: test-kubernetes-mcp
+  labels:
+    kubemoot.ai/crew: test
+rules:
+  - apiGroups: [""]
+    resources: [pods, pods/log, services, endpoints, configmaps, serviceaccounts, events, persistentvolumeclaims]
+    verbs: [get, list, watch]
+  - apiGroups: [apps]
+    resources: [deployments, replicasets, statefulsets, daemonsets]
+    verbs: [get, list, watch]
+  - apiGroups: [batch]
+    resources: [jobs, cronjobs]
+    verbs: [get, list, watch]
+  - apiGroups: [discovery.k8s.io]
+    resources: [endpointslices]
+    verbs: [get, list, watch]
+  - apiGroups: [events.k8s.io]
+    resources: [events]
+    verbs: [get, list, watch]
+  - apiGroups: [networking.k8s.io]
+    resources: [ingresses, networkpolicies]
+    verbs: [get, list, watch]
+  - apiGroups: [gateway.networking.k8s.io]
+    resources: [httproutes, gateways]
+    verbs: [get, list, watch]
+  - apiGroups: [kubemoot.ai]
+    resources: [crews, agents, promptmodules, models, mcpservers, mcpgateways]
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: test-kubernetes-mcp
+  labels:
+    kubemoot.ai/crew: test
+subjects:
+  - kind: ServiceAccount
+    name: test-kubernetes-mcp
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: test-kubernetes-mcp
+{{- end }}

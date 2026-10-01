@@ -22,7 +22,7 @@ Listings in the Visual Studio Marketplace and Open VSX are coming.
 You need VS Code 1.95 or later and a kubeconfig with access to a cluster that runs the
 Kubemoot operator. Developing a crew also needs `helm` (deploy and lint), `kubectl`
 (bundles of plain manifests), and [`kmctl`](https://github.com/kubemoot/kmctl/releases)
-0.12.0 or later (create). CrewForge reads the kubeconfig from the `crewforge.kubeconfig`
+0.14.0 or later (create). CrewForge reads the kubeconfig from the `crewforge.kubeconfig`
 setting, else `KUBECONFIG`, else `~/.kube/config`.
 
 ## A 60-second tour
@@ -38,7 +38,8 @@ setting, else `KUBECONFIG`, else `~/.kube/config`.
    crew, deployed or in your workspace, for its dashboard: **Overview**, **Source**,
    **Live**, and **Diff** tabs.
 4. Right-click a folder in the Explorer and choose **New Kubemoot Crew Here** to scaffold
-   a crew with `kmctl create --chart`.
+   kmctl's starter crew with `kmctl create --chart`: a small, working crew that reads its
+   own namespace, with 1 to 5 specialists.
 5. Edit it, or use **Add <Kind>...** on a group in Crew Sources to add an Agent, a
    PromptModule, a Model, a RAG source, an MCP server, and more. The status bar says where
    it stands against its deployment: not deployed, in sync, or changed. **Lint** checks

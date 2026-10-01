@@ -7,31 +7,39 @@ metadata:
     kubemoot.ai/role: coordinator
 spec:
   type: chat
-  description: "Coordinator for the test crew - facilitates the discussion."
+  description: "Coordinator for the test crew: picks the specialists for each question and writes the answer."
   discussRole: coordinator
   capabilities: [tool-calling, reasoning]
-  discussChannels: [general, topic-1, topic-2]
+  discussChannels: [kubernetes, general]
   promptRefs: [advisory-prompt, coordinator-decision-logic, synthesis-prompt]
   temperature: "0.1"
   maxTokens: 4096
   deployment:
     replicas: 1
     port: 8080
+    env:
+      # The coordinator calls no tools: the specialists gather, it writes the answer.
+      - name: KUBEMOOT_GATEWAY_ENABLED
+        value: "false"
 ---
 apiVersion: kubemoot.ai/v1alpha1
 kind: Agent
 metadata:
-  name: test-tooler-1
+  name: test-workloads
   labels:
     kubemoot.ai/crew: test
     kubemoot.ai/role: tooler
 spec:
   type: chat
-  description: "Tooler test-tooler-1 - replace with a real responsibility."
+  description: "Pods, Deployments, ReplicaSets, StatefulSets, and Jobs in the crew's namespace."
+  triageSummary: "Lists and inspects Pods, Deployments, ReplicaSets, StatefulSets, and Jobs in this namespace: phase, readiness, replicas, conditions, and logs."
   discussRole: tooler
-  capabilities: [tool-calling]
-  discussChannels: [topic-1]
-  promptRefs: [discussion-protocol, response-style, test-tooler-1-system]
+  capabilities: [tool-calling, kubernetes]
+  discussChannels: [kubernetes]
+  discussKeywords: [pod, pods, deployment, deployments, replicaset, statefulset, job, jobs, replicas, workload, logs, running]
+  promptRefs: [discussion-protocol, response-style, test-workloads-system]
+  # Only this specialist's tools from the crew's Kubernetes MCP server (tools.yaml).
+  enabledTools: [pods_list_in_namespace, pods_get, pods_log, resources_list, resources_get]
   temperature: "0.3"
   maxTokens: 4096
   deployment:
@@ -41,17 +49,21 @@ spec:
 apiVersion: kubemoot.ai/v1alpha1
 kind: Agent
 metadata:
-  name: test-tooler-2
+  name: test-events
   labels:
     kubemoot.ai/crew: test
     kubemoot.ai/role: tooler
 spec:
   type: chat
-  description: "Tooler test-tooler-2 - replace with a real responsibility."
+  description: "Warning events, container restarts, and recent failures in the crew's namespace."
+  triageSummary: "Reads Warning events, container restart counts, and the reasons for recent failures (crashes, failed probes, failed pulls) in this namespace."
   discussRole: tooler
-  capabilities: [tool-calling]
-  discussChannels: [topic-2]
-  promptRefs: [discussion-protocol, response-style, test-tooler-2-system]
+  capabilities: [tool-calling, kubernetes]
+  discussChannels: [kubernetes]
+  discussKeywords: [event, events, warning, warnings, restart, restarts, crash, failing, failed, error, unhealthy, problem]
+  promptRefs: [discussion-protocol, response-style, test-events-system]
+  # Only this specialist's tools from the crew's Kubernetes MCP server (tools.yaml).
+  enabledTools: [events_list, pods_list_in_namespace, pods_get, pods_log]
   temperature: "0.3"
   maxTokens: 4096
   deployment:

@@ -10,6 +10,18 @@ import { nameProblem } from '../k8s/paths';
 const MODEL_FAMILIES = ['qwen', 'gemma', 'llama', 'mistral'];
 
 /**
+ * The sizes of kmctl's starter crew, a read-only guide to its own namespace. Each size adds
+ * the next specialist, in kmctl's order: workloads, events, networking, config, reviewer.
+ */
+export const CREW_SIZES: readonly { label: string; description: string }[] = [
+  { label: '1', description: 'workloads: pods, Deployments, ReplicaSets, StatefulSets, Jobs' },
+  { label: '2', description: 'adds events: Warning events, restarts, recent failures' },
+  { label: '3', description: 'adds networking: Services, endpoints, routes, NetworkPolicies' },
+  { label: '4', description: 'adds config: ConfigMaps, ServiceAccounts, Secret references' },
+  { label: '5', description: 'adds a reviewer that checks the answer against the gathered data' },
+];
+
+/**
  * Checks kmctl first, then asks for a name, a size, and a model family, and scaffolds
  * the crew as a chart in `folder` (New Kubemoot Crew Here in the Explorer) or in a folder the
  * developer picks. A missing or old kmctl, or a failed scaffold, is a modal error, so it
@@ -67,10 +79,7 @@ async function askRequest(folder?: string): Promise<CreateCrewRequest | undefine
   if (!parent) return;
   const name = await vscode.window.showInputBox({ title: `Create a crew in ${parent}`, prompt: 'Crew name (lowercase letters, digits, hyphens)', validateInput: (value) => nameProblem('crew', value) });
   if (!name) return;
-  const size = await vscode.window.showQuickPick(
-    ['1', '2', '3', '4'].map((n) => ({ label: n, description: n === '1' ? 'specialist, beside the coordinator' : 'specialists, beside the coordinator' })),
-    { placeHolder: 'How many specialists to start with?' },
-  );
+  const size = await vscode.window.showQuickPick(CREW_SIZES, { placeHolder: 'How many specialists beside the coordinator? Each size is a working crew that reads its own namespace.' });
   if (!size) return;
   const family = await vscode.window.showQuickPick([...MODEL_FAMILIES.map((f) => ({ label: f })), { label: 'none', description: 'add Models yourself' }], {
     placeHolder: 'Which model family should its Models use?',
