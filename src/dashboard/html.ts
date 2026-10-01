@@ -1,8 +1,11 @@
 import { SELECT_CONTEXT } from '../views/errors';
 import { escapeHtml } from '../webview/render';
 
-/** Escapes any value for HTML text or an attribute; undefined and null become empty. */
-export function escape(value: unknown): string {
+/** A value a page shows as text. */
+export type Shown = string | number | boolean | undefined | null;
+
+/** Escapes a value for HTML text or an attribute; undefined and null become empty. */
+export function escape(value: Shown): string {
   return value === undefined || value === null ? '' : escapeHtml(String(value));
 }
 
@@ -43,23 +46,40 @@ export function section(title: string, body: string): string {
 }
 
 /** Label and value rows; rows without a value are left out. Values are escaped. */
-export function facts(rows: [string, unknown][]): string {
+export function facts(rows: [string, Shown][]): string {
   const shown = rows.filter(([, v]) => v !== undefined && v !== null && v !== '');
   if (shown.length === 0) return '';
-  return `<dl class="facts">${shown.map(([k, v]) => `<dt>${escape(k)}</dt><dd>${escape(v)}</dd>`).join('')}</dl>`;
+  return `<dl class="facts">${shown.map(fact).join('')}</dl>`;
+}
+
+function fact([label, value]: [string, Shown]): string {
+  return `<dt>${escape(label)}</dt><dd>${escape(value)}</dd>`;
 }
 
 /** A table: header cells are escaped; body cells are HTML already escaped (use `escape` or `cell`). */
 export function table(head: string[], rows: string[][], empty = 'None'): string {
   if (rows.length === 0) return `<p class="muted">${escape(empty)}</p>`;
   const th = head.map((h) => `<th>${escape(h)}</th>`).join('');
-  const body = rows.map((r) => `<tr>${r.map((c) => `<td>${c}</td>`).join('')}</tr>`).join('');
+  const body = rows.map(tableRow).join('');
   return `<table><thead><tr>${th}</tr></thead><tbody>${body}</tbody></table>`;
+}
+
+function tableRow(cells: string[]): string {
+  return `<tr>${cells.map(tableCell).join('')}</tr>`;
+}
+
+function tableCell(cell: string): string {
+  return `<td>${cell}</td>`;
 }
 
 /** A status word with a color class: good, warn, bad, or plain. */
 export function badge(text: string, tone: 'good' | 'warn' | 'bad' | 'plain' = 'plain'): string {
   return `<span class="badge ${tone}">${escape(text)}</span>`;
+}
+
+/** The tone of a readiness badge: good when ready, warn otherwise. */
+export function readyTone(ready: boolean | undefined): 'good' | 'warn' {
+  return ready ? 'good' : 'warn';
 }
 
 /** A line of muted text. */
@@ -81,7 +101,7 @@ export function duration(ms?: number): string | undefined {
 
 /** The time between two ISO times, or from `start` to now while running. */
 export function between(start?: string, end?: string, now = Date.now()): string | undefined {
-  const a = start ? Date.parse(start) : NaN;
+  const a = start ? Date.parse(start) : Number.NaN;
   const b = end ? Date.parse(end) : now;
   return Number.isNaN(a) || Number.isNaN(b) ? undefined : duration(b - a);
 }

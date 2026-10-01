@@ -263,7 +263,9 @@ class CrewDashboard implements PageModel {
     refresh: async () => undefined,
     selectContext: () => selectContext(),
     tab: async (arg) => this.select(arg),
-    raw: async () => void (this.raw = !this.raw),
+    raw: async () => {
+      this.raw = !this.raw;
+    },
     openAt: (arg) => this.openAt(arg),
     openDiff: (arg) => this.openDiff(arg),
     openSourceFolder: () => addSourceFolder(),

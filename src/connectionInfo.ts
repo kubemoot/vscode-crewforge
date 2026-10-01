@@ -118,8 +118,7 @@ export function connectionLines(info: ConnectionInfo): string[] {
   if (info.server) lines.push(`Server: ${info.server}`);
   if (info.kubeconfig) lines.push(`Kubeconfig: ${info.kubeconfig}`);
   if (info.unreachable) return [...lines, info.unreachable, ...(info.unreachableDetail ? [detailLine(info.unreachableDetail)] : [])];
-  lines.push(`Kubernetes ${info.kubernetes ?? 'version unknown'}`);
-  lines.push(info.kubemoot ? kubemootLine(info.kubemoot) : `Kubemoot: ${info.kubemootMissing}`);
+  lines.push(`Kubernetes ${info.kubernetes ?? 'version unknown'}`, info.kubemoot ? kubemootLine(info.kubemoot) : `Kubemoot: ${info.kubemootMissing}`);
   return lines;
 }
 

@@ -59,7 +59,7 @@ export async function readChart(root: string, readText: ReadText): Promise<Chart
 /** The crew source a file or folder belongs to: the innermost source folder that is it or holds it. */
 export function sourceOf(entries: SourceEntry[], file: string): SourceEntry | undefined {
   const holding = entries.filter((e) => file === e.source.root || file.startsWith(e.source.root + path.sep));
-  return holding.sort((a, b) => b.source.root.length - a.source.root.length)[0];
+  return holding.toSorted((a, b) => b.source.root.length - a.source.root.length)[0];
 }
 
 /** Where a source's fitness definitions live: a `fitness` folder inside it (a kmctl chart) or beside it (a workshop bundle). */

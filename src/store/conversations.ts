@@ -2,6 +2,9 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { metaOf, type Conversation, type ConversationMeta } from './conversation';
 
+/** What names a saved conversation's file. */
+type ConversationKey = Pick<Conversation, 'context' | 'namespace' | 'crewName' | 'id'>;
+
 /**
  * Saved conversations, one JSON file each, at
  * `<root>/<context>/<namespace>/<crew>/<id>.json`.
@@ -13,7 +16,7 @@ export class ConversationStore {
     return path.join(this.root, safeSegment(context), safeSegment(namespace), safeSegment(crew));
   }
 
-  file(c: Pick<Conversation, 'context' | 'namespace' | 'crewName' | 'id'>): string {
+  file(c: ConversationKey): string {
     return path.join(this.dir(c.context, c.namespace, c.crewName), `${safeSegment(c.id)}.json`);
   }
 
@@ -26,12 +29,12 @@ export class ConversationStore {
     await fs.rename(temp, target);
   }
 
-  async load(c: Pick<Conversation, 'context' | 'namespace' | 'crewName' | 'id'>): Promise<Conversation> {
+  async load(c: ConversationKey): Promise<Conversation> {
     return JSON.parse(await fs.readFile(this.file(c), 'utf8')) as Conversation;
   }
 
   /** Deletes a saved conversation; one never saved is already gone. */
-  async remove(c: Pick<Conversation, 'context' | 'namespace' | 'crewName' | 'id'>): Promise<void> {
+  async remove(c: ConversationKey): Promise<void> {
     await fs.rm(this.file(c), { force: true });
   }
 

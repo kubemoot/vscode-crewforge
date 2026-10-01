@@ -52,7 +52,8 @@ export function renderSourceTab(located: Located[] | Missing): string {
 
 function sourceRow(l: Located, index: number): string {
   const where = l.file ? `${l.file}:${l.line + 1}` : 'not in a file';
-  const name = l.file ? `<button type="button" class="link" data-action="openAt" data-arg="${index}" title="${escape(`Open ${where}`)}">${escape(l.manifest.metadata.name)}</button>` : escape(l.manifest.metadata.name);
+  const title = `Open ${where}`;
+  const name = l.file ? `<button type="button" class="link" data-action="openAt" data-arg="${index}" title="${escape(title)}">${escape(l.manifest.metadata.name)}</button>` : escape(l.manifest.metadata.name);
   return `<li>${name} <span class="muted">${escape(where)}</span></li>`;
 }
 
@@ -82,15 +83,17 @@ export function renderDiffTab(drift: ResourceDrift[] | Missing): string {
 
 function diffItem(d: ResourceDrift): string {
   const { text: label, tone } = DRIFT_STATES[d.state];
-  const open = buttons([{ action: 'openDiff', arg: `${d.kind}/${d.name}`, label: 'Open in Diff Editor', title: 'Compare live with source in the diff editor' }]);
+  const id = `${d.kind}/${d.name}`;
+  const open = buttons([{ action: 'openDiff', arg: id, label: 'Open in Diff Editor', title: 'Compare live with source in the diff editor' }]);
   const lines = lineDiff(d.live ? normalizedYaml(d.live) : '', d.rendered ? normalizedYaml(d.rendered) : '');
   const paths = d.paths.length ? note(`Changed: ${d.paths.join(', ')}`) : '';
-  return `<section><h3>${escape(`${d.kind}/${d.name}`)} ${badge(label, tone)}</h3>${paths}${open}<pre class="diff">${lines.map(diffLine).join('')}</pre></section>`;
+  return `<section><h3>${escape(id)} ${badge(label, tone)}</h3>${paths}${open}<pre class="diff">${lines.map(diffLine).join('')}</pre></section>`;
 }
 
 function diffLine(l: DiffLine): string {
   const cls = { ' ': 'same', '-': 'removed', '+': 'added' }[l.op];
-  return `<span class="${cls}">${escape(`${l.op} ${l.text}`)}</span>\n`;
+  const text = `${l.op} ${l.text}`;
+  return `<span class="${cls}">${escape(text)}</span>\n`;
 }
 
 function groupBy<T>(items: T[], key: (item: T) => string): [string, T[]][] {

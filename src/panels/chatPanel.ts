@@ -47,7 +47,8 @@ export class ChatPanel {
       return existing;
     }
     const key = panelKey(connection.context, crew);
-    const panel = new ChatPanel(extensionUri, connection, crew, store, conversation, key, links);
+    const panel = new ChatPanel(extensionUri, connection, crew, store, conversation, key);
+    if (links) panel.follow(links);
     ChatPanel.panels.set(key, panel);
     return panel;
   }
@@ -85,7 +86,6 @@ export class ChatPanel {
     private readonly store: ConversationStore,
     conversation: Conversation | undefined,
     private readonly key: string,
-    links?: ChatLinks,
   ) {
     this.panel = vscode.window.createWebviewPanel('crewforge.chat', `Ask ${crew.name}`, vscode.ViewColumn.Active, {
       enableScripts: true,
@@ -109,8 +109,12 @@ export class ChatPanel {
     });
     this.panel.onDidDispose(() => this.dispose());
     ChatPanel.activePanel = this;
-    if (links) void this.loadSources(links);
-    if (links?.availability) this.followAvailability(links.availability.bind(links));
+  }
+
+  /** Starts what the panel reads through its links: where each agent is defined, and the crew's availability. */
+  private follow(links: ChatLinks): void {
+    void this.loadSources(links);
+    if (links.availability) this.followAvailability(links.availability.bind(links));
   }
 
   /**
@@ -189,8 +193,12 @@ export class ChatPanel {
   /** What each message from the page does, by type. */
   private readonly handlers: { [K in WebviewMessage['type']]: (m: Extract<WebviewMessage, { type: K }>) => unknown } = {
     ready: () => this.onReady(),
-    shown: (m) => void (this.shownText = messageText(m.text)),
-    error: (m) => void this.pageErrors.push(messageText(m.message)),
+    shown: (m) => {
+      this.shownText = messageText(m.text);
+    },
+    error: (m) => {
+      this.pageErrors.push(messageText(m.message));
+    },
     send: (m) => this.session.send(m.text),
     stop: () => this.session.stop(),
     new: () => this.session.load(newConversation(this.connection.context, this.crew.namespace, this.crew.name)),

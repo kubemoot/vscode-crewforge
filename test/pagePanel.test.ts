@@ -149,7 +149,7 @@ describe('PagePanel', () => {
 
   it('keeps what each page shows and the errors its script reports, and logs them', async () => {
     const logged: string[] = [];
-    PagePanel.host = { log: (line) => void logged.push(line), readingFrom: () => 'kind-dev' };
+    PagePanel.useHost({ log: (line) => void logged.push(line), readingFrom: () => 'kind-dev' });
     PagePanel.show(Uri.file('/ext') as never, 'k', model());
     const { webview } = recorded.panels[0];
     expect(PagePanel.states()).toEqual([{ key: 'k', title: 'Page 0', ready: false, errors: [] }]);
@@ -161,13 +161,13 @@ describe('PagePanel', () => {
     expect(PagePanel.states()[0].shown).toBe('');
     await webview.receive({ type: 'error', message: { not: 'text' } });
     expect(logged).toEqual(['The page "Page 1" reported: boom', 'The page "Page 1" reported: ']);
-    PagePanel.host = { log: () => undefined, readingFrom: () => 'the cluster' };
+    PagePanel.useHost({ log: () => undefined, readingFrom: () => 'the cluster' });
   });
 
   it('says so on the page when its script never starts, in the page itself and in the log', async () => {
     vi.useFakeTimers();
     const logged: string[] = [];
-    PagePanel.host = { log: (line) => void logged.push(line), readingFrom: () => 'kind-dev' };
+    PagePanel.useHost({ log: (line) => void logged.push(line), readingFrom: () => 'kind-dev' });
     PagePanel.show(Uri.file('/ext') as never, 'k', model());
     const { webview } = recorded.panels[0];
     expect(webview.html).toContain('id="stuck"');
@@ -178,12 +178,12 @@ describe('PagePanel', () => {
     await recorded.panels[1].webview.receive({ type: 'ready' });
     await vi.advanceTimersByTimeAsync(PAGE_WAIT.scriptStartMs);
     expect(logged).toHaveLength(1);
-    PagePanel.host = { log: () => undefined, readingFrom: () => 'the cluster' };
+    PagePanel.useHost({ log: () => undefined, readingFrom: () => 'the cluster' });
   });
 
   it('says it is still reading, from where, and gives up on a read that takes too long', async () => {
     vi.useFakeTimers();
-    PagePanel.host = { log: () => undefined, readingFrom: () => 'kind-dev' };
+    PagePanel.useHost({ log: () => undefined, readingFrom: () => 'kind-dev' });
     const slow: PageModel = { ...model(), render: () => new Promise(() => undefined) };
     const page = PagePanel.show(Uri.file('/ext') as never, 'k', slow);
     const refreshing = page.refresh();
@@ -199,17 +199,17 @@ describe('PagePanel', () => {
 
   it('names the cluster plainly when the page cannot say where it reads from', async () => {
     vi.useFakeTimers();
-    PagePanel.host = {
+    PagePanel.useHost({
       log: () => undefined,
       readingFrom: () => {
         throw new Error('no kubeconfig');
       },
-    };
+    });
     const broken: PageModel = { ...model(), render: () => new Promise(() => undefined) };
     void PagePanel.show(Uri.file('/ext') as never, 'k', broken).refresh();
     await vi.advanceTimersByTimeAsync(PAGE_WAIT.stillReadingMs);
     expect(posted().at(-1)).toEqual({ type: 'status', text: 'Still reading from the cluster...' });
-    PagePanel.host = { log: () => undefined, readingFrom: () => '' };
+    PagePanel.useHost({ log: () => undefined, readingFrom: () => '' });
     void PagePanel.show(Uri.file('/ext') as never, 'k2', broken).refresh();
     await vi.advanceTimersByTimeAsync(PAGE_WAIT.stillReadingMs);
     expect(recorded.panels[1].webview.posted.at(-1)).toEqual({ type: 'status', text: 'Still reading from the cluster...' });

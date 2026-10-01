@@ -9,6 +9,7 @@ import { scenarioLine } from '../source/locate';
 import { refuseIfDirty, renameWithEdit } from '../source/fsEdit';
 import { listScripts } from '../source/nodeDeps';
 import { scriptFile } from '../source/scripts';
+import { escapeRegExp } from '../text';
 
 export type ScenarioForm = 'ADL' | 'prose';
 
@@ -111,14 +112,13 @@ export function withRenamedScript(text: string, from: string, to: string, start 
   const lines = text.split('\n');
   const at = scenarioLine(text, start, from);
   if (!/testRef:/.test(lines[at] ?? '')) return text;
-  lines[at] = lines[at].replace(new RegExp(`(testRef:\\s*["']?)${from.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`)}(["']?\\s*)$`), `$1${to}$2`);
+  lines[at] = lines[at].replace(new RegExp(String.raw`(testRef:\s*["']?)${escapeRegExp(from)}(["']?\s*)$`), `$1${to}$2`);
   return lines.join('\n');
 }
 
 /** The text with the object's `metadata.name` renamed when it is the scenario's name or ends with `-<name>`. */
 export function withRenamedName(text: string, from: string, to: string): string {
-  const name = from.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
-  return text.replace(new RegExp(`^(\\s+name:\\s*["']?)((?:[\\w.-]*-)?)${name}(["']?\\s*)$`, 'm'), `$1$2${to}$3`);
+  return text.replace(new RegExp(String.raw`^(\s+name:\s*["']?)((?:[\w.-]*-)?)${escapeRegExp(from)}(["']?\s*)$`, 'm'), `$1$2${to}$3`);
 }
 
 /** Add, rename, and delete fitness scenario files; local file changes only, deletion to the trash after a confirmation. */

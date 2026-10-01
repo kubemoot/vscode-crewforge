@@ -3,12 +3,11 @@ import { connect, type Connection } from '../connection';
 import type { Deployment } from '../source/deployments';
 import type { Manifest } from '../source/manifests';
 import type { SourceEntry, SourceService } from '../source/service';
-import type { SourceNode } from '../views/sourceTree';
+import type { DeploymentNode, SourceNode } from '../views/sourceTree';
 import { confirmModal } from '../views/confirm';
 import type { KubeTransport } from '../k8s/request';
 import type { ScenarioRef } from '../source/declared';
 import type { KubemootKind } from '../source/live';
-import type { DeploymentNode } from '../views/sourceTree';
 import type { FitnessActivity } from './controls';
 import { isRunning, listRuns, runReport, runsInProgress, SINGLE_SCENARIO, startRun } from './fitness';
 

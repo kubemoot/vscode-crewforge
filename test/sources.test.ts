@@ -7,7 +7,7 @@ import { discoverSources, type CrewSource } from '../src/source/discover';
 import { identify, normalizeRemote } from '../src/source/identity';
 import { crewOf, isKubemoot, objectKey, parseManifests } from '../src/source/manifests';
 import { normalizedYaml } from '../src/source/normalize';
-import { byCodeUnits, execProgram, readText, readYamlFiles } from '../src/source/nodeDeps';
+import { execProgram, readText, readYamlFiles } from '../src/source/nodeDeps';
 import { render, type Exec } from '../src/source/render';
 import type { CrewSummary } from '../src/k8s/crews';
 
@@ -60,13 +60,6 @@ describe('readYamlFiles', () => {
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
-  });
-
-  it('orders by code units: negative, positive, or zero', () => {
-    expect(byCodeUnits('B', 'a')).toBe(-1);
-    expect(byCodeUnits('a', 'B')).toBe(1);
-    expect(byCodeUnits('a', 'a')).toBe(0);
-    expect(['10', '9', '1'].sort(byCodeUnits)).toEqual(['1', '10', '9']);
   });
 });
 

@@ -34,6 +34,20 @@ describe('promptForm', () => {
     expect(promptForm('Use DEFINE to name a thing mid-sentence.')).toBe('prose');
     expect(promptForm('')).toBe('prose');
   });
+
+  it('reads every kind of line break and indent, and whole keywords only', () => {
+    expect(promptForm('intro\r\n\t \u00a0NEVER guess')).toBe('ADL');
+    expect(promptForm('intro\rALWAYS cite')).toBe('ADL');
+    expect(promptForm('intro\u2028WHEN asked')).toBe('ADL');
+    expect(promptForm('WHENEVER asked\nDEFINED terms')).toBe('prose');
+    expect(promptForm('ASSERT')).toBe('ADL');
+  });
+
+  it('takes linear time on a module of blank lines', () => {
+    const started = Date.now();
+    expect(promptForm(`${'\n '.repeat(100_000)}x`)).toBe('prose');
+    expect(Date.now() - started).toBeLessThan(5_000);
+  });
 });
 
 describe('member parsing', () => {

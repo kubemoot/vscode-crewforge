@@ -1,7 +1,7 @@
 import { runControls, shownPhase, type SuiteControls } from '../fitness/controls';
 import { isRunning, runSummary, scenarioResults, type FitnessRun, type ScenarioResult } from '../fitness/fitness';
 import type { SuiteIteration, SuiteScores } from '../kubemoot/dashboardApi';
-import { badge, between, buttons, duration, escape, facts, note, section, SELECT_CONTEXT_BUTTON, table, type ButtonSpec } from './html';
+import { badge, between, buttons, duration, escape, facts, note, section, SELECT_CONTEXT_BUTTON, table, type ButtonSpec, type Shown } from './html';
 
 /** What the fitness dashboard reads for one deployment. */
 export interface FitnessView {
@@ -70,7 +70,7 @@ function runSection(v: FitnessView, r: FitnessRun): string {
   return section(`Run ${r.name}`, body);
 }
 
-function runFacts(r: FitnessRun): [string, unknown][] {
+function runFacts(r: FitnessRun): [string, Shown][] {
   return [
     ['Phase', shownPhase(r)],
     ['Progress', progressText(r)],
@@ -91,7 +91,8 @@ function suiteDetail(v: FitnessView, r: FitnessRun): string {
   const scores = v.scores && 'unavailable' in v.scores ? undefined : v.scores?.scores;
   const rows = results.map((s) => scenarioRow(s, scores?.[s.scenario]));
   const where = live.length ? 'From the iterations in the cluster.' : archivedNote(v.archived);
-  return `<h3>Scenarios</h3>${table(['Scenario', 'Done', 'Passed', 'Failed', 'Errored', 'Mean duration', 'Score'], rows, 'No iterations yet.')}${note(where)}<p>${escape(`Judge: ${judgeText(r, v.scores)}`)}</p>`;
+  const judge = `Judge: ${judgeText(r, v.scores)}`;
+  return `<h3>Scenarios</h3>${table(['Scenario', 'Done', 'Passed', 'Failed', 'Errored', 'Mean duration', 'Score'], rows, 'No iterations yet.')}${note(where)}<p>${escape(judge)}</p>`;
 }
 
 function scenarioRow(s: ScenarioResult, score?: number): string[] {

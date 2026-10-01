@@ -13,6 +13,21 @@ describe('splitChart', () => {
     expect(splitChart(undefined)).toEqual({});
     expect(splitChart('')).toEqual({});
   });
+
+  it('splits at the first hyphen a version follows, never at the first character, and not across a line break', () => {
+    expect(splitChart('a-b-1.2-c-2.0.0-d-3.0.0')).toEqual({ chart: 'a-b-1.2-c', version: '2.0.0-d-3.0.0' });
+    expect(splitChart('-1.2.3')).toEqual({ chart: '-1.2.3' });
+    expect(splitChart('--1.2.3')).toEqual({ chart: '-', version: '1.2.3' });
+    expect(splitChart('demo-vv1.2.3')).toEqual({ chart: 'demo-vv1.2.3' });
+    expect(splitChart('demo-1.2.3\nx')).toEqual({ chart: 'demo-1.2.3\nx' });
+  });
+
+  it('takes linear time on a label of many hyphens', () => {
+    const label = '-1.1'.repeat(50_000);
+    const started = Date.now();
+    expect(splitChart(label)).toEqual({ chart: label });
+    expect(Date.now() - started).toBeLessThan(5_000);
+  });
 });
 
 describe('fluxOwnerOf', () => {

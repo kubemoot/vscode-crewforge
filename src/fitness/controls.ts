@@ -3,6 +3,7 @@ import { KubeError, type KubeTransport } from '../k8s/request';
 import { OPENAPI_PATH } from '../schema/kubemootSchema';
 import { objectPath, type KubemootKind } from '../source/live';
 import { isRunning, type FitnessRun } from './fitness';
+import { byCodeUnits } from '../text';
 
 /** Which suite controls the installed operator understands, read from the CRD's schema. */
 export interface SuiteControls {
@@ -130,7 +131,7 @@ export class FitnessActivity {
   }
 
   private set(key: string, names: string[]): void {
-    const going = [...new Set(names)].sort();
+    const going = [...new Set(names)].sort(byCodeUnits);
     const before = (this.busy.get(key) ?? []).join(',');
     if (going.length) this.busy.set(key, going);
     else this.busy.delete(key);

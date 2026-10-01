@@ -4,7 +4,7 @@ import type { CrewSummary } from '../k8s/crews';
 import type { KubeTransport } from '../k8s/request';
 import { listKind, type KubemootKind } from '../source/live';
 import { provenanceOf } from '../source/provenance';
-import { badge, buttons, escape, note, section, SELECT_CONTEXT_BUTTON, table, type ButtonSpec } from './html';
+import { badge, buttons, escape, note, section, SELECT_CONTEXT_BUTTON, table, readyTone, type ButtonSpec } from './html';
 
 /** One deployed crew as the overview lists it. */
 export interface OverviewRow {
@@ -62,19 +62,22 @@ export function renderOverview(v: OverviewView): string {
     { action: 'connection', label: 'Connection Info', title: 'Show the connection details, with Copy for a bug report' },
   ]);
   if (v.connection.unreachable) return `<h1>Crews Overview</h1>${connection}${top}${note('No crews are listed until CrewForge can reach the cluster.')}`;
-  const error = v.error ? `<p class="error">${escape(`Cannot list the crews: ${v.error}`)}</p>` : '';
+  const listError = `Cannot list the crews: ${v.error}`;
+  const error = v.error ? `<p class="error">${escape(listError)}</p>` : '';
   const rows = v.rows.map(rowCells);
   const head = ['Crew', 'Namespace', 'Phase', 'Agents ready', 'Chart', 'Channel', 'Last deploy', 'Answering now', 'Recent problems', 'Local source'];
-  return `<h1>Crews Overview</h1>${connection}${top}${error}${section(`Deployed crews (${v.rows.length})`, table(head, rows, 'No deployed crews in the namespaces this kubeconfig can see.'))}`;
+  const deployed = section(`Deployed crews (${v.rows.length})`, table(head, rows, 'No deployed crews in the namespaces this kubeconfig can see.'));
+  return `<h1>Crews Overview</h1>${connection}${top}${error}${deployed}`;
 }
 
 function rowCells(r: OverviewRow): string[] {
   const { crew } = r;
   const agents = r.agentsTotal === undefined ? '' : `${r.agentsReady ?? 0}/${r.agentsTotal}`;
+  const id = `${crew.namespace}/${crew.name}`;
   return [
-    `<button type="button" class="link" data-action="open" data-arg="${escape(`${crew.namespace}/${crew.name}`)}" title="Open this crew's dashboard">${escape(crew.name)}</button>`,
+    `<button type="button" class="link" data-action="open" data-arg="${escape(id)}" title="Open this crew's dashboard">${escape(crew.name)}</button>`,
     escape(crew.namespace),
-    badge(crew.phase, crew.ready ? 'good' : 'warn'),
+    badge(crew.phase, readyTone(crew.ready)),
     escape(agents),
     escape(r.chartVersion ?? ''),
     escape(r.channel),

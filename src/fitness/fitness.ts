@@ -1,5 +1,5 @@
 import type { KubeTransport } from '../k8s/request';
-import { trimEnd } from '../text';
+import { byCodeUnits, trimEnd } from '../text';
 import { objectPath, type KubemootKind } from '../source/live';
 import type { Manifest } from '../source/manifests';
 
@@ -10,6 +10,14 @@ export interface Assertion {
   raw: string;
   passed: boolean;
   message: string;
+}
+
+/** A condition on a fitness run's status. */
+export interface FitnessCondition {
+  type: string;
+  status: string;
+  reason?: string;
+  message?: string;
 }
 
 /** One fitness run of a crew, as its status reports it. */
@@ -35,7 +43,7 @@ export interface FitnessRun {
   /** A suite's run id, and where its XLSX is once written. */
   runId?: string;
   artifact?: { bucket: string; objectKey: string };
-  conditions?: { type: string; status: string; reason?: string; message?: string }[];
+  conditions?: FitnessCondition[];
   /** A suite's spec.suspend and spec.cancel, as set. */
   suspend?: boolean;
   cancel?: boolean;
@@ -79,7 +87,7 @@ interface FitnessStatus {
   durationMs?: number;
   runId?: string;
   artifactRef?: { bucket: string; objectKey: string };
-  conditions?: FitnessRun['conditions'];
+  conditions?: FitnessCondition[];
 }
 
 interface FitnessObject extends Manifest {
@@ -155,7 +163,7 @@ const OUTCOME: Record<string, keyof Pick<ScenarioResult, 'passed' | 'failed' | '
 
 /** Groups iterations by scenario, in the suite's script order, then any other scenario by name. */
 export function scenarioResults(scripts: string[], iterations: { scenario: string; status: string; durationMs?: number }[]): ScenarioResult[] {
-  const order = [...scripts, ...[...new Set(iterations.map((i) => i.scenario))].filter((s) => !scripts.includes(s)).sort()];
+  const order = [...scripts, ...[...new Set(iterations.map((i) => i.scenario))].filter((s) => !scripts.includes(s)).sort(byCodeUnits)];
   return order.map((scenario) => {
     const mine = iterations.filter((i) => i.scenario === scenario);
     const finished = mine.filter((i) => OUTCOME[i.status]);

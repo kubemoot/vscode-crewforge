@@ -83,7 +83,7 @@ export function activate(context: vscode.ExtensionContext): CrewForgeApi {
   sources.onMessage = (text) => (sourcesView.message = text);
   const documents = new ManifestDocuments();
   const output = vscode.window.createOutputChannel('CrewForge');
-  PagePanel.host = { log: (line) => output.appendLine(line), readingFrom: () => (tree.connection ?? connect()).context };
+  PagePanel.useHost({ log: (line) => output.appendLine(line), readingFrom: () => (tree.connection ?? connect()).context });
   const schemas = new SchemaProvider(() => currentConnection(tree)?.client);
   void schemas.register();
   const deploy = new DeployCommands(sources, { exec: execProgram, readYamlFiles }, output, () => {
@@ -133,7 +133,9 @@ export function activate(context: vscode.ExtensionContext): CrewForgeApi {
   const explorer = new ExplorerCrews({
     sources,
     reveal: (node) => sourcesView.reveal(node, { select: true, focus: true, expand: node.kind === 'source' }),
-    openDashboard: (node) => void dashboards.openCrew(node),
+    openDashboard: (node) => {
+      dashboards.openCrew(node);
+    },
   });
   const created = (root: string) =>
     showCreatedCrew(root, { reload: () => sources.reload(), reveal: (node) => sourcesView.reveal(node, { select: true, focus: true, expand: true }) });
@@ -169,9 +171,21 @@ export function activate(context: vscode.ExtensionContext): CrewForgeApi {
       tree.refresh();
     }),
     vscode.commands.registerCommand('crewforge.viewInCrewForge', (uri?: vscode.Uri) => guard(() => explorer.viewInCrewForge(uri))),
-    vscode.commands.registerCommand('crewforge.openCrewDashboard', (node?: SourceNode | CrewNode) => guard(async () => void dashboards.openCrew(node))),
-    vscode.commands.registerCommand('crewforge.openCrewsOverview', () => guard(async () => void dashboards.openOverview())),
-    vscode.commands.registerCommand('crewforge.openFitnessDashboard', (node?: SourceNode | CrewNode) => guard(async () => void dashboards.openFitness(node))),
+    vscode.commands.registerCommand('crewforge.openCrewDashboard', (node?: SourceNode | CrewNode) =>
+      guard(async () => {
+        dashboards.openCrew(node);
+      }),
+    ),
+    vscode.commands.registerCommand('crewforge.openCrewsOverview', () =>
+      guard(async () => {
+        dashboards.openOverview();
+      }),
+    ),
+    vscode.commands.registerCommand('crewforge.openFitnessDashboard', (node?: SourceNode | CrewNode) =>
+      guard(async () => {
+        dashboards.openFitness(node);
+      }),
+    ),
     vscode.commands.registerCommand('crewforge.showConnectionInfo', () => guard(() => dashboards.showConnection())),
     ...registerScenarioCommands({ files: new ScenarioFiles(), fitness, redeployTarget: (node) => loop.redeployTargetOf(node), readText, reload: () => sources.reload(), guard }),
     sourcesView,
@@ -193,7 +207,10 @@ export function activate(context: vscode.ExtensionContext): CrewForgeApi {
       'crewforge.runFitness',
       either(
         (crew) => live.runFitness(crew),
-        async (node) => void (node?.kind === 'source' ? await loop.runFitness(node) : await fitness.runFitness(node)),
+        async (node) => {
+          if (node?.kind === 'source') await loop.runFitness(node);
+          else await fitness.runFitness(node);
+        },
       ),
     ),
     vscode.commands.registerCommand('crewforge.showRun', (node?: SourceNode) => guard(() => fitness.showRun(node))),
@@ -230,7 +247,9 @@ export class Commands {
   ) {}
 
   async askCrew(node?: CrewNode): Promise<void> {
-    await guard(async () => void (await this.openChat(node)));
+    await guard(async () => {
+      await this.openChat(node);
+    });
   }
 
   /** Opens a chat with a crew the person picks, with the editor's selection in the input, fenced, for their question. */

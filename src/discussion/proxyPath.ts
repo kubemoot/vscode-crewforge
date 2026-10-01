@@ -36,5 +36,6 @@ export function streamPath(namespace: string, crew: string, conversationId: stri
   if (position.since) query.set('since', position.since);
   if (position.lastEventId) query.set('lastEventId', position.lastEventId);
   const q = query.toString();
-  return `${gatewayBase(namespace, crew)}/${encodeURIComponent(conversationId)}/stream${q ? `?${q}` : ''}`;
+  const search = q ? `?${q}` : '';
+  return `${gatewayBase(namespace, crew)}/${encodeURIComponent(conversationId)}/stream${search}`;
 }

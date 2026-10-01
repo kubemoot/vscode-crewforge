@@ -1,5 +1,6 @@
 import type { CrewSummary } from '../k8s/crews';
 import { ANNOTATIONS, channelOf, type Channel } from './deployments';
+import { LINE_BREAK } from '../text';
 
 /** The Flux object that applies a crew: a HelmRelease (helm-controller) or a Kustomization (kustomize-controller). */
 export interface FluxOwner {
@@ -29,13 +30,22 @@ export interface Provenance {
   deployedAt?: string;
 }
 
-const HELM_CHART = /^(.+?)-(v?\d+\.\d+\.\d+.*)$/;
+/** A version (`1.2.3`, `v1.2.3-rc.0`) starting exactly at `lastIndex`. */
+const VERSION_AT = /v?\d+\.\d+\.\d+/y;
 
-/** Splits helm.sh/chart ("homelab-pilot-crew-0.45.1-rc.0") into its name and version. */
+/**
+ * Splits helm.sh/chart ("homelab-pilot-crew-0.45.1-rc.0") into its name and version: the
+ * version starts after the first hyphen that a version follows, past the first character.
+ * A label with a line break has no version. Linear time: each hyphen is tried once.
+ */
 export function splitChart(label?: string): { chart?: string; version?: string } {
   if (!label) return {};
-  const m = HELM_CHART.exec(label);
-  return m ? { chart: m[1], version: m[2] } : { chart: label };
+  if (LINE_BREAK.test(label)) return { chart: label };
+  for (let dash = label.indexOf('-', 1); dash !== -1; dash = label.indexOf('-', dash + 1)) {
+    VERSION_AT.lastIndex = dash + 1;
+    if (VERSION_AT.test(label)) return { chart: label.slice(0, dash), version: label.slice(dash + 1) };
+  }
+  return { chart: label };
 }
 
 export function fluxOwnerOf(labels: Record<string, string>): FluxOwner | undefined {
@@ -53,7 +63,7 @@ export function provenanceOf(crew: CrewSummary): Provenance {
   return {
     channel: channelOf(crew),
     chart,
-    chartVersion: version ?? labels['kubemoot.ai/crew-version']?.replace(/_/g, '+'),
+    chartVersion: version ?? labels['kubemoot.ai/crew-version']?.replaceAll('_', '+'),
     appVersion: labels['app.kubernetes.io/version'],
     release: annotations['meta.helm.sh/release-name'],
     releaseNamespace: annotations['meta.helm.sh/release-namespace'],

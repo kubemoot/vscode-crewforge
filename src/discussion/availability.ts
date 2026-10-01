@@ -66,7 +66,8 @@ interface Endpoints {
 /** True when the gateway Service has a ready address; undefined when the account may not tell. */
 async function gatewayUp(client: KubeTransport, namespace: string, crew: string): Promise<boolean | undefined> {
   try {
-    const body = JSON.parse(await client.request('GET', `/api/v1/namespaces/${encodeURIComponent(namespace)}/endpoints/${encodeURIComponent(`${crew}-discussion`)}`)) as Endpoints;
+    const service = `${crew}-discussion`;
+    const body = JSON.parse(await client.request('GET', `/api/v1/namespaces/${encodeURIComponent(namespace)}/endpoints/${encodeURIComponent(service)}`)) as Endpoints;
     return (body.subsets ?? []).some((s) => (s.addresses ?? []).length > 0);
   } catch (err) {
     return err instanceof KubeError && err.status === 404 ? false : undefined;

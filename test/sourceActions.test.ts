@@ -101,6 +101,25 @@ describe('renameCrewText', () => {
     expect(renameCrewText('name: demo\nname: demo-coordinator\npromptRefs: [demo-x]', 'demo', 'demo-2')).toBe('name: demo-2\nname: demo-2-coordinator\npromptRefs: [demo-2-x]');
     expect(renameCrewText('name: a.b\nname: axb', 'a.b', 'c')).toBe('name: c\nname: axb');
   });
+
+  it('reads quoted keys and list items with any whitespace, and only keys made of key characters', () => {
+    expect(renameCrewText('"name": test\n\'crewRef\':\ttest-x\n"name\': test\n', 'test', 'lab')).toBe('"name": lab\n\'crewRef\':\tlab-x\n"name\': test\n');
+    expect(renameCrewText('- \tname: test\n-name: test\n: test\nname : test\n', 'test', 'lab')).toBe('- \tname: lab\n-name: test\n: test\nname : test\n');
+    expect(renameCrewText('Refs: test\nRef: test\nxRefs: test\nRefz: test\nx1Ref: test\n', 'test', 'lab')).toBe('Refs: lab\nRef: lab\nxRefs: lab\nRefz: test\nx1Ref: test\n');
+    expect(renameCrewText('promptRefs:\n  -\ttest\n  -test\n', 'test', 'lab')).toBe('promptRefs:\n  - lab\n  -test\n');
+  });
+
+  it('leaves a line alone when a line separator falls inside its value, as a YAML key line ends there', () => {
+    expect(renameCrewText('name: test\u2028x\nname: test \u2028\nname: test\n', 'test', 'lab')).toBe('name: test\u2028x\nname: test \u2028\nname: lab\n');
+    expect(renameCrewText('promptRefs:\n  - test\u2028x\n', 'test', 'lab')).toBe('promptRefs:\n  - test\u2028x\n');
+  });
+
+  it('takes linear time on long lines that almost match', () => {
+    const long = `${' '.repeat(50_000)}-${' '.repeat(50_000)}${'a'.repeat(50_000)}`;
+    const started = Date.now();
+    expect(renameCrewText(`${long}\n${'aRef'.repeat(30_000)}x: test`, 'test', 'lab')).toBe(`${long}\n${'aRef'.repeat(30_000)}x: test`);
+    expect(Date.now() - started).toBeLessThan(5_000);
+  });
 });
 
 describe('renameCrewFiles', () => {

@@ -50,7 +50,10 @@ export function unknownNetworkMessage(where: Where, said: string): string {
  */
 export function plainStatusMessage(status: number, where: Where, said = ''): string | undefined {
   if (status === 401) return `Context ${where.context} did not accept your credentials. The token may have expired; get a fresh kubeconfig or log in again.`;
-  if (status === 403) return `Your account in context ${where.context} is not allowed to do this.${said ? ` The cluster says: ${said}` : ''}`;
+  if (status === 403) {
+    const says = said ? ` The cluster says: ${said}` : '';
+    return `Your account in context ${where.context} is not allowed to do this.${says}`;
+  }
   return undefined;
 }
 

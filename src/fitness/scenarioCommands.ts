@@ -28,7 +28,12 @@ export function entryOf(node?: SourceNode): SourceEntry | undefined {
 
 /** Add Scenario, Rename Scenario, Delete Scenario, and Run Scenario, from the Fitness nodes of Crew Sources. */
 export function registerScenarioCommands(deps: ScenarioCommandDeps): vscode.Disposable[] {
-  const command = (id: string, run: (node?: SourceNode) => Promise<unknown>) => vscode.commands.registerCommand(id, (node?: SourceNode) => deps.guard(async () => void (await run(node))));
+  const command = (id: string, run: (node?: SourceNode) => Promise<unknown>) =>
+    vscode.commands.registerCommand(id, (node?: SourceNode) =>
+      deps.guard(async () => {
+        await run(node);
+      }),
+    );
   const edit = (change: (scenario: ScenarioRef) => Promise<void>) => async (node?: SourceNode) => {
     const scenario = scenarioOf(node);
     if (!scenario) return;

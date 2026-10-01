@@ -61,7 +61,10 @@ export function cardText(card: AgentCard): CardText {
 /** What the agent found, led by its verdict in plain words; else how it is starting up, or its status. */
 function verdictText(card: AgentCard): string {
   const verdict = card.signal ? (VERDICTS.get(card.signal) ?? card.signal) : undefined;
-  if (card.summary) return `${verdict ? `${verdict}: ` : ''}${readable(card.summary)}`;
+  if (card.summary) {
+    const lead = verdict ? `${verdict}: ` : '';
+    return `${lead}${readable(card.summary)}`;
+  }
   return verdict || STARTING.get(card.status) || card.status || 'waiting';
 }
 

@@ -35,8 +35,7 @@ export class CrewLinter implements vscode.Disposable {
     const result = await this.run(entry, true);
     if (!result) return;
     const count = result.findings.filter((f) => f.severity !== 'info').length;
-    const found = count === 0 ? 'no problems' : `${count} ${count === 1 ? 'problem' : 'problems'}; see the Problems panel`;
-    void vscode.window.showInformationMessage([`Lint: ${entry.crewName ?? entry.source.label} has ${found}.`, ...result.notes].join(' '));
+    void vscode.window.showInformationMessage([`Lint: ${entry.crewName ?? entry.source.label} has ${problemsFound(count)}.`, ...result.notes].join(' '));
   }
 
   /** Lints the saved file's crew once saves settle; `after` runs when it has. */
@@ -97,4 +96,11 @@ function toDiagnostic(f: Finding): vscode.Diagnostic {
   const diagnostic = new vscode.Diagnostic(new vscode.Range(f.line, 0, f.line, Number.MAX_SAFE_INTEGER), f.message, SEVERITY[f.severity]);
   diagnostic.source = `CrewForge (${f.source})`;
   return diagnostic;
+}
+
+/** How many problems a lint found, as the message says it: "no problems", "1 problem; see the Problems panel". */
+function problemsFound(count: number): string {
+  if (count === 0) return 'no problems';
+  const noun = count === 1 ? 'problem' : 'problems';
+  return `${count} ${noun}; see the Problems panel`;
 }

@@ -127,5 +127,11 @@ export function schemaIssues(m: Manifest, errors: ErrorObject[]): { keys: string
 
 /** `spec.mcpServers[1].name` from its JSON pointer segments. */
 function fieldPath(keys: string[]): string {
-  return keys.map((k, i) => (/^\d+$/.test(k) ? `[${k}]` : `${i ? '.' : ''}${k}`)).join('');
+  return keys.map(pathSegment).join('');
+}
+
+/** One segment of a field path: `[1]` for an index, `.name` for a key after the first, `spec` for the first. */
+function pathSegment(key: string, index: number): string {
+  if (/^\d+$/.test(key)) return `[${key}]`;
+  return index ? `.${key}` : key;
 }

@@ -1,5 +1,6 @@
 import type { KubeTransport } from '../k8s/request';
 import { byName, text } from './describe';
+import { byCodeUnits, LINE_BREAK } from '../text';
 import { isOwned, listKind, objectPath, type KubemootKind } from '../source/live';
 import { KUBEMOOT_GROUP, type Manifest } from '../source/manifests';
 import { errorText } from '../views/errors';
@@ -80,11 +81,14 @@ type Obj = Manifest & { spec?: Record<string, unknown>; status?: Record<string, 
  * The statement keywords of ADL as the Kubemoot guide "Write agents and ADL" lists them,
  * plus DEFER, which crews use for synthesis rules. THEN is left out: it continues a WHEN.
  */
-const ADL_LINE = /^\s*(DESCRIPTION|DEFINE|WHEN|ALWAYS|NEVER|ASSERT|FOREACH|DEFER)\b/m;
+const ADL_KEYWORD = /^(DESCRIPTION|DEFINE|WHEN|ALWAYS|NEVER|ASSERT|FOREACH|DEFER)\b/;
 
-/** ADL when any line opens with an ADL keyword, prose otherwise; a heuristic, since a module may mix the two. */
+/**
+ * ADL when any line opens with an ADL keyword after its indent, prose otherwise; a
+ * heuristic, since a module may mix the two. Each line is read once, in linear time.
+ */
 export function promptForm(content: string): PromptForm {
-  return ADL_LINE.test(content) ? 'ADL' : 'prose';
+  return content.split(LINE_BREAK).some((line) => ADL_KEYWORD.test(line.trimStart())) ? 'ADL' : 'prose';
 }
 
 const strings = (value: unknown): string[] => (Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : []);
@@ -126,7 +130,7 @@ export function promptModulesOf(agents: AgentInfo[], modules: Obj[], sharedRefs:
   const users = new Map<string, string[]>();
   for (const agent of agents) for (const ref of agent.promptRefs) users.set(ref, [...(users.get(ref) ?? []), agent.name]);
   const found = new Map(modules.map((m) => [m.metadata.name, m]));
-  return [...users.entries()].map(([name, usedBy]) => toPromptModule(name, usedBy.sort(), found.get(name), sharedRefs.has(name))).sort(byOrder);
+  return [...users.entries()].map(([name, usedBy]) => toPromptModule(name, usedBy.toSorted(byCodeUnits), found.get(name), sharedRefs.has(name))).sort(byOrder);
 }
 
 /** One PromptModule as the trees show it; `object` is absent when the module does not exist. */
@@ -169,7 +173,7 @@ function serverStatus(server: Obj): Pick<McpServerInfo, 'ready' | 'toolCount'> {
 export function toolsOf(agents: Obj[]): ToolInfo[] {
   const tools = new Map<string, string[]>();
   for (const agent of agents) for (const tool of strings(agent.spec?.enabledTools)) tools.set(tool, [...(tools.get(tool) ?? []), agent.metadata.name]);
-  return [...tools.entries()].map(([name, users]) => ({ name, agents: users.sort() })).sort(byName);
+  return [...tools.entries()].map(([name, users]) => ({ name, agents: users.toSorted(byCodeUnits) })).sort(byName);
 }
 
 export function archetypeOf(crew: string, policies: Obj[]): string | undefined {

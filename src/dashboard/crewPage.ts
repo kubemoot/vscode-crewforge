@@ -1,7 +1,7 @@
 import { chartVersionBanner } from '../source/normalize';
 import { tabBar, type CrewTab } from './crewTabs';
 import { agentsByRole, type CrewVitals } from './crewVitals';
-import { badge, banner, buttons, escape, facts, note, section, SELECT_CONTEXT_BUTTON, table, type ButtonSpec } from './html';
+import { badge, banner, buttons, escape, facts, note, section, SELECT_CONTEXT_BUTTON, table, readyTone, type ButtonSpec, type Shown } from './html';
 
 /** The crew dashboard's page body: the header, the buttons, the tabs, and the shown tab (the overview unless `body` is given). */
 export function renderCrewPage(v: CrewVitals, tab: CrewTab = 'overview', body?: string): string {
@@ -10,7 +10,7 @@ export function renderCrewPage(v: CrewVitals, tab: CrewTab = 'overview', body?: 
 }
 
 function header(v: CrewVitals): string {
-  const state = v.deployment ? badge(v.deployment.crew.phase, v.deployment.crew.ready ? 'good' : 'warn') : badge('not deployed');
+  const state = v.deployment ? badge(v.deployment.crew.phase, readyTone(v.deployment.crew.ready)) : badge('not deployed');
   const where = v.deployment ? `${v.deployment.namespace} in ${v.context}` : `not deployed in ${v.context}`;
   const description = v.description ? `<p>${escape(v.description)}</p>` : '';
   const version = chartVersionBanner(v.source?.chart?.version, v.provenance?.chartVersion);
@@ -52,7 +52,7 @@ export function crewButtons(v: CrewVitals): ButtonSpec[] {
 function sourceSection(v: CrewVitals): string {
   if (!v.source) return section('Source', note('No workspace source renders this crew. Open the folder that holds its chart or bundle.'));
   const { source, chart, error } = v.source;
-  const rows: [string, unknown][] = [
+  const rows: [string, Shown][] = [
     ['Path', source.root],
     ['Kind', source.kind === 'helm' ? 'Helm chart' : 'bundle of manifests'],
     ['Chart', chart?.name],
@@ -71,7 +71,7 @@ function deploymentSection(v: CrewVitals): string {
   return section('Deployment', facts([...whereRows(v), ...whenRows(v)]));
 }
 
-function whereRows(v: CrewVitals): [string, unknown][] {
+function whereRows(v: CrewVitals): [string, Shown][] {
   const d = v.deployment;
   return [
     ['Namespace', d?.namespace],
@@ -84,7 +84,7 @@ function whereRows(v: CrewVitals): [string, unknown][] {
 }
 
 /** When it was deployed: the Helm release's first install and last upgrade, else the Crew's creation and CrewForge's stamp. */
-function whenRows(v: CrewVitals): [string, unknown][] {
+function whenRows(v: CrewVitals): [string, Shown][] {
   const p = v.provenance;
   const helm = v.helm ?? {};
   return [
@@ -104,11 +104,20 @@ function agentsSection(v: CrewVitals): string {
     escape(a.name),
     escape(a.role ?? ''),
     escape(a.capabilities.join(', ') || 'none declared'),
-    v.agentsFrom === 'live' ? badge(a.ready ? 'ready' : (a.phase ?? 'starting'), a.ready ? 'good' : 'warn') : '',
+    v.agentsFrom === 'live' ? agentState(a) : '',
   ]);
-  const models = v.models.length ? `<p class="muted">Models the source declares: ${escape(v.models.map((m) => (m.model ? `${m.name} (${m.model})` : m.name)).join(', '))}</p>` : '';
+  const models = v.models.length ? `<p class="muted">Models the source declares: ${escape(v.models.map(modelLabel).join(', '))}</p>` : '';
   const error = v.agentsError ? note(`Cannot read the live agents: ${v.agentsError}`) : '';
-  return section(`Agents (${v.agents.length})`, `${note(`${from}${roles ? ` ${roles}.` : ''}`)}${error}${table(['Agent', 'Role', 'Capabilities', 'State'], rows, 'No agents.')}${models}`);
+  const summary = note(roles ? `${from} ${roles}.` : from);
+  return section(`Agents (${v.agents.length})`, [summary, error, table(['Agent', 'Role', 'Capabilities', 'State'], rows, 'No agents.'), models].join(''));
+}
+
+function agentState(a: { ready?: boolean; phase?: string }): string {
+  return badge(a.ready ? 'ready' : (a.phase ?? 'starting'), readyTone(a.ready));
+}
+
+function modelLabel(m: { name: string; model?: string }): string {
+  return m.model ? `${m.name} (${m.model})` : m.name;
 }
 
 function statusSection(v: CrewVitals): string {
@@ -146,5 +155,6 @@ function kubemootSection(v: CrewVitals): string {
     ['Agent failures', k.failures],
   ]);
   const failures = table(['Recent agent failures'], k.recentFailures.map((f) => [escape(f)]), 'None.');
-  return section('Discussions (Kubemoot)', `${counts}${failures}${note(`From the newest ${k.messages} discussion messages the Kubemoot dashboard keeps.`)}`);
+  const kept = note(`From the newest ${k.messages} discussion messages the Kubemoot dashboard keeps.`);
+  return section('Discussions (Kubemoot)', [counts, failures, kept].join(''));
 }

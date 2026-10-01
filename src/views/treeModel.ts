@@ -52,8 +52,13 @@ function mapLines(title: string, map: Record<string, string> = {}): string[] {
 
 function conditionLines(conditions: CrewCondition[] = []): string[] {
   if (conditions.length === 0) return [];
-  const line = (c: CrewCondition) => `  ${c.type}=${c.status}${c.reason ? ` (${c.reason})` : ''}${c.message ? `: ${c.message}` : ''}`;
-  return ['Conditions:', ...conditions.map(line)];
+  return ['Conditions:', ...conditions.map(conditionLine)];
+}
+
+function conditionLine(c: CrewCondition): string {
+  const reason = c.reason ? ` (${c.reason})` : '';
+  const message = c.message ? `: ${c.message}` : '';
+  return `  ${c.type}=${c.status}${reason}${message}`;
 }
 
 /** The empty state's line about a crew. */

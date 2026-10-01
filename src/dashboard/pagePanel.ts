@@ -45,8 +45,17 @@ export const PAGE_WAIT = { stillReadingMs: 2_000, readLimitMs: 45_000, scriptSta
  */
 export class PagePanel {
   private static readonly panels = new Map<string, PagePanel>();
-  /** Where page problems are logged, and what pages read from; set once when CrewForge starts. */
-  static host: PageHost = { log: () => undefined, readingFrom: () => 'the cluster' };
+  private static pageHost: PageHost = { log: () => undefined, readingFrom: () => 'the cluster' };
+
+  /** Where page problems are logged, and what pages read from. */
+  static get host(): PageHost {
+    return PagePanel.pageHost;
+  }
+
+  /** Sets where page problems are logged and what pages read from; CrewForge calls it once when it starts. */
+  static useHost(host: PageHost): void {
+    PagePanel.pageHost = host;
+  }
 
   /** Opens the page for `key`, or shows and refreshes the one already open. */
   static show(extensionUri: vscode.Uri, key: string, model: PageModel): PagePanel {
@@ -82,7 +91,7 @@ export class PagePanel {
   private readonly panel: vscode.WebviewPanel;
   private readonly state: PageState;
   private timer?: ReturnType<typeof setTimeout>;
-  private startTimer?: ReturnType<typeof setTimeout>;
+  private readonly startTimer: ReturnType<typeof setTimeout>;
   private reading?: Promise<void>;
   private again = false;
   private disposed = false;

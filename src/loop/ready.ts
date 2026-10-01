@@ -24,7 +24,9 @@ const FAILED = new Set(['Error', 'Failed']);
 export function failedReason(crew: CrewSummary, agents: AgentInfo[] = []): string | undefined {
   const agent = agents.find((a) => FAILED.has(a.phase ?? ''));
   if (agent) return `Agent ${agent.name} is ${agent.phase}`;
-  return FAILED.has(crew.phase) ? `Crew ${crew.name} is ${crew.phase}${crew.message ? `: ${crew.message}` : ''}` : undefined;
+  if (!FAILED.has(crew.phase)) return undefined;
+  const detail = crew.message ? `: ${crew.message}` : '';
+  return `Crew ${crew.name} is ${crew.phase}${detail}`;
 }
 
 /**

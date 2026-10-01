@@ -3,6 +3,7 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import type { Exec } from './render';
 import { isScriptFile } from './scripts';
+import { byCodeUnits } from '../text';
 
 /**
  * Runs a program without a shell, feeding `input` to its standard input. A missing
@@ -32,15 +33,6 @@ export function readText(file: string): Promise<string> {
 export async function readYamlFiles(dir: string): Promise<{ file: string; text: string }[]> {
   const names = (await fs.readdir(dir)).filter((n) => /\.ya?ml$/.test(n)).sort(byCodeUnits);
   return Promise.all(names.map(async (n) => ({ file: path.join(dir, n), text: await readText(path.join(dir, n)) })));
-}
-
-/**
- * Orders names by UTF-16 code units, the same on every machine whatever its locale, so a
- * bundle's files are applied in one fixed order.
- */
-export function byCodeUnits(a: string, b: string): number {
-  if (a < b) return -1;
-  return a > b ? 1 : 0;
 }
 
 /** The loose fitness scripts directly in a folder: `.adl` files and `.md` files other than README.md, in name order; none when the folder does not exist. */

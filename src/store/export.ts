@@ -26,7 +26,8 @@ export function exportAsMarkdown(c: Conversation): string {
 function messageLines(m: ChatMessage): string[] {
   const label = m.role === 'user' ? 'You' : m.agentName || 'Crew';
   const took = formatDuration(m.durationMs);
-  const lines = [`### ${label} (${m.timestamp}${took ? `, took ${took}` : ''})`, '', m.content, ''];
+  const duration = took ? `, took ${took}` : '';
+  const lines = [`### ${label} (${m.timestamp}${duration})`, '', m.content, ''];
   const problems = problemsOf(m);
   if (problems.length > 0) lines.push('What went wrong:', '', ...problems.map((p) => `- ${p}`), '');
   return lines;

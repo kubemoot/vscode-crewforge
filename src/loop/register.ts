@@ -52,7 +52,12 @@ export function registerLoop(context: vscode.ExtensionContext, parts: LoopParts)
     const state = states.get(root);
     return state && { text: stateText(state), changed: state.kind === 'changed' };
   };
-  const command = (id: string, run: (target?: LoopTarget) => Promise<unknown>) => vscode.commands.registerCommand(id, (target?: LoopTarget) => guard(async () => void (await run(target))));
+  const command = (id: string, run: (target?: LoopTarget) => Promise<unknown>) =>
+    vscode.commands.registerCommand(id, (target?: LoopTarget) =>
+      guard(async () => {
+        await run(target);
+      }),
+    );
   context.subscriptions.push(
     diagnostics,
     linter,
@@ -73,7 +78,9 @@ export function registerLoop(context: vscode.ExtensionContext, parts: LoopParts)
     command('crewforge.askSource', (target) => loop.ask(target)),
     command('crewforge.crewActions', (target) => loop.actions(target)),
   );
-  void guard(async () => void (await sources.entries()));
+  void guard(async () => {
+    await sources.entries();
+  });
   return loop;
 }
 

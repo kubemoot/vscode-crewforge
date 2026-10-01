@@ -106,9 +106,10 @@ export const readyIcon = (ready?: boolean): Pick<MemberView, 'icon' | 'color'> =
 
 export function agentView(crew: CrewSummary, a: AgentInfo): MemberView {
   const state = a.ready ? 'ready' : (a.phase ?? 'not ready');
+  const shownState = a.ready ? '' : ` · ${state}`;
   return {
     label: a.name,
-    description: `${agentLine(a)}${a.ready ? '' : ` · ${state}`}`,
+    description: `${agentLine(a)}${shownState}`,
     tooltip: agentTooltip(a, state),
     ...readyIcon(a.ready),
     ref: ref(crew, 'Agent', a.name),
@@ -139,10 +140,16 @@ export function skillView(crew: CrewSummary, s: SkillInfo): MemberView {
   };
 }
 
+/** "ready" or "not ready"; undefined when readiness is not known. */
+function readyWord(ready: boolean | undefined): string | undefined {
+  if (ready === undefined) return undefined;
+  return ready ? 'ready' : 'not ready';
+}
+
 export function serverView(crew: CrewSummary, s: McpServerInfo): MemberView {
   if (!s.object) return { label: s.name, description: 'missing', tooltip: `MCPServer ${s.name}: ${s.reason}.`, icon: 'warning', color: 'list.warningForeground' };
   const tools = s.toolCount === undefined ? undefined : `${s.toolCount} tools`;
-  const state = s.ready === undefined ? undefined : s.ready ? 'ready' : 'not ready';
+  const state = readyWord(s.ready);
   return {
     label: s.name,
     description: [state, tools].filter(Boolean).join(' · ') || undefined,

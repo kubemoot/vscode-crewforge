@@ -1,6 +1,7 @@
 import type { Manifest } from './manifests';
 import { kubemootObjects, type ObjectPosition } from './positions';
 import type { Rendered } from './render';
+import { escapeRegExp } from '../text';
 
 /** A rendered object, the file it came from, and the line (0-based) where it starts there. */
 export interface Located {
@@ -64,23 +65,19 @@ export function keyLine(text: string, start: number, keys: string[]): number {
 }
 
 function findKey(lines: string[], from: number, parentIndent: number, key: string): { line: number; indent: number } | undefined {
-  const pattern = new RegExp(`^(\\s*(?:- )?)${escapeRegExp(key)}:`);
+  const pattern = new RegExp(String.raw`^(\s*(?:- )?)${escapeRegExp(key)}:`);
   for (let i = from; i < lines.length; i++) {
-    if (i > from && /^---/.test(lines[i])) return undefined;
+    if (i > from && lines[i].startsWith('---')) return undefined;
     const m = pattern.exec(lines[i]);
     if (m && m[1].length > parentIndent) return { line: i, indent: m[1].length };
   }
   return undefined;
 }
 
-function escapeRegExp(text: string): string {
-  return text.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
-}
-
 /** The line of `testRef: <name>` at or after `start`, for a fitness scenario; `start` when absent. */
 export function scenarioLine(text: string, start: number, testRef: string): number {
   const lines = text.split('\n');
-  const pattern = new RegExp(`testRef:\\s*["']?${escapeRegExp(testRef)}["']?\\s*$`);
+  const pattern = new RegExp(String.raw`testRef:\s*["']?${escapeRegExp(testRef)}["']?\s*$`);
   const at = lines.findIndex((l, i) => i >= start && pattern.test(l));
   return at < 0 ? start : at;
 }

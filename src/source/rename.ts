@@ -1,14 +1,75 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { IGNORED_DIRS } from './ignored';
+import { byCodeUnits, LINE_BREAK } from '../text';
 
 /**
- * Keys whose values name the crew or an object built on its name: `name`, `crew`,
+ * True for a key whose value names the crew or an object built on its name: `name`, `crew`,
  * `kubemoot.ai/crew`, and any reference key (`crewRef`, `promptRefs`, `coordinatorRef`).
  */
-const NAME_KEY = /^(name|crew|kubemoot\.ai\/crew|[A-Za-z]*Refs?)$/;
-const KEY_LINE = /^(\s*)(-\s+)?(["']?)([\w./-]+)\3:(\s*)(.*)$/;
-const LIST_ITEM = /^(\s*)-\s+(.*)$/;
+function isNameKey(key: string): boolean {
+  if (key === 'name' || key === 'crew' || key === 'kubemoot.ai/crew') return true;
+  const suffix = key.endsWith('Refs') ? 'Refs' : 'Ref';
+  return key.endsWith(suffix) && /^[A-Za-z]*$/.test(key.slice(0, -suffix.length));
+}
+
+/** A `key: value` line, in parts: `lead`, an optional list `dash`, the key `name` with its `quote`, the `gap`, and the `value`. */
+interface KeyLine {
+  line: string;
+  lead: string;
+  dash: string;
+  quote: string;
+  name: string;
+  gap: string;
+  value: string;
+}
+
+const SPACE = /\s/;
+const KEY_CHAR = /[\w./-]/;
+const isSpace = (ch: string) => SPACE.test(ch);
+const isKeyChar = (ch: string) => KEY_CHAR.test(ch);
+
+/** The index of the first character at or after `from` that `keep` rejects. */
+function skip(line: string, from: number, keep: (ch: string) => boolean): number {
+  let at = from;
+  while (at < line.length && keep(line.charAt(at))) at++;
+  return at;
+}
+
+/** Where the key starts: past a list item's dash and the whitespace after it, when the line has one. */
+function pastDash(line: string, at: number): number {
+  return line.charAt(at) === '-' && isSpace(line.charAt(at + 1)) ? skip(line, at + 1, isSpace) : at;
+}
+
+/**
+ * Reads a `key: value` line: indent, an optional `- `, a key of word characters, dots,
+ * slashes, and hyphens (quoted or not), a colon, and the rest of the line as the value.
+ * One pass over the line, so the time is linear in its length.
+ */
+function parseKeyLine(line: string): KeyLine | undefined {
+  const leadEnd = skip(line, 0, isSpace);
+  const dashEnd = pastDash(line, leadEnd);
+  const quote = line.charAt(dashEnd) === '"' || line.charAt(dashEnd) === "'" ? line.charAt(dashEnd) : '';
+  const nameStart = dashEnd + quote.length;
+  const nameEnd = skip(line, nameStart, isKeyChar);
+  if (nameEnd === nameStart || !line.startsWith(`${quote}:`, nameEnd)) return undefined;
+  const gapStart = nameEnd + quote.length + 1;
+  const gapEnd = skip(line, gapStart, isSpace);
+  const value = line.slice(gapEnd);
+  if (LINE_BREAK.test(value)) return undefined;
+  const name = line.slice(nameStart, nameEnd);
+  return { line, lead: line.slice(0, leadEnd), dash: line.slice(leadEnd, dashEnd), quote, name, gap: line.slice(gapStart, gapEnd), value };
+}
+
+/** Reads a list item line (`  - value`) into its indent and its value, in linear time. */
+function parseListItem(line: string): { lead: string; value: string } | undefined {
+  const leadEnd = skip(line, 0, isSpace);
+  const valueStart = pastDash(line, leadEnd);
+  if (valueStart === leadEnd) return undefined;
+  const value = line.slice(valueStart);
+  return LINE_BREAK.test(value) ? undefined : { lead: line.slice(0, leadEnd), value };
+}
+
 const BLOCK_SCALAR = /^[|>][-+0-9]*\s*(#.*)?$/;
 
 /** The crew name in one value token: the name itself, or a name built on it (`<crew>-coordinator`). */
@@ -44,11 +105,11 @@ function inBlock(line: string, walk: Walk): boolean {
 }
 
 /** A `key: value` line: renamed when the key holds a name; it may open a block scalar or a list of names. */
-function renameKeyLine(key: RegExpExecArray, from: string, to: string): [string, Walk] {
-  const [line, lead, dash = '', quote, name, gap, value] = key;
+function renameKeyLine(key: KeyLine, from: string, to: string): [string, Walk] {
+  const { line, lead, dash, quote, name, gap, value } = key;
   const at = lead.length + dash.length;
   if (BLOCK_SCALAR.test(value)) return [line, { blockIndent: at }];
-  if (!NAME_KEY.test(name)) return [line, {}];
+  if (!isNameKey(name)) return [line, {}];
   if (value === '') return [line, { listIndent: at }];
   return [`${lead}${dash}${quote}${name}${quote}:${gap}${renameValue(value, from, to)}`, {}];
 }
@@ -56,11 +117,11 @@ function renameKeyLine(key: RegExpExecArray, from: string, to: string): [string,
 /** One line of the file, renamed where it holds a crew name, with the walk's state after it. */
 function renameLine(line: string, walk: Walk, from: string, to: string): [string, Walk] {
   if (inBlock(line, walk)) return [line, walk];
-  const key = KEY_LINE.exec(line);
+  const key = parseKeyLine(line);
   if (key) return renameKeyLine(key, from, to);
-  const item = LIST_ITEM.exec(line);
-  if (item && BLOCK_SCALAR.test(item[2])) return [line, { blockIndent: indentOf(line) }];
-  if (item && walk.listIndent !== undefined && indentOf(line) >= walk.listIndent) return [`${item[1]}- ${renameValue(item[2], from, to)}`, walk];
+  const item = parseListItem(line);
+  if (item && BLOCK_SCALAR.test(item.value)) return [line, { blockIndent: indentOf(line) }];
+  if (item && walk.listIndent !== undefined && indentOf(line) >= walk.listIndent) return [`${item.lead}- ${renameValue(item.value, from, to)}`, walk];
   const keeps = line.trim() === '' || line.trimStart().startsWith('#');
   return [line, keeps ? walk : {}];
 }
@@ -98,7 +159,7 @@ export async function crewYamlFiles(root: string, top = root): Promise<string[]>
       return /\.ya?ml$/.test(e.name) ? [full] : [];
     }),
   );
-  return nested.flat().sort();
+  return nested.flat().sort(byCodeUnits);
 }
 
 /**

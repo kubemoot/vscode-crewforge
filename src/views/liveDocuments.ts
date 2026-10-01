@@ -33,8 +33,15 @@ export function livePath(ref: ObjectRef, kinds: Map<string, KubemootKind>): stri
 }
 
 export function liveUri(target: LiveTarget): vscode.Uri {
-  const path = target.kind === 'bundle' ? `/${target.namespace}/${target.crew}.bundle.yaml` : `/${target.ref.namespace}/${target.ref.kind}/${target.ref.name}${target.raw ? '.raw' : ''}.yaml`;
-  return vscode.Uri.parse(`${LIVE_SCHEME}:${path}`);
+  return vscode.Uri.parse(`${LIVE_SCHEME}:${documentPath(target)}`);
+}
+
+/** Where a live document lives under the live scheme: `/<namespace>/<kind>/<name>[.raw].yaml`, or a bundle's file. */
+function documentPath(target: LiveTarget): string {
+  if (target.kind === 'bundle') return `/${target.namespace}/${target.crew}.bundle.yaml`;
+  const { namespace, kind, name } = target.ref;
+  const raw = target.raw ? '.raw' : '';
+  return `/${namespace}/${kind}/${name}${raw}.yaml`;
 }
 
 /**
@@ -54,7 +61,7 @@ export class LiveDocuments implements vscode.TextDocumentContentProvider {
     try {
       return await this.render(target);
     } catch (err) {
-      return `# Cannot read it: ${errorText(err).replace(/\n/g, '\n# ')}\n`;
+      return `# Cannot read it: ${errorText(err).replaceAll('\n', '\n# ')}\n`;
     }
   }
 

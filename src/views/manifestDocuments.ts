@@ -43,7 +43,8 @@ export class ManifestDocuments implements vscode.TextDocumentContentProvider {
     const live = this.put(`/live/${namespace}/${name}`, header + (drift.live ? normalizedYaml(drift.live) : '# not deployed\n'), view);
     const source = this.put(`/source/${namespace}/${name}`, header + (drift.rendered ? normalizedYaml(drift.rendered) : '# not in the source\n'), view);
     const banner = chartVersionBanner(view.versions?.source, view.versions?.deployed);
-    const title = `${drift.kind}/${drift.name}: live in ${namespace} vs source${banner ? ` (${banner})` : ''}`;
+    const versions = banner ? ` (${banner})` : '';
+    const title = `${drift.kind}/${drift.name}: live in ${namespace} vs source${versions}`;
     await vscode.commands.executeCommand('vscode.diff', live, source, title);
   }
 
@@ -77,5 +78,6 @@ const OPEN_SOURCE = 'Open Source File';
 
 function headerOf(view: ResourceView): string {
   const banner = chartVersionBanner(view.versions?.source, view.versions?.deployed);
-  return `${banner ? `# ${banner}\n` : ''}${NORMALIZED_NOTE}\n`;
+  const bannerLine = banner ? `# ${banner}\n` : '';
+  return `${bannerLine}${NORMALIZED_NOTE}\n`;
 }
