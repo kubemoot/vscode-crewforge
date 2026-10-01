@@ -5,7 +5,7 @@ import { listCrews, type CrewSummary } from '../k8s/crews';
 import { channelOf } from '../source/deployments';
 import { discoverKinds, type KubemootKind } from '../source/live';
 import { memberItem, membersOf, readyIcon, sectionItem, sectionsOf, type DetailNode } from './crewDetailsTree';
-import { errorLabel, errorText } from './errors';
+import { errorItems, errorLabel, type MessageNode } from './errors';
 import { crewDescription, crewTooltip, groupByNamespace, type NamespaceGroup } from './treeModel';
 
 export type CrewNode =
@@ -13,7 +13,7 @@ export type CrewNode =
   | { kind: 'namespace'; group: NamespaceGroup }
   | { kind: 'crew'; crew: CrewSummary }
   | DetailNode
-  | { kind: 'message'; text: string; detail?: string };
+  | MessageNode;
 
 export type LiveCrewNode = Extract<CrewNode, { kind: 'crew' }>;
 
@@ -112,8 +112,7 @@ export class CrewTreeProvider implements vscode.TreeDataProvider<CrewNode> {
       const problems = details.problems.map((p): CrewNode => ({ kind: 'message', text: errorLabel(`Cannot read ${p}`), detail: p }));
       return [...sectionsOf(crew, details), ...problems];
     } catch (err) {
-      const message = errorText(err);
-      return [{ kind: 'message', text: errorLabel(message), detail: message }];
+      return errorItems(err);
     }
   }
 
@@ -124,8 +123,7 @@ export class CrewTreeProvider implements vscode.TreeDataProvider<CrewNode> {
       this.crews = await listCrews(this.connection.client, namespaceFilter());
     } catch (err) {
       this.crews = [];
-      const message = errorText(err);
-      return [{ kind: 'message', text: errorLabel(message), detail: message }];
+      return errorItems(err);
     }
     const connection = this.connectionItem();
     const head: CrewNode[] = connection ? [{ kind: 'connection', ...connection }] : [];
@@ -155,7 +153,8 @@ function namespaceItem(group: NamespaceGroup): vscode.TreeItem {
 function messageItem(node: Extract<CrewNode, { kind: 'message' }>): vscode.TreeItem {
   const item = new vscode.TreeItem(node.text, vscode.TreeItemCollapsibleState.None);
   item.tooltip = node.detail ?? node.text;
-  item.iconPath = new vscode.ThemeIcon('warning');
+  item.iconPath = new vscode.ThemeIcon(node.icon ?? 'warning');
+  item.command = node.command;
   return item;
 }
 

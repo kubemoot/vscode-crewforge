@@ -13,7 +13,7 @@ import { devDeployment, type LoopMemory } from '../loop/state';
 import { ChatPanel } from '../panels/chatPanel';
 import type { Deployment } from '../source/deployments';
 import { provenanceOf } from '../source/provenance';
-import { errorText } from '../views/errors';
+import { errorText, SELECT_CONTEXT } from '../views/errors';
 import type { Exec } from '../source/render';
 import type { SourceEntry, SourceService } from '../source/service';
 import { conversationStats } from '../store/stats';
@@ -226,6 +226,7 @@ class CrewDashboard implements PageModel {
     lint: () => run('crewforge.lintCrew', this.sourceNode),
     yaml: () => this.showYaml(),
     refresh: async () => undefined,
+    selectContext: () => selectContext(),
   };
 
   private async showYaml(): Promise<void> {
@@ -234,6 +235,10 @@ class CrewDashboard implements PageModel {
     const crew = this.vitals?.deployment?.crew;
     if (crew) return run('crewforge.showLiveYaml', { kind: 'crew', crew });
   }
+}
+
+async function selectContext(): Promise<void> {
+  await vscode.commands.executeCommand(SELECT_CONTEXT.command);
 }
 
 async function run(command: string, ...args: unknown[]): Promise<void> {
@@ -277,6 +282,7 @@ class CrewsOverview implements PageModel {
     },
     refresh: async () => undefined,
     connection: () => this.dashboards.showConnection(),
+    selectContext: () => selectContext(),
   };
 }
 
@@ -327,6 +333,7 @@ class FitnessDashboard implements PageModel {
       if (this.view?.xlsxUrl) await vscode.env.openExternal(vscode.Uri.parse(this.view.xlsxUrl));
     },
     refresh: async () => undefined,
+    selectContext: () => selectContext(),
   };
 
   private async control(name: string | undefined, act: (run: FitnessRun) => Promise<void>): Promise<void> {

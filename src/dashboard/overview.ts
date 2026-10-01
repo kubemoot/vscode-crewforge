@@ -4,7 +4,7 @@ import type { CrewSummary } from '../k8s/crews';
 import type { KubeTransport } from '../k8s/request';
 import { listKind, type KubemootKind } from '../source/live';
 import { provenanceOf } from '../source/provenance';
-import { badge, buttons, escape, note, section, table } from './html';
+import { badge, buttons, escape, note, section, SELECT_CONTEXT_BUTTON, table, type ButtonSpec } from './html';
 
 /** One deployed crew as the overview lists it. */
 export interface OverviewRow {
@@ -55,11 +55,13 @@ export function lastDeployOf(crew: CrewSummary): string | undefined {
 
 export function renderOverview(v: OverviewView): string {
   const connection = `<div class="connection">${connectionLines(v.connection).map(escape).join('<br>')}</div>`;
+  const select: ButtonSpec[] = v.connection.unreachable ? [{ ...SELECT_CONTEXT_BUTTON, primary: true }] : [];
   const top = buttons([
+    ...select,
     { action: 'refresh', label: 'Refresh', title: 'Read every crew again' },
     { action: 'connection', label: 'Connection Info', title: 'Show the connection details, with Copy for a bug report' },
   ]);
-  if (v.connection.unreachable) return `<h1>Crews Overview</h1>${connection}${top}${note(`Cannot reach the cluster, so no crews are listed: ${v.connection.unreachable}`)}`;
+  if (v.connection.unreachable) return `<h1>Crews Overview</h1>${connection}${top}${note('No crews are listed until CrewForge can reach the cluster.')}`;
   const error = v.error ? `<p class="error">${escape(`Cannot list the crews: ${v.error}`)}</p>` : '';
   const rows = v.rows.map(rowCells);
   const head = ['Crew', 'Namespace', 'Phase', 'Agents ready', 'Chart', 'Channel', 'Last deploy', 'Answering now', 'Recent problems', 'Local source'];

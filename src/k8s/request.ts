@@ -1,17 +1,23 @@
 import * as http from 'node:http';
 import * as https from 'node:https';
 import type { KubeConfig } from '@kubernetes/client-node';
+import { errorCode, plainCredentialsMessage, plainNetworkMessage, plainStatusMessage, unknownNetworkMessage, type Where } from './plainErrors';
 
-/** A failed call to the API server, with a message a person can act on. */
+/** A failed call to the API server, with a message a person can act on, and the raw error behind it. */
 export class KubeError extends Error {
   constructor(
     message: string,
     readonly status?: number,
+    /** The raw error, such as "connect ECONNREFUSED 127.0.0.1:6443" or "GET /api returned 401", for a tooltip or a bug report. */
+    readonly detail?: string,
   ) {
     super(message);
     this.name = 'KubeError';
   }
 }
+
+/** How long one request may wait for the API server before it fails as timed out. Streams have no such limit. */
+export const REQUEST_TIMEOUT_MS = 20_000;
 
 /** The two things CrewForge asks of the API server. */
 export interface KubeTransport {
@@ -30,14 +36,17 @@ export interface KubeTransport {
  * applied by the Kubernetes client library itself.
  */
 export class KubeClient implements KubeTransport {
-  constructor(private readonly config: KubeConfig) {}
+  constructor(
+    private readonly config: KubeConfig,
+    private readonly timeoutMs = REQUEST_TIMEOUT_MS,
+  ) {}
 
   async request(method: string, path: string, body?: unknown, signal?: AbortSignal): Promise<string> {
     for (let attempt = 1; ; attempt++) {
       const res = await this.once(method, path, body, signal);
       if (res.status >= 200 && res.status < 300) return res.text;
       const wait = retryDelayMs(res.status, res.retryAfter, attempt);
-      if (wait === undefined) throw describeFailure(res.status, method, path, res.text);
+      if (wait === undefined) throw describeFailure(res.status, method, path, res.text, this.where());
       await sleep(wait, signal);
     }
   }
@@ -64,7 +73,8 @@ export class KubeClient implements KubeTransport {
         reject(abortError());
       };
       signal?.addEventListener('abort', onAbort, { once: true });
-      req.on('error', (err) => fail(signal?.aborted ? abortError() : connectionError(err)));
+      req.setTimeout(this.timeoutMs, () => req.destroy(timeoutError(this.timeoutMs)));
+      req.on('error', (err) => fail(signal?.aborted ? abortError() : connectionError(err, this.where())));
       if (payload) req.write(payload);
       req.end();
     });
@@ -84,22 +94,27 @@ export class KubeClient implements KubeTransport {
       const req = send(options, (res) => {
         const status = res.statusCode ?? 0;
         if (status < 200 || status >= 300) {
-          collect(res).then((text) => settle(describeFailure(status, 'GET', path, text)), settle);
+          collect(res).then((text) => settle(describeFailure(status, 'GET', path, text, this.where())), settle);
           return;
         }
         res.setEncoding('utf8');
         res.on('data', onChunk);
         res.on('end', () => settle());
-        res.on('error', (err) => settle(connectionError(err)));
+        res.on('error', (err) => settle(connectionError(err, this.where())));
       });
       const onAbort = () => {
         req.destroy();
         settle();
       };
       signal.addEventListener('abort', onAbort, { once: true });
-      req.on('error', (err) => settle(connectionError(err)));
+      req.on('error', (err) => settle(connectionError(err, this.where())));
       req.end();
     });
+  }
+
+  /** The context and server this client talks to, for messages that name them. */
+  private where(): Where {
+    return { context: this.config.getCurrentContext(), server: this.config.getCurrentCluster()?.server };
   }
 
   private async prepare(method: string, path: string, headers: Record<string, string>) {
@@ -114,7 +129,11 @@ export class KubeClient implements KubeTransport {
       path: server.pathname.replace(/\/$/, '') + path,
       headers: { Accept: 'application/json', ...headers },
     };
-    await this.config.applyToHTTPSOptions(options);
+    try {
+      await this.config.applyToHTTPSOptions(options);
+    } catch (err) {
+      throw new CredentialsError(plainCredentialsMessage(this.where()), err instanceof Error ? err.message : String(err));
+    }
     const send = server.protocol === 'http:' ? http.request : https.request;
     return { send, options };
   }
@@ -198,21 +217,53 @@ const hints: Record<number, string> = {
   503: 'The service has no ready pod behind it yet. Check that the crew is Ready.',
 };
 
-export function describeFailure(status: number, method: string, path: string, body: string): KubeError {
+/**
+ * A refusal by status. With the context known, a refusal of the credentials or the account
+ * is said plainly with the context, and the request and the server's words become the detail.
+ */
+export function describeFailure(status: number, method: string, path: string, body: string, where?: Where): KubeError {
   const detail = statusMessage(body);
-  const hint = hints[status] ?? 'The API server refused the request.';
   const suffix = detail ? ` (${detail})` : '';
-  return new KubeError(`${hint} ${method} ${path} returned ${status}${suffix}`, status);
+  const raw = `${method} ${path} returned ${status}${suffix}`;
+  const plain = where && plainStatusMessage(status, where, detail);
+  if (plain) return new KubeError(plain, status, raw);
+  const hint = hints[status] ?? 'The API server refused the request.';
+  return new KubeError(`${hint} ${raw}`, status, raw);
 }
 
 /** A request that failed on the wire (reset, refused, timed out) rather than with a status. */
 export class ConnectionError extends KubeError {
-  constructor(message: string) {
-    super(message);
+  constructor(message: string, detail?: string) {
+    super(message, undefined, detail);
     this.name = 'ConnectionError';
   }
 }
 
-function connectionError(err: Error): ConnectionError {
-  return new ConnectionError(`Could not reach the API server: ${err.message}`);
+/** Credentials the kubeconfig could not produce, such as a login plugin that failed. */
+export class CredentialsError extends KubeError {
+  constructor(message: string, detail?: string) {
+    super(message, undefined, detail);
+    this.name = 'CredentialsError';
+  }
+}
+
+function timeoutError(ms: number): Error {
+  return Object.assign(new Error(`no response in ${ms / 1000} s`), { code: 'ETIMEDOUT' });
+}
+
+/** A failure on the wire in plain words, naming the context and server; the raw error is the detail. */
+export function connectionError(err: Error, where: Where): ConnectionError {
+  const code = errorCode(err);
+  const raw = code && !err.message.includes(code) ? `${code}: ${err.message}` : err.message;
+  const plain = plainNetworkMessage(code, where) ?? unknownNetworkMessage(where, err.message);
+  return new ConnectionError(plain, raw);
+}
+
+/**
+ * Whether the error means the cluster could not be reached, or would not take these
+ * credentials, so another context may help. A 403 is left out: it denies one request to
+ * an account the cluster knows, which another context rarely fixes.
+ */
+export function isConnectionProblem(err: unknown): boolean {
+  return err instanceof ConnectionError || err instanceof CredentialsError || (err instanceof KubeError && err.status === 401);
 }

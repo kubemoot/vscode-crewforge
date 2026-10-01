@@ -6,9 +6,9 @@ import { summarize, type ResourceDrift } from '../source/drift';
 import { isRunning, runSummary, type FitnessRun } from '../fitness/fitness';
 import { fluxSummary, type FluxState } from '../gitops/flux';
 import type { DeclaredItem, DeclaredSection } from '../source/declared';
-import { locationOf, type SourceLocation } from '../source/render';
+import { locationOf } from '../source/render';
 import type { SourceEntry, SourceService } from '../source/service';
-import { errorLabel, errorText } from './errors';
+import { errorItems, errorText, type MessageNode } from './errors';
 
 export type SourceNode =
   | { kind: 'source'; entry: SourceEntry }
@@ -18,7 +18,7 @@ export type SourceNode =
   | { kind: 'run'; entry: SourceEntry; deployment: Deployment; run: FitnessRun }
   | { kind: 'declSection'; entry: SourceEntry; section: DeclaredSection; items: DeclaredItem[] }
   | { kind: 'declared'; entry: SourceEntry; item: DeclaredItem }
-  | { kind: 'message'; text: string; detail?: string; icon?: string; at?: SourceLocation };
+  | MessageNode;
 
 export type DeploymentNode = Extract<SourceNode, { kind: 'deployment' }>;
 
@@ -154,7 +154,7 @@ export class SourceTreeProvider implements vscode.TreeDataProvider<SourceNode> {
       this.loadedEntries = await this.service.load();
     } catch (err) {
       this.loadedEntries = [];
-      return [errorMessage(err)];
+      return errorNodes(err);
     }
     this.roots = this.loadedEntries.map((entry) => ({ kind: 'source', entry }));
     this.sourcesLoaded.fire();
@@ -163,7 +163,7 @@ export class SourceTreeProvider implements vscode.TreeDataProvider<SourceNode> {
 
   /** What a source declares, then where it is deployed. */
   private async loadSource(entry: SourceEntry): Promise<SourceNode[]> {
-    if (entry.error) return [{ ...errorMessage(entry.error), at: entry.errorAt }];
+    if (entry.error) return errorNodes(entry.error, entry.errorAt);
     const [declared, deployments] = await Promise.all([this.loadDeclarations(entry), this.loadDeployments(entry)]);
     return [...declared, ...deployments];
   }
@@ -175,7 +175,7 @@ export class SourceTreeProvider implements vscode.TreeDataProvider<SourceNode> {
       const crewNode: SourceNode[] = crew ? [{ kind: 'declared', entry, item: crew }] : [];
       return [...crewNode, ...shown.map((s): SourceNode => ({ kind: 'declSection', entry, ...s }))];
     } catch (err) {
-      return [errorMessage(err)];
+      return errorNodes(err);
     }
   }
 
@@ -192,7 +192,7 @@ export class SourceTreeProvider implements vscode.TreeDataProvider<SourceNode> {
     } catch (err) {
       this.loaded.delete(entry.source.root);
       this.loadedChanged.fire();
-      return [errorMessage(err)];
+      return errorNodes(err);
     }
   }
 
@@ -204,7 +204,7 @@ export class SourceTreeProvider implements vscode.TreeDataProvider<SourceNode> {
       if (runs.length === 0) return [{ kind: 'message', text: 'No fitness runs yet', icon: 'info' }];
       return runs.map((run) => ({ kind: 'run', entry: node.entry, deployment: node.deployment, run }));
     } catch (err) {
-      return [errorMessage(err)];
+      return errorNodes(err);
     }
   }
 
@@ -378,12 +378,11 @@ function messageItem(node: Extract<SourceNode, { kind: 'message' }>): vscode.Tre
   const item = new vscode.TreeItem(node.text, vscode.TreeItemCollapsibleState.None);
   item.tooltip = node.at ? `${node.detail ?? node.text}\n${node.at.file}:${node.at.line + 1}` : (node.detail ?? node.text);
   item.iconPath = new vscode.ThemeIcon(node.icon ?? 'warning');
-  if (node.at) item.command = openAt(node.at.file, node.at.line);
+  item.command = node.at ? openAt(node.at.file, node.at.line) : node.command;
   return item;
 }
 
-/** A failure as a tree item: its first sentence, the whole text on hover, and the file and line it points at, which a click opens. */
-function errorMessage(err: unknown): Extract<SourceNode, { kind: 'message' }> {
-  const message = errorText(err);
-  return { kind: 'message', text: errorLabel(message), detail: message, at: locationOf(err) };
+/** A failure as tree items: see errorItems; the file and line it points at, if any, open on a click. */
+function errorNodes(err: unknown, at = locationOf(err)): SourceNode[] {
+  return errorItems(err, at);
 }

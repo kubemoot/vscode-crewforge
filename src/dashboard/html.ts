@@ -1,3 +1,4 @@
+import { SELECT_CONTEXT } from '../views/errors';
 import { escapeHtml } from '../webview/render';
 
 /** Escapes any value for HTML text or an attribute; undefined and null become empty. */
@@ -22,6 +23,9 @@ export function button(b: ButtonSpec): string {
   const cls = b.primary ? 'btn primary' : 'btn';
   return `<button type="button" class="${cls}" data-action="${escape(b.action)}"${arg} title="${escape(b.disabled ?? b.title)}"${disabled}>${escape(b.label)}</button>`;
 }
+
+/** The button a page shows when it could not read the cluster: another context may help. */
+export const SELECT_CONTEXT_BUTTON: ButtonSpec = { action: 'selectContext', label: SELECT_CONTEXT.title, title: 'Pick another context from the kubeconfig' };
 
 export function buttons(specs: ButtonSpec[]): string {
   return specs.length ? `<div class="actions">${specs.map(button).join('')}</div>` : '';

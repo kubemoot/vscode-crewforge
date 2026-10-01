@@ -1,6 +1,6 @@
 import { chartVersionBanner } from '../source/normalize';
 import { agentsByRole, type CrewVitals } from './crewVitals';
-import { badge, banner, buttons, escape, facts, note, section, table, type ButtonSpec } from './html';
+import { badge, banner, buttons, escape, facts, note, section, SELECT_CONTEXT_BUTTON, table, type ButtonSpec } from './html';
 
 /** The crew dashboard's page body. */
 export function renderCrewPage(v: CrewVitals): string {
@@ -44,6 +44,7 @@ export function crewButtons(v: CrewVitals): ButtonSpec[] {
     { action: 'lint', label: 'Lint', title: 'Lint Crew (helm lint and schema check)', disabled: r.noSource },
     { action: 'yaml', label: 'Show YAML', title: v.sourceAt ? "Open the Crew's source file at the Crew" : 'Show the live Crew YAML', disabled: r.nothingToShow },
     { action: 'refresh', label: 'Refresh', title: 'Read everything again' },
+    ...(v.deploymentError ? [SELECT_CONTEXT_BUTTON] : []),
   ];
 }
 

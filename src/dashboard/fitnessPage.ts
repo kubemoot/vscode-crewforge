@@ -1,7 +1,7 @@
 import { runControls, shownPhase, type SuiteControls } from '../fitness/controls';
 import { isRunning, runSummary, scenarioResults, type FitnessRun, type ScenarioResult } from '../fitness/fitness';
 import type { SuiteIteration, SuiteScores } from '../kubemoot/dashboardApi';
-import { badge, between, buttons, duration, escape, facts, note, section, table, type ButtonSpec } from './html';
+import { badge, between, buttons, duration, escape, facts, note, section, SELECT_CONTEXT_BUTTON, table, type ButtonSpec } from './html';
 
 /** What the fitness dashboard reads for one deployment. */
 export interface FitnessView {
@@ -30,6 +30,7 @@ export function renderFitnessPage(v: FitnessView): string {
   const top: ButtonSpec[] = [
     { action: 'run', label: 'Run Fitness', title: 'Run one of the crew\'s fitness definitions', disabled: busy ? 'A fitness run for this crew is in progress.' : v.cannotRun, primary: true },
     { action: 'refresh', label: 'Refresh', title: 'Read the runs again' },
+    ...(v.error ? [SELECT_CONTEXT_BUTTON] : []),
   ];
   const error = v.error ? `<p class="error">${escape(v.error)}</p>` : '';
   return `<h1>Fitness: ${escape(v.crew)}</h1><p class="muted">${escape(v.namespace)}</p>${error}${buttons(top)}${runsSection(v)}${v.selected ? runSection(v, v.selected) : ''}`;

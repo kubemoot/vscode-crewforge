@@ -10,6 +10,8 @@ generated from the conventional commits since the previous release.
 - The crew dashboard, the Crews Overview, and the fitness dashboard show their data again instead of hanging on "Reading...".
 - A page that cannot start says so; a slow read says "Still reading from <context>..."; a cluster that does not answer is named after a bounded wait. Page errors go to the CrewForge output channel.
 - Dashboard and chat tabs carry the Kubemoot logo, in light and dark variants.
+- A cluster that cannot be reached is said in plain words, with the context and server: "No response from context docker-desktop at https://127.0.0.1:49681. Is the cluster running?". Refused, timed-out, unresolvable, and reset connections, untrusted certificates, rejected credentials (401), forbidden requests (403), and failed login plugins each have their own message; the raw error stays in the tooltip or under Details. The trees, the status bar, the dashboards, Show Connection Info, and error notifications offer Select Kubernetes Context.
+- A request that gets no answer from the API server for 20 seconds fails with a plain message instead of waiting on the operating system's connect timeout. Chat streams are not limited.
 
 ### Crew Sources
 

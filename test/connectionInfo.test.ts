@@ -3,7 +3,7 @@ import * as path from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { Connection } from '../src/connection';
 import { connectionLines, ConnectionStatus, findKubemoot, imageTag, readConnectionInfo, showConnectionInfo, statusText, type ConnectionInfo } from '../src/connectionInfo';
-import { KubeError, type KubeTransport } from '../src/k8s/request';
+import { ConnectionError, KubeError, type KubeTransport } from '../src/k8s/request';
 import { recorded, resetFake } from './vscodeFake';
 
 /** A cluster that answers /version, Deployments by label, and the Crew CRD, or fails where told. */
@@ -93,6 +93,11 @@ describe('readConnectionInfo', () => {
     cluster.failures.set('/version', new Error('connect ECONNREFUSED 10.0.0.1:6443'));
     const down = await readConnectionInfo(connection, 'dev');
     expect(connectionLines(down).at(-1)).toBe('Cannot reach the cluster: connect ECONNREFUSED 10.0.0.1:6443');
+    cluster.failures.set('/version', new ConnectionError('No response from context lab at https://10.0.0.1:6443. Is the cluster running?', 'connect ECONNREFUSED 10.0.0.1:6443'));
+    const refused = await readConnectionInfo(connection, 'dev');
+    expect(connectionLines(refused).slice(-2)).toEqual(['No response from context lab at https://10.0.0.1:6443. Is the cluster running?', 'Details: connect ECONNREFUSED 10.0.0.1:6443']);
+    cluster.failures.set('/version', new KubeError('Context lab did not accept your credentials.', 401, 'Context lab did not accept your credentials.'));
+    expect(connectionLines(await readConnectionInfo(connection, 'dev')).at(-1)).toBe('Context lab did not accept your credentials.');
     cluster.failures.clear();
     cluster.deployments = { items: [] };
     cluster.version = {};
@@ -111,7 +116,8 @@ describe('the connection status bar item', () => {
     expect(statusText({ context: 'lab', kubeconfig: path.join(os.homedir(), '.kube', 'config') })).toBe('$(plug) lab');
     expect(statusText({ context: 'lab', kubeconfig: '/home/me/.kube/lab.yaml' })).toBe('$(plug) lab (lab.yaml)');
     expect(statusText({ context: 'lab' })).toBe('$(plug) lab');
-    expect(statusText({})).toBe('$(plug) not connected');
+    expect(statusText({})).toBe('$(debug-disconnect) not connected');
+    expect(statusText({ context: 'lab', unreachable: 'No response from context lab. Is the cluster running?' })).toBe('$(debug-disconnect) lab: no connection');
   });
 
   it('shows the connection, selects the context on click, and lists the versions on hover', async () => {
@@ -136,5 +142,8 @@ describe('the connection status bar item', () => {
     recorded.quickPicks.push(undefined);
     await showConnectionInfo(info);
     expect(recorded.clipboard).toHaveLength(1);
+    recorded.quickPicks.push((items: { label: string }[]) => items.find((i) => i.label.endsWith('Select Kubernetes Context')));
+    await showConnectionInfo(info);
+    expect(recorded.executed.map((e) => e.id)).toEqual(['crewforge.selectContext']);
   });
 });

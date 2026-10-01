@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import type { SourceEntry } from '../source/service';
 import { errorText } from '../views/errors';
+import { showError } from '../views/notify';
 import { lintSource, MissingToolError, type Finding, type LintDeps, type LintResult, type Severity } from './lint';
 
 const SEVERITY: Record<Severity, vscode.DiagnosticSeverity> = {
@@ -66,7 +67,7 @@ export class CrewLinter implements vscode.Disposable {
   private report(err: unknown, loud: boolean): void {
     this.output.appendLine(`Lint Crew: ${errorText(err)}`);
     if (!(err instanceof MissingToolError)) {
-      if (loud) void vscode.window.showErrorMessage(`CrewForge: ${errorText(err)}`);
+      if (loud) void showError(err);
       return;
     }
     if (loud || !this.toldMissing) void vscode.window.showWarningMessage(err.message);

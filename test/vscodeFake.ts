@@ -182,6 +182,8 @@ export const recorded = {
   documentProviders: new Map<string, { provideTextDocumentContent(uri: Uri): string }>(),
   /** Answers for information messages with actions, in order; undefined dismisses. */
   infoAnswers: [] as (string | undefined)[],
+  /** Answers to error messages that offer an action, in order. */
+  errorAnswers: [] as (string | undefined)[],
   /** Options each showTextDocument call got, in order. */
   shownOptions: [] as unknown[],
   diagnostics: [] as FakeDiagnostics[],
@@ -232,6 +234,7 @@ export function resetFake(): void {
   recorded.cancel = undefined;
   recorded.activeEditor = undefined;
   recorded.infoAnswers = [];
+  recorded.errorAnswers = [];
   recorded.shownOptions = [];
   recorded.diagnostics = [];
   recorded.statusBarItems = [];
@@ -377,10 +380,10 @@ export const window = {
     recorded.info.push(message);
     return Promise.resolve(actions.length && typeof actions[0] === 'string' ? recorded.infoAnswers.shift() : undefined);
   },
-  showErrorMessage(message: string, options?: { modal?: boolean }) {
+  showErrorMessage(message: string, options?: { modal?: boolean } | string) {
     recorded.errors.push(message);
     if (typeof options === 'object' && options?.modal) recorded.modalErrors.push(message);
-    return Promise.resolve(undefined);
+    return Promise.resolve(typeof options === 'string' ? recorded.errorAnswers.shift() : undefined);
   },
   showQuickPick(items: unknown[]) {
     const choice = recorded.quickPicks.shift();

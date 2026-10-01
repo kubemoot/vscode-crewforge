@@ -82,7 +82,7 @@ describe('readAvailability', () => {
     cluster.failures.set('/apis/kubemoot.ai/v1alpha1/namespaces/crew-demo/agents', new Error('forbidden'));
     expect(await readAvailability(cluster, kinds, 'crew-demo', 'demo')).toEqual({ state: 'ready' });
     cluster.failures.set('/apis/kubemoot.ai/v1alpha1/namespaces/crew-demo/crews', new Error('connect ECONNREFUSED'));
-    expect(await readAvailability(cluster, kinds, 'crew-demo', 'demo')).toEqual({ state: 'unreachable', reason: "Can't reach the cluster: connect ECONNREFUSED" });
+    expect(await readAvailability(cluster, kinds, 'crew-demo', 'demo')).toEqual({ state: 'unreachable', reason: 'Cannot reach the cluster: connect ECONNREFUSED' });
   });
 });
 
@@ -124,7 +124,7 @@ describe('ChatPanel availability', () => {
     answers.push(new Error('boom'));
     ChatPanel.show(Uri.file('/ext') as never, connection, crew(), store, undefined, links);
     await settle();
-    expect(recorded.panels[1].webview.posted.at(-1)).toMatchObject({ availability: { state: 'unreachable', reason: "Can't reach the cluster: boom" } });
+    expect(recorded.panels[1].webview.posted.at(-1)).toMatchObject({ availability: { state: 'unreachable', reason: 'Cannot reach the cluster: boom' } });
   });
 
   it('reads it again while visible, not while hidden, and stops when closed', async () => {

@@ -3,7 +3,7 @@ import type { AddressInfo } from 'node:net';
 import { KubeConfig } from '@kubernetes/client-node';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { getEventListeners } from 'node:events';
-import { ConnectionError, describeFailure, KubeClient, KubeError, retryDelayMs, statusMessage } from '../src/k8s/request';
+import { ConnectionError, CredentialsError, describeFailure, KubeClient, KubeError, retryDelayMs, statusMessage } from '../src/k8s/request';
 
 let server: http.Server;
 let base: string;
@@ -63,7 +63,7 @@ function route(url: string, res: http.ServerResponse): void {
   res.end('404 page not found');
 }
 
-function client(server = base): KubeClient {
+function client(server = base, timeoutMs?: number): KubeClient {
   const kc = new KubeConfig();
   kc.loadFromOptions({
     clusters: [{ name: 'c', server, skipTLSVerify: true }],
@@ -71,7 +71,7 @@ function client(server = base): KubeClient {
     contexts: [{ name: 'ctx', cluster: 'c', user: 'u' }],
     currentContext: 'ctx',
   });
-  return new KubeClient(kc);
+  return new KubeClient(kc, timeoutMs);
 }
 
 describe('KubeClient', () => {
@@ -91,7 +91,8 @@ describe('KubeClient', () => {
     const err = await client().request('POST', '/api/forbidden', {}).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(KubeError);
     expect((err as KubeError).status).toBe(403);
-    expect((err as KubeError).message).toMatch(/not allowed.*returned 403.*cannot create resource/);
+    expect((err as KubeError).message).toMatch(/^Your account in context ctx is not allowed to do this. The cluster says: .*cannot create resource/);
+    expect((err as KubeError).detail).toMatch(/^POST \/api\/forbidden returned 403 \(.*cannot create resource/);
   });
 
   it('retries while the API server asks it to with Retry-After, as client-go does', async () => {
@@ -156,19 +157,51 @@ describe('KubeClient', () => {
   it('leaves no abort listener behind, however many streams share one signal', async () => {
     const abort = new AbortController();
     for (let i = 0; i < 12; i++) await client().stream('/api/stream', () => {}, abort.signal);
-    await expect(client().stream('/api/forbidden', () => {}, abort.signal)).rejects.toThrow(/403/);
+    await expect(client().stream('/api/forbidden', () => {}, abort.signal)).rejects.toMatchObject({ status: 403 });
     await expect(client('http://127.0.0.1:1').stream('/api/stream', () => {}, abort.signal)).rejects.toBeInstanceOf(ConnectionError);
     expect(getEventListeners(abort.signal, 'abort')).toHaveLength(0);
   });
 
   it('rejects a failed stream with the status', async () => {
-    await expect(client().stream('/api/forbidden', () => {}, new AbortController().signal)).rejects.toThrow(/403/);
+    await expect(client().stream('/api/forbidden', () => {}, new AbortController().signal)).rejects.toMatchObject({ status: 403, detail: expect.stringMatching(/GET \/api\/forbidden returned 403/) });
   });
 
   it('reports an unreachable server as a connection error', async () => {
     const failure = client('http://127.0.0.1:1').request('GET', '/api/ok');
-    await expect(failure).rejects.toThrow(/Could not reach the API server/);
+    await expect(failure).rejects.toThrow('No response from context ctx at http://127.0.0.1:1. Is the cluster running?');
+    await expect(failure).rejects.toMatchObject({ detail: 'connect ECONNREFUSED 127.0.0.1:1' });
     await expect(failure).rejects.toBeInstanceOf(ConnectionError);
+  });
+
+  it('gives up on a request the server does not answer, and says so plainly', async () => {
+    const failure = client(base, 50).request('GET', '/api/slow');
+    await expect(failure).rejects.toThrow(`No answer in time from context ctx at ${base}. Is the cluster running, and can this computer reach it (network, VPN)?`);
+    await expect(failure).rejects.toMatchObject({ detail: 'ETIMEDOUT: no response in 0.05 s' });
+  });
+
+  it('says plainly when the kubeconfig cannot produce credentials, keeping the raw error', async () => {
+    const kc = new KubeConfig();
+    kc.loadFromOptions({
+      clusters: [{ name: 'c', server: base, skipTLSVerify: true }],
+      users: [{ name: 'u', exec: { command: 'crewforge-no-such-login-plugin', apiVersion: 'client.authentication.k8s.io/v1beta1' } }],
+      contexts: [{ name: 'gke', cluster: 'c', user: 'u' }],
+      currentContext: 'gke',
+    });
+    const before = seen.length;
+    const err = (await new KubeClient(kc).request('GET', '/api/ok').catch((e: unknown) => e)) as KubeError;
+    expect(err).toBeInstanceOf(CredentialsError);
+    expect(seen.length).toBe(before);
+    expect(err.message).toMatch(/^CrewForge could not get credentials for context gke at http:\/\/127\.0\.0\.1:\d+ from the kubeconfig\./);
+    expect(err.detail).toBeTruthy();
+  });
+
+  it('lets a stream stay quiet longer than a request may', async () => {
+    const abort = new AbortController();
+    const chunks: string[] = [];
+    const done = client(base, 30).stream('/api/forever', (c) => chunks.push(c), abort.signal);
+    setTimeout(() => abort.abort(), 120);
+    await expect(done).resolves.toBeUndefined();
+    expect(chunks).toHaveLength(1);
   });
 
   it('fails when the kubeconfig has no current cluster', async () => {

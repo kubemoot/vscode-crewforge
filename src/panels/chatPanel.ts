@@ -15,6 +15,7 @@ import { icons } from '../webview/render';
 import { messageText, type PanelState } from './panelState';
 import { tabIcon } from './tabIcon';
 import type { Located } from '../source/locate';
+import { showError } from '../views/notify';
 import { trimEnd } from '../text';
 
 /** What a chat can link to in the workspace. */
@@ -175,7 +176,7 @@ export class ChatPanel {
     try {
       await this.handle(m);
     } catch (err) {
-      void vscode.window.showErrorMessage(`CrewForge: ${err instanceof Error ? err.message : String(err)}`);
+      void showError(err);
     }
   }
 

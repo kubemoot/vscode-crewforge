@@ -188,7 +188,12 @@ describe('the Crews Overview', () => {
   it('says plainly when the cluster cannot be reached or the crews cannot be listed', async () => {
     cluster.reachable = false;
     new Dashboards(parts).openOverview();
-    expect(await body(recorded.panels[0])).toContain('Cannot reach the cluster, so no crews are listed: connect ECONNREFUSED');
+    const unreachable = await body(recorded.panels[0]);
+    expect(unreachable).toContain('Cannot reach the cluster: connect ECONNREFUSED');
+    expect(unreachable).toContain('No crews are listed until CrewForge can reach the cluster.');
+    expect(unreachable).toContain('data-action="selectContext"');
+    await press(recorded.panels[0], 'selectContext');
+    expect(recorded.executed.map((e) => e.id)).toContain('crewforge.selectContext');
     recorded.panels[0].dispose();
     cluster.reachable = true;
     cluster.failures.set('/apis/kubemoot.ai/v1alpha1/crews', new Error('crews is forbidden'));

@@ -4,6 +4,7 @@ import type { PageHostMessage, PageMessage } from '../webview/pageProtocol';
 import { messageText, type PanelState } from '../panels/panelState';
 import { tabIcon } from '../panels/tabIcon';
 import { errorText } from '../views/errors';
+import { showError } from '../views/notify';
 import { escape } from './html';
 
 /** What a dashboard page shows and what its buttons do. */
@@ -201,7 +202,7 @@ export class PagePanel {
     try {
       await this.model.actions[m.action](arg);
     } catch (err) {
-      void vscode.window.showErrorMessage(`CrewForge: ${errorText(err)}`);
+      void showError(err);
     }
     await this.refresh();
   }

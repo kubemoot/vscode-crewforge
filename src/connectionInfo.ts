@@ -4,7 +4,7 @@ import * as vscode from 'vscode';
 import type { Connection } from './connection';
 import type { KubeTransport } from './k8s/request';
 import { splitChart } from './source/provenance';
-import { errorText } from './views/errors';
+import { detailLine, errorText, rawDetail, SELECT_CONTEXT, unreachableReason } from './views/errors';
 
 /** The Kubemoot operator as found in the cluster: its image, chart, and namespace. */
 export interface KubemootVersion {
@@ -25,8 +25,10 @@ export interface ConnectionInfo {
   kubemoot?: KubemootVersion;
   /** Why Kubemoot's version is not known, when the cluster answered but the operator was not found. */
   kubemootMissing?: string;
-  /** Why the cluster (or the kubeconfig) could not be read at all. */
+  /** Why the cluster (or the kubeconfig) could not be read at all, in plain words. */
   unreachable?: string;
+  /** The raw error behind `unreachable`, such as "connect ECONNREFUSED 127.0.0.1:6443". */
+  unreachableDetail?: string;
 }
 
 const OPERATOR_SELECTOR = 'app.kubernetes.io/name=kubemoot-operator';
@@ -86,14 +88,14 @@ export async function readConnectionInfo(connect: () => Connection, crewforge: s
   try {
     connection = connect();
   } catch (err) {
-    return { crewforge, unreachable: errorText(err) };
+    return { crewforge, ...failure(err) };
   }
   const base: ConnectionInfo = { crewforge, context: connection.context, kubeconfig: connection.source, server: connection.server };
   try {
     const version = JSON.parse(await connection.client.request('GET', '/version')) as { gitVersion?: string };
     base.kubernetes = version.gitVersion;
   } catch (err) {
-    return { ...base, unreachable: errorText(err) };
+    return { ...base, ...failure(err) };
   }
   try {
     const kubemoot = await findKubemoot(connection.client);
@@ -103,13 +105,19 @@ export async function readConnectionInfo(connect: () => Connection, crewforge: s
   }
 }
 
+/** Why the connection failed, in plain words, with the raw error when it says more. */
+function failure(err: unknown): Pick<ConnectionInfo, 'unreachable' | 'unreachableDetail'> {
+  const raw = rawDetail(err);
+  return raw ? { unreachable: unreachableReason(err), unreachableDetail: raw } : { unreachable: unreachableReason(err) };
+}
+
 /** The connection as lines of text, for a tooltip, the quick pick, and a bug report. */
 export function connectionLines(info: ConnectionInfo): string[] {
   const lines = [`CrewForge ${info.crewforge}`];
   if (info.context) lines.push(`Context: ${info.context}`);
   if (info.server) lines.push(`Server: ${info.server}`);
   if (info.kubeconfig) lines.push(`Kubeconfig: ${info.kubeconfig}`);
-  if (info.unreachable) return [...lines, `Cannot reach the cluster: ${info.unreachable}`];
+  if (info.unreachable) return [...lines, info.unreachable, ...(info.unreachableDetail ? [detailLine(info.unreachableDetail)] : [])];
   lines.push(`Kubernetes ${info.kubernetes ?? 'version unknown'}`);
   lines.push(info.kubemoot ? kubemootLine(info.kubemoot) : `Kubemoot: ${info.kubemootMissing}`);
   return lines;
@@ -124,9 +132,9 @@ const DEFAULT_KUBECONFIG = path.join(os.homedir(), '.kube', 'config');
 
 /** The status bar text: the context, and the kubeconfig file's name when it is not the default one. */
 export function statusText(info: Pick<ConnectionInfo, 'context' | 'kubeconfig' | 'unreachable'>): string {
-  if (!info.context) return '$(plug) not connected';
+  if (!info.context) return '$(debug-disconnect) not connected';
   const file = info.kubeconfig && info.kubeconfig !== DEFAULT_KUBECONFIG ? ` (${path.basename(info.kubeconfig)})` : '';
-  return `$(plug) ${info.context}${file}`;
+  return info.unreachable ? `$(debug-disconnect) ${info.context}${file}: no connection` : `$(plug) ${info.context}${file}`;
 }
 
 /**
@@ -141,7 +149,7 @@ export class ConnectionStatus implements vscode.Disposable {
     private readonly connect: () => Connection,
     private readonly crewforge: string,
   ) {
-    this.item.command = { command: 'crewforge.selectContext', title: 'Select Kubernetes Context' };
+    this.item.command = { ...SELECT_CONTEXT };
   }
 
   /** Reads the connection again and redraws the item; resolves to what it read. */
@@ -161,9 +169,11 @@ export class ConnectionStatus implements vscode.Disposable {
 
 const COPY = 'Copy for a bug report';
 
-/** Shows the connection details in a quick pick, with a Copy item for bug reports. */
+/** Shows the connection details in a quick pick, with Select Kubernetes Context and a Copy item for bug reports. */
 export async function showConnectionInfo(info: ConnectionInfo): Promise<void> {
   const lines = connectionLines(info);
-  const choice = await vscode.window.showQuickPick([...lines.map((label) => ({ label })), { label: `$(copy) ${COPY}` }], { title: 'CrewForge connection' });
+  const actions = [{ label: `$(server-environment) ${SELECT_CONTEXT.title}` }, { label: `$(copy) ${COPY}` }];
+  const choice = await vscode.window.showQuickPick([...lines.map((label) => ({ label })), ...actions], { title: 'CrewForge connection' });
   if (choice?.label.endsWith(COPY)) await vscode.env.clipboard.writeText(lines.join('\n'));
+  if (choice?.label.endsWith(SELECT_CONTEXT.title)) await vscode.commands.executeCommand(SELECT_CONTEXT.command);
 }

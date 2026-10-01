@@ -3,7 +3,7 @@ import { listCrews, type CrewSummary } from '../k8s/crews';
 import { KubeError, type KubeTransport } from '../k8s/request';
 import { listKind, type KubemootKind } from '../source/live';
 import { failedReason, type CrewReadiness } from '../loop/ready';
-import { errorText } from '../views/errors';
+import { unreachableReason } from '../views/errors';
 
 /**
  * Whether a crew can take a question now, and if not, why, in a few words for the chat
@@ -31,7 +31,7 @@ function notReadyReason(crew: CrewSummary, agents?: AgentInfo[]): string | undef
 
 /** The availability of a crew whose cluster could not be read. */
 export function unreachable(err: unknown): CrewAvailability {
-  return { state: 'unreachable', reason: `Can't reach the cluster: ${errorText(err)}` };
+  return { state: 'unreachable', reason: unreachableReason(err) };
 }
 
 /**

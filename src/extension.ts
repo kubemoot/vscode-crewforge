@@ -34,6 +34,7 @@ import { SchemaProvider } from './schema/schemaProvider';
 import { CrewCodeLens } from './views/codeLens';
 import { SourceTreeProvider, type SourceNode } from './views/sourceTree';
 import { YamlCommands, type YamlTarget } from './views/yamlCommands';
+import { showError } from './views/notify';
 
 const REFRESH_MS = 30_000;
 
@@ -356,6 +357,7 @@ async function guard(action: () => Promise<void>): Promise<void> {
   try {
     await action();
   } catch (err) {
-    void vscode.window.showErrorMessage(`CrewForge: ${err instanceof Error ? err.message : String(err)}`);
+    void showError(err);
   }
 }
+

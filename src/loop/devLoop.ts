@@ -15,9 +15,9 @@ import { listKind } from '../source/live';
 import type { Exec } from '../source/render';
 import { sourceOf, type SourceEntry, type SourceService } from '../source/service';
 import { confirmModal } from '../views/confirm';
-import { errorText } from '../views/errors';
 import type { DeploymentNode, SourceNode, SourceTreeProvider } from '../views/sourceTree';
 import { waitUntilReady, type CrewReadiness, type WaitOutcome } from './ready';
+import { showError } from '../views/notify';
 import { stateFrom, stateText, type CrewState, type LoopMemory, type LoopStates } from './state';
 
 /** The chat, as the inner loop uses it: ask a crew, or ask its last question again. */
@@ -278,7 +278,7 @@ export class DevLoop {
     try {
       await next[choice ?? '']?.();
     } catch (err) {
-      void vscode.window.showErrorMessage(`CrewForge: ${errorText(err)}`);
+      void showError(err);
     }
   }
 }
