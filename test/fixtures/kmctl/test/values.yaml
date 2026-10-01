@@ -1,2 +1,9 @@
-# The crew's manifests are plain YAML under templates/; Helm installs them into the
-# release namespace. Move a setting here when you want it to vary per deployment.
+# Values for the test crew. The crew's manifests are under templates/; move a
+# setting here when you want it to vary per install.
+
+access:
+  # false: the crew's Kubernetes MCP server can read only the release namespace
+  # (a Role). true: it can read every namespace (a ClusterRole), still read-only
+  # and still without Secrets. The prompts keep the crew on its own namespace
+  # unless a question names another.
+  clusterWide: false

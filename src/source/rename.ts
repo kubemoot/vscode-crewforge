@@ -3,12 +3,16 @@ import * as path from 'node:path';
 import { IGNORED_DIRS } from './ignored';
 import { byCodeUnits, LINE_BREAK } from '../text';
 
+/** Keys whose value names the crew or an object built on its name, beyond the reference keys. */
+const NAME_KEYS = new Set(['name', 'crew', 'kubemoot.ai/crew', 'serviceAccountName']);
+
 /**
  * True for a key whose value names the crew or an object built on its name: `name`, `crew`,
- * `kubemoot.ai/crew`, and any reference key (`crewRef`, `promptRefs`, `coordinatorRef`).
+ * `kubemoot.ai/crew`, `serviceAccountName` (an MCPServer runs as `<crew>-kubernetes-mcp`), and
+ * any reference key (`crewRef`, `promptRefs`, `coordinatorRef`).
  */
 function isNameKey(key: string): boolean {
-  if (key === 'name' || key === 'crew' || key === 'kubemoot.ai/crew') return true;
+  if (NAME_KEYS.has(key)) return true;
   const suffix = key.endsWith('Refs') ? 'Refs' : 'Ref';
   return key.endsWith(suffix) && /^[A-Za-z]*$/.test(key.slice(0, -suffix.length));
 }

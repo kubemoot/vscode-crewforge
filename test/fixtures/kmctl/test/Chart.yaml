@@ -1,6 +1,6 @@
 apiVersion: v2
 name: test
-description: The test Kubemoot crew, scaffolded by kmctl create.
+description: The test Kubemoot crew, a read-only guide to its own namespace, scaffolded by kmctl create.
 type: application
 version: 0.1.0
 annotations:

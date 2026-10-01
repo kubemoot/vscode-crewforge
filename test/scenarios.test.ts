@@ -77,20 +77,20 @@ describe('editing suite scripts', () => {
   const suite = fs.readFileSync(path.join(SCAFFOLD, 'fitness', 'fitness.yaml'), 'utf8');
 
   it('removes one script and keeps the others', () => {
-    const out = withoutScript(suite, 'general-knowledge');
+    const out = withoutScript(suite, 'coordinator-deployment');
     const [parsed] = parseManifests(out) as (Manifest & { spec: { scripts: { testRef: string }[] } })[];
-    expect(parsed.spec.scripts.map((s) => s.testRef)).toEqual(['smoke-hello', 'honest-no-fabrication']);
-    const last = withoutScript(suite, 'honest-no-fabrication');
-    expect((parseManifests(last)[0] as unknown as { spec: { scripts: unknown[] } }).spec.scripts).toHaveLength(2);
+    expect(parsed.spec.scripts.map((s) => s.testRef)).toEqual(['pods-in-namespace', 'refuse-delete', 'warnings-and-restarts']);
+    const last = withoutScript(suite, 'warnings-and-restarts');
+    expect((parseManifests(last)[0] as unknown as { spec: { scripts: unknown[] } }).spec.scripts).toHaveLength(3);
     expect(withoutScript(suite, 'missing')).toBe(suite);
     const twoDocs = `${suite}---\napiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: c\n`;
-    expect(parseManifests(withoutScript(twoDocs, 'honest-no-fabrication')).map((m) => m.kind)).toEqual(['CrewFitnessSuite', 'ConfigMap']);
+    expect(parseManifests(withoutScript(twoDocs, 'warnings-and-restarts')).map((m) => m.kind)).toEqual(['CrewFitnessSuite', 'ConfigMap']);
   });
 
   it('renames a script\'s testRef on its own line', () => {
-    const out = withRenamedScript(suite, 'smoke-hello', 'hello');
+    const out = withRenamedScript(suite, 'pods-in-namespace', 'hello');
     expect(out).toContain('    - testRef: hello\n');
-    expect(out).toContain('DESCRIPTION Smoke test');
+    expect(out).toContain('DESCRIPTION Workloads: the crew lists the pods');
     expect(withRenamedScript(suite, 'missing', 'x')).toBe(suite);
     expect(withRenamedScript('testRef: "a.b"\n', 'a.b', 'c')).toBe('testRef: "c"\n');
   });
@@ -104,7 +104,7 @@ describe('editing suite scripts', () => {
   it('plans a deletion: a script file to the trash, a script out of a suite, or a refusal', () => {
     const file = '/f.yaml';
     expect(deletePlan({ kind: 'script-file', name: 'a', file: '/a.adl' }, '')).toEqual({ trash: true });
-    expect(deletePlan({ kind: 'suite-script', name: 'smoke-hello', file }, suite)).toMatchObject({ trash: false });
+    expect(deletePlan({ kind: 'suite-script', name: 'pods-in-namespace', file }, suite)).toMatchObject({ trash: false });
     const one = suiteFile('test', 'x', 'ADL');
     expect(deletePlan({ kind: 'suite-script', name: 'x', file }, one)).toEqual({ trash: true });
     expect(deletePlan({ kind: 'fitness', name: 'x', file }, one)).toEqual({ trash: true });
@@ -146,7 +146,7 @@ describe('ScenarioFiles', () => {
     const files = new ScenarioFiles();
     const suiteFileAt = path.join(root, 'fitness', 'fitness.yaml');
     recorded.inputs.push('hello');
-    await files.rename({ kind: 'suite-script', name: 'smoke-hello', owner: 'test-starter', file: suiteFileAt });
+    await files.rename({ kind: 'suite-script', name: 'pods-in-namespace', owner: 'test-starter', file: suiteFileAt });
     expect(fs.readFileSync(suiteFileAt, 'utf8')).toContain('- testRef: hello\n');
     const script = path.join(root, 'fitness', 'weather.adl');
     fs.writeFileSync(script, adlScript('weather'));
@@ -188,7 +188,7 @@ describe('ScenarioFiles', () => {
     const file = path.join(copyScaffold(), 'fitness', 'fitness.yaml');
     recorded.textDocuments = [{ uri: { fsPath: file } as never, getText: () => '', isDirty: true }];
     const files = new ScenarioFiles();
-    const scenario: ScenarioRef = { kind: 'suite-script', name: 'smoke-hello', file };
+    const scenario: ScenarioRef = { kind: 'suite-script', name: 'pods-in-namespace', file };
     await files.rename(scenario);
     await files.delete(scenario);
     expect(recorded.errors).toHaveLength(2);
@@ -199,11 +199,11 @@ describe('ScenarioFiles', () => {
     const root = copyScaffold();
     const files = new ScenarioFiles();
     const suite = path.join(root, 'fitness', 'fitness.yaml');
-    await files.delete({ kind: 'suite-script', name: 'smoke-hello', file: suite });
-    expect(fs.readFileSync(suite, 'utf8')).toContain('smoke-hello');
+    await files.delete({ kind: 'suite-script', name: 'pods-in-namespace', file: suite });
+    expect(fs.readFileSync(suite, 'utf8')).toContain('pods-in-namespace');
     recorded.warningAnswers.push('Delete');
-    await files.delete({ kind: 'suite-script', name: 'smoke-hello', file: suite });
-    expect(fs.readFileSync(suite, 'utf8')).not.toContain('smoke-hello');
+    await files.delete({ kind: 'suite-script', name: 'pods-in-namespace', file: suite });
+    expect(fs.readFileSync(suite, 'utf8')).not.toContain('pods-in-namespace');
     const script = path.join(root, 'fitness', 'a.adl');
     fs.writeFileSync(script, '');
     recorded.warningAnswers.push('Delete');
@@ -228,10 +228,10 @@ describe('Run Scenario', () => {
 
   it('cuts a suite down to one script, keeps a CrewFitness as it is, and wraps a script file; all marked single', () => {
     const owner = parseManifests(fs.readFileSync(path.join(SCAFFOLD, 'fitness', 'fitness.yaml'), 'utf8'))[0];
-    const one = singleScenario(owner, { kind: 'suite-script', name: 'general-knowledge', file: '/f' }) as Manifest & { spec: { iterations: number; scripts: { testRef: string }[] } };
-    expect(one.metadata.name).toBe('test-starter-general-knowledge');
+    const one = singleScenario(owner, { kind: 'suite-script', name: 'coordinator-deployment', file: '/f' }) as Manifest & { spec: { iterations: number; scripts: { testRef: string }[] } };
+    expect(one.metadata.name).toBe('test-starter-coordinator-deployment');
     expect(one.metadata.annotations).toEqual({ 'crewforge.kubemoot.ai/single-scenario': 'true' });
-    expect([one.spec.iterations, one.spec.scripts.map((s) => s.testRef)]).toEqual([1, ['general-knowledge']]);
+    expect([one.spec.iterations, one.spec.scripts.map((s) => s.testRef)]).toEqual([1, ['coordinator-deployment']]);
     expect(singleScenario(owner, { kind: 'suite-script', name: 'missing', file: '/f' })).toBeUndefined();
     const fitness: Manifest = { apiVersion: 'kubemoot.ai/v1alpha1', kind: 'CrewFitness', metadata: { name: 'f' }, spec: {} };
     expect(singleScenario(fitness, { kind: 'fitness', name: 'f', file: '/f' })?.metadata.annotations).toEqual({ 'crewforge.kubemoot.ai/single-scenario': 'true' });
@@ -245,10 +245,10 @@ describe('Run Scenario', () => {
     const connection = () => ({ source: '/k', context: 'lab', client: cluster as unknown as KubeClient });
     const commands = new FitnessCommands(service(), () => undefined, connection);
     const node: DeploymentNode = { kind: 'deployment', entry: entryAt(root), deployment: { namespace: 'crew-test', crew: { name: 'test', namespace: 'crew-test', ready: true, phase: 'Ready' }, channel: 'helm', linked: true } };
-    const name = await commands.runScenario(node, { kind: 'suite-script', name: 'smoke-hello', owner: 'test-starter', file: path.join(root, 'fitness', 'fitness.yaml') }, readText);
-    expect(name).toBe('test-starter-smoke-hello');
+    const name = await commands.runScenario(node, { kind: 'suite-script', name: 'pods-in-namespace', owner: 'test-starter', file: path.join(root, 'fitness', 'fitness.yaml') }, readText);
+    expect(name).toBe('test-starter-pods-in-namespace');
     const posted = cluster.calls.filter((c) => c.method === 'POST').map((c) => c.body as Manifest);
-    expect(posted[0].metadata.name).toMatch(/^test-starter-smoke-hello-\d{8}-\d{6}$/);
+    expect(posted[0].metadata.name).toMatch(/^test-starter-pods-in-namespace-\d{8}-\d{6}$/);
     expect(await commands.runScenario(node, { kind: 'script-file', name: 'weather', file: path.join(root, 'fitness', 'weather.adl') }, readText)).toBeUndefined();
     expect(recorded.info.at(-1)).toMatch(/^A fitness run of test is in progress/);
     cluster.objects.at(-1)!.status = { phase: 'Completed' };
@@ -265,9 +265,10 @@ describe('Run Scenario', () => {
     fs.writeFileSync(path.join(root, 'fitness', 'README.md'), '');
     const fitness = (await service().declarations({ ...entryAt(root), rendered: undefined })).sections.find((s) => s.section === 'fitness')!;
     expect(fitness.items.map((i) => [i.label, i.description, i.scenario?.kind])).toEqual([
-      ['smoke-hello', 'suite test-starter', 'suite-script'],
-      ['general-knowledge', 'suite test-starter', 'suite-script'],
-      ['honest-no-fabrication', 'suite test-starter', 'suite-script'],
+      ['pods-in-namespace', 'suite test-starter', 'suite-script'],
+      ['coordinator-deployment', 'suite test-starter', 'suite-script'],
+      ['refuse-delete', 'suite test-starter', 'suite-script'],
+      ['warnings-and-restarts', 'suite test-starter', 'suite-script'],
       ['prose', 'prose script', 'script-file'],
       ['weather', 'ADL script', 'script-file'],
     ]);

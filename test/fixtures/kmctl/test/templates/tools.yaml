@@ -1,0 +1,49 @@
+# The crew's one tool server: the Kubernetes MCP server in read-only mode, which
+# registers only tools that do not change the cluster. It runs as the
+# test-kubernetes-mcp ServiceAccount, whose RBAC grants read access to this
+# namespace. Agents reach it through the crew's MCPGateway, never directly, and
+# each specialist enables only its own tools (agents.yaml).
+apiVersion: kubemoot.ai/v1alpha1
+kind: MCPServer
+metadata:
+  name: test-kubernetes-mcp
+  labels:
+    kubemoot.ai/crew: test
+spec:
+  # A pinned release of the Kubernetes MCP server; move to a newer tag when you upgrade.
+  image: quay.io/containers/kubernetes_mcp_server:v0.0.63
+  transport: stdio
+  port: 8080
+  replicas: 1
+  serviceAccountName: test-kubernetes-mcp
+  securityMode: relaxed
+  command: ["/app/kubernetes-mcp-server", "--read-only"]
+  capabilities: [kubernetes, pods, resources, events]
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+---
+apiVersion: kubemoot.ai/v1alpha1
+kind: MCPGateway
+metadata:
+  name: test-gateway
+  labels:
+    kubemoot.ai/crew: test
+spec:
+  implementation: kubemoot
+  port: 8080
+  replicas: 1
+  mcpServerSelector:
+    matchLabels:
+      kubemoot.ai/crew: test
+  resources:
+    requests:
+      cpu: 100m
+      memory: 768Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi

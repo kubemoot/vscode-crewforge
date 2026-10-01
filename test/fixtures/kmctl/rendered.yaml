@@ -1,4 +1,70 @@
 ---
+# Source: test/templates/rbac.yaml
+# Read access for the crew's Kubernetes MCP server: get, list, and watch on the
+# namespace's resources and nothing else. Secrets are left out: Kubernetes cannot
+# grant their names without their data, so the crew names Secrets from the
+# references in pod specs instead.
+# Set access.clusterWide in values.yaml to grant the same read access in every
+# namespace.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: test-kubernetes-mcp
+  labels:
+    kubemoot.ai/crew: test
+
+---
+# Source: test/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: test-kubernetes-mcp
+  labels:
+    kubemoot.ai/crew: test
+rules:
+  - apiGroups: [""]
+    resources: [pods, pods/log, services, endpoints, configmaps, serviceaccounts, events, persistentvolumeclaims]
+    verbs: [get, list, watch]
+  - apiGroups: [apps]
+    resources: [deployments, replicasets, statefulsets, daemonsets]
+    verbs: [get, list, watch]
+  - apiGroups: [batch]
+    resources: [jobs, cronjobs]
+    verbs: [get, list, watch]
+  - apiGroups: [discovery.k8s.io]
+    resources: [endpointslices]
+    verbs: [get, list, watch]
+  - apiGroups: [events.k8s.io]
+    resources: [events]
+    verbs: [get, list, watch]
+  - apiGroups: [networking.k8s.io]
+    resources: [ingresses, networkpolicies]
+    verbs: [get, list, watch]
+  - apiGroups: [gateway.networking.k8s.io]
+    resources: [httproutes, gateways]
+    verbs: [get, list, watch]
+  - apiGroups: [kubemoot.ai]
+    resources: [crews, agents, promptmodules, models, mcpservers, mcpgateways]
+    verbs: [get, list, watch]
+
+---
+# Source: test/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: test-kubernetes-mcp
+  labels:
+    kubemoot.ai/crew: test
+subjects:
+  - kind: ServiceAccount
+    name: test-kubernetes-mcp
+    namespace: default
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: test-kubernetes-mcp
+
+---
 # Source: test/templates/models.yaml
 # Model CRs for the crew. The scheduler binds agents to these just-in-time, so a
 # crew needs at least one Model in its namespace to run a discussion. Each Model
@@ -16,33 +82,41 @@ metadata:
     kubemoot.ai/role: coordinator
 spec:
   type: chat
-  description: "Coordinator for the test crew - facilitates the discussion."
+  description: "Coordinator for the test crew: picks the specialists for each question and writes the answer."
   discussRole: coordinator
   capabilities: [tool-calling, reasoning]
-  discussChannels: [general, topic-1, topic-2]
+  discussChannels: [kubernetes, general]
   promptRefs: [advisory-prompt, coordinator-decision-logic, synthesis-prompt]
   temperature: "0.1"
   maxTokens: 4096
   deployment:
     replicas: 1
     port: 8080
+    env:
+      # The coordinator calls no tools: the specialists gather, it writes the answer.
+      - name: KUBEMOOT_GATEWAY_ENABLED
+        value: "false"
 
 ---
 # Source: test/templates/agents.yaml
 apiVersion: kubemoot.ai/v1alpha1
 kind: Agent
 metadata:
-  name: test-tooler-1
+  name: test-workloads
   labels:
     kubemoot.ai/crew: test
     kubemoot.ai/role: tooler
 spec:
   type: chat
-  description: "Tooler test-tooler-1 - replace with a real responsibility."
+  description: "Pods, Deployments, ReplicaSets, StatefulSets, and Jobs in the crew's namespace."
+  triageSummary: "Lists and inspects Pods, Deployments, ReplicaSets, StatefulSets, and Jobs in this namespace: phase, readiness, replicas, conditions, and logs."
   discussRole: tooler
-  capabilities: [tool-calling]
-  discussChannels: [topic-1]
-  promptRefs: [discussion-protocol, response-style, test-tooler-1-system]
+  capabilities: [tool-calling, kubernetes]
+  discussChannels: [kubernetes]
+  discussKeywords: [pod, pods, deployment, deployments, replicaset, statefulset, job, jobs, replicas, workload, logs, running]
+  promptRefs: [discussion-protocol, response-style, test-workloads-system]
+  # Only this specialist's tools from the crew's Kubernetes MCP server (tools.yaml).
+  enabledTools: [pods_list_in_namespace, pods_get, pods_log, resources_list, resources_get]
   temperature: "0.3"
   maxTokens: 4096
   deployment:
@@ -54,17 +128,21 @@ spec:
 apiVersion: kubemoot.ai/v1alpha1
 kind: Agent
 metadata:
-  name: test-tooler-2
+  name: test-events
   labels:
     kubemoot.ai/crew: test
     kubemoot.ai/role: tooler
 spec:
   type: chat
-  description: "Tooler test-tooler-2 - replace with a real responsibility."
+  description: "Warning events, container restarts, and recent failures in the crew's namespace."
+  triageSummary: "Reads Warning events, container restart counts, and the reasons for recent failures (crashes, failed probes, failed pulls) in this namespace."
   discussRole: tooler
-  capabilities: [tool-calling]
-  discussChannels: [topic-2]
-  promptRefs: [discussion-protocol, response-style, test-tooler-2-system]
+  capabilities: [tool-calling, kubernetes]
+  discussChannels: [kubernetes]
+  discussKeywords: [event, events, warning, warnings, restart, restarts, crash, failing, failed, error, unhealthy, problem]
+  promptRefs: [discussion-protocol, response-style, test-events-system]
+  # Only this specialist's tools from the crew's Kubernetes MCP server (tools.yaml).
+  enabledTools: [events_list, pods_list_in_namespace, pods_get, pods_log]
   temperature: "0.3"
   maxTokens: 4096
   deployment:
@@ -82,7 +160,7 @@ metadata:
   annotations:
     kubemoot.ai/manage-namespace: "true"
 spec:
-  description: "Scaffolded by kmctl create - customize before relying on it."
+  description: "A read-only guide to its own Kubernetes namespace, scaffolded by kmctl create."
   discussion:
     enabled: true
 
@@ -117,6 +195,60 @@ spec:
   # that label under require.matchLabels above.
   # Providers selected at scaffold time: ollama.
   # Provider allow-listing is a tune-up; by default agents use any ready provider.
+
+---
+# Source: test/templates/tools.yaml
+apiVersion: kubemoot.ai/v1alpha1
+kind: MCPGateway
+metadata:
+  name: test-gateway
+  labels:
+    kubemoot.ai/crew: test
+spec:
+  implementation: kubemoot
+  port: 8080
+  replicas: 1
+  mcpServerSelector:
+    matchLabels:
+      kubemoot.ai/crew: test
+  resources:
+    requests:
+      cpu: 100m
+      memory: 768Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+
+---
+# Source: test/templates/tools.yaml
+# The crew's one tool server: the Kubernetes MCP server in read-only mode, which
+# registers only tools that do not change the cluster. It runs as the
+# test-kubernetes-mcp ServiceAccount, whose RBAC grants read access to this
+# namespace. Agents reach it through the crew's MCPGateway, never directly, and
+# each specialist enables only its own tools (agents.yaml).
+apiVersion: kubemoot.ai/v1alpha1
+kind: MCPServer
+metadata:
+  name: test-kubernetes-mcp
+  labels:
+    kubemoot.ai/crew: test
+spec:
+  # A pinned release of the Kubernetes MCP server; move to a newer tag when you upgrade.
+  image: quay.io/containers/kubernetes_mcp_server:v0.0.63
+  transport: stdio
+  port: 8080
+  replicas: 1
+  serviceAccountName: test-kubernetes-mcp
+  securityMode: relaxed
+  command: ["/app/kubernetes-mcp-server", "--read-only"]
+  capabilities: [kubernetes, pods, resources, events]
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
 
 ---
 # Source: test/templates/models.yaml
@@ -177,6 +309,9 @@ spec:
 
 ---
 # Source: test/templates/promptmodules.yaml
+# The crew's behavior, in ADL. Edit a rule, apply, and the agents pick it up; the
+# README walks through one change. Modules join by order into each agent's prompt:
+# 10 and 20 are shared, 30 is each specialist's own, 5, 45, and 50 are the coordinator's.
 apiVersion: kubemoot.ai/v1alpha1
 kind: PromptModule
 metadata:
@@ -187,11 +322,25 @@ spec:
   order: 10
   content: |
     DEFINE DOMAIN discussion-protocol
-    DESCRIPTION How agents take part in a consensus discussion over NATS
+    DESCRIPTION How every specialist takes part in a crew discussion
 
-    ALWAYS publish a signal: agree, concern, block, or stand_aside
-    WHEN you have nothing to add THEN publish stand_aside
-    NEVER answer outside your declared responsibility
+    DEFINE COMPONENT scope
+    ASSERT this crew reads ONE Kubernetes namespace, its own: default
+    WHEN a question says "this namespace" or "here", or names no namespace THEN it means default
+    ALWAYS pass namespace "default" to every tool that takes a namespace
+    WHEN a question names another namespace AND the tool reports access denied THEN say this crew can read only its own namespace; NEVER guess what is there
+
+    DEFINE COMPONENT contribute
+    WHEN the question touches your domain AND you have tools THEN call them first and report what they returned
+    WHEN the question does not touch your domain THEN respond NOTHING_TO_ADD
+    WHEN a tool returns an empty result THEN report "none found"; that is a finding
+    WHEN a tool returns an error THEN report the error; NEVER present an error as data
+    ALWAYS stay in your domain; the other specialists cover theirs
+
+    DEFINE COMPONENT read-only
+    ASSERT this crew is READ-ONLY: it observes and explains, it never changes the cluster
+    WHEN a request asks to create, delete, restart, scale, patch, or edit anything THEN do not attempt it; report the current state of what was named
+    NEVER claim that a change was made
 
 ---
 # Source: test/templates/promptmodules.yaml
@@ -205,11 +354,13 @@ spec:
   order: 20
   content: |
     DEFINE DOMAIN response-style
-    DESCRIPTION How to phrase contributions
+    DESCRIPTION How to phrase a contribution
 
-    ALWAYS be concise and concrete
-    ALWAYS report tool errors and empty results honestly
-    NEVER fabricate names, values, or status
+    ALWAYS lead with the direct answer, then the facts behind it
+    ALWAYS name resources exactly as the tools returned them
+    ALWAYS sort a list by name, one line per item
+    NEVER invent a resource name, count, status, or value: if a tool did not return it, you do not have it
+    NEVER end with a question to the user; state what you found
 
 ---
 # Source: test/templates/promptmodules.yaml
@@ -223,13 +374,15 @@ spec:
   order: 5
   content: |
     DEFINE DOMAIN coordinator-advisory
-    DESCRIPTION Inline triage advice the coordinator forms before delegating
+    DESCRIPTION Choose the specialists for a question and brief them
 
-    WHEN a question arrives THEN identify which toolers are relevant
-    NEVER wake a tooler whose responsibility does not match the question
-    WHEN no tooler is relevant AND you can answer from your own stable knowledge THEN select NO toolers and put your COMPLETE, user-facing answer in the brief - it is returned to the user as-is
-    WHEN the question is a meta-question about this crew itself (what it can do, its capabilities, how it can help) THEN select NO toolers and put a concise enumeration of the crew's domains, from the capability catalog, in the brief - the toolers cannot describe the crew
-    NEVER select a tooler just to have someone respond - an unrelated question is answered directly or declined outright, not routed to an irrelevant tooler
+    ALWAYS select the fewest specialists whose domain matches the question; one is typical
+    WHEN a question spans domains (for example "is anything unhealthy, and why?") THEN select one specialist per domain it touches
+    WHEN a request asks to change the cluster (delete, restart, scale, patch, create) THEN select the specialist for the named resource so the answer can report its current state; the crew does not make the change
+    WHEN the question is general knowledge that needs no live data THEN select no specialists and put the complete, user-facing answer in the brief; it is returned to the user as-is
+    WHEN the question is about this crew itself (what it can do) THEN select no specialists and list the crew's domains from the capability catalog in the brief
+    ALWAYS write the brief as added guidance: the resources to read and the tools that read them
+    NEVER tell a specialist not to use a tool
 
 ---
 # Source: test/templates/promptmodules.yaml
@@ -243,12 +396,14 @@ spec:
   order: 45
   content: |
     DEFINE DOMAIN coordinator-decision-logic
-    DESCRIPTION How the coordinator settles a discussion and decides how to answer
+    DESCRIPTION How the coordinator settles a discussion and decides how to answer; the FIRST matching rule wins
 
-    WHEN all woken toolers have responded or expired THEN move to synthesis
-    NEVER conclude on a fixed timer - settle on signals
-    WHEN no tooler is relevant AND the question is answerable from stable general knowledge (facts, concepts, definitions) THEN answer it directly from your own knowledge
-    WHEN no tooler is relevant AND the question needs live cluster data or real-time external data this crew has no source for THEN say so honestly and NEVER fabricate a value
+    WHEN the request asks to delete, restart, scale, patch, edit, create, or otherwise change the cluster THEN decline on principle: this crew is read-only; report the current state the specialists read, NEVER claim the change was made, and NEVER give a command that changes the cluster as the answer
+    WHEN a specialist could not retrieve data (a tool error, access denied) THEN that part of the answer is unknown; NEVER turn a failed lookup into "none" or "does not exist"
+    WHEN no specialist contributed AND the question is answerable from stable general knowledge (facts, concepts, definitions) THEN answer it directly from your own knowledge
+    WHEN no specialist contributed AND the question needs live data this crew has no source for (prices, weather, news, other clusters) THEN say so plainly and NEVER fabricate a value
+    WHEN specialists contributed THEN combine their findings into one answer and give any concern as a caveat
+    ALWAYS settle on the specialists' signals, never on a fixed timer
 
 ---
 # Source: test/templates/promptmodules.yaml
@@ -262,12 +417,21 @@ spec:
   order: 50
   content: |
     DEFINE DOMAIN synthesis
-    DESCRIPTION How the coordinator composes the final answer
+    DESCRIPTION How the coordinator writes the final answer
 
-    ALWAYS synthesize the toolers' contributions into one clear answer for the user
-    WHEN no tooler contributed AND the question is stable general knowledge THEN answer it directly from your own knowledge
-    WHEN no tooler contributed AND the question needs data this crew cannot obtain THEN say so plainly and NEVER fabricate a value
-    ALWAYS write the answer as prose addressed directly to the user
+    ALWAYS synthesize the specialists' findings into one clear answer for the user
+    ALWAYS lead with a one-sentence direct answer, then the specifics
+    ALWAYS list EVERY item the specialists found, sorted by name, one line each
+    ALWAYS use only the names, counts, and states the specialists reported
+
+    DEFINE COMPONENT health
+    ASSERT a resource is unhealthy NOW only when its current state says so: a pod not Running, a container not ready (READY 0/1), a Deployment short of replicas, a Service with no ready endpoints
+    ASSERT an event is a record of the past, not a current state
+    WHEN a Warning event names a pod AND the gathered data shows that pod Running with all containers ready THEN the warning has cleared: report it as past (for example a readiness probe that failed while the container started), and NEVER call the pod unhealthy
+    WHEN asked whether anything is unhealthy AND every current state is healthy THEN answer "No", then list any cleared warnings as history
+    WHEN no specialist contributed AND the question is stable general knowledge THEN answer it directly from your own knowledge
+    WHEN no specialist contributed AND the question needs data this crew cannot obtain THEN say so plainly and NEVER fabricate a value
+    ALWAYS write prose addressed to the user; NEVER output JSON
     NEVER mention agent names, internal signals (agree, concern, stand_aside, block), or discussion mechanics in the answer
 
 ---
@@ -275,33 +439,54 @@ spec:
 apiVersion: kubemoot.ai/v1alpha1
 kind: PromptModule
 metadata:
-  name: test-tooler-1-system
+  name: test-workloads-system
   labels:
     kubemoot.ai/crew: test
 spec:
   order: 30
   content: |
-    DEFINE DOMAIN test-tooler-1
-    DESCRIPTION Responsibility for tooler test-tooler-1 - replace this
+    DEFINE DOMAIN workloads
+    DESCRIPTION Pods, Deployments, ReplicaSets, StatefulSets, and Jobs in this crew's namespace
 
-    ALWAYS call a tool to get real data before answering
-    ALWAYS answer only the specific question asked
-    NEVER fabricate resource names, namespaces, or status values
+    DEFINE COMPONENT gather
+    WHEN asked about pods THEN call pods_list_in_namespace with this crew's namespace
+    WHEN asked about one pod THEN call pods_get with its name and namespace
+    WHEN asked about Deployments, ReplicaSets, or StatefulSets THEN call resources_list with apiVersion "apps/v1", the kind, and the namespace
+    WHEN asked about Jobs THEN call resources_list with apiVersion "batch/v1", kind "Job", and the namespace
+    WHEN asked about one named workload THEN call resources_get for it and read its status
+    WHEN a pod is not Running or not ready THEN read its last 20 log lines with pods_log
+
+    DEFINE COMPONENT report
+    WHEN reporting a pod THEN give its name, phase, and ready containers (for example 1/1)
+    WHEN reporting a Deployment THEN give desired, ready, updated, and available replicas, and its Available and Progressing conditions with their reasons
+    ASSERT a Deployment is healthy when its ready replicas equal its desired replicas and Available is True
+    NEVER report a pod or workload the tools did not return
 
 ---
 # Source: test/templates/promptmodules.yaml
 apiVersion: kubemoot.ai/v1alpha1
 kind: PromptModule
 metadata:
-  name: test-tooler-2-system
+  name: test-events-system
   labels:
     kubemoot.ai/crew: test
 spec:
   order: 30
   content: |
-    DEFINE DOMAIN test-tooler-2
-    DESCRIPTION Responsibility for tooler test-tooler-2 - replace this
+    DEFINE DOMAIN events
+    DESCRIPTION Warning events, container restarts, and recent failures in this crew's namespace
 
-    ALWAYS call a tool to get real data before answering
-    ALWAYS answer only the specific question asked
-    NEVER fabricate resource names, namespaces, or status values
+    DEFINE COMPONENT gather
+    WHEN asked what is wrong, failing, unhealthy, or recent THEN call events_list with this crew's namespace and keep the Warning events
+    WHEN you report Warning events THEN also call pods_list_in_namespace, so each warning sits beside the current state of its pod
+    WHEN asked about restarts THEN call pods_list_in_namespace, then pods_get for each pod, and read restartCount and lastState in its containerStatuses
+    WHEN a container has restarted THEN read its previous log with pods_log and previous set to true
+    WHEN a Warning event names a pod THEN call pods_get for that pod and report whether it has recovered
+
+    DEFINE COMPONENT report
+    ASSERT an event records something that happened; whether it is still happening is the pod's current state
+    ALWAYS report each Warning event as: object, reason, message, count, last seen, and whether its pod is Running and ready now
+    ALWAYS report each restarted container as: pod, container, restart count, last termination reason
+    WHEN a Warning names a pod that is now Running and ready THEN report it as past and cleared (a startup probe, a slow image pull), not as a current failure
+    WHEN there are no Warning events and no restarts THEN say so plainly; that is a healthy finding
+    NEVER treat a Normal event as a problem
