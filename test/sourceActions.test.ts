@@ -221,7 +221,12 @@ describe('SourceActions.undeploy', () => {
     await actions.undeploy({ kind: 'message', text: 'x' });
     await actions.undeploy();
     expect(removed).toEqual(['crew-test', 'b', 'direct']);
-    expect(recorded.info).toEqual(['test is not deployed in this context.', 'test is not deployed in this context.']);
+    expect(recorded.info).toEqual([
+      'test is not deployed in this context.',
+      'test is not deployed in this context.',
+      'There is no crew source in this workspace to undeploy.',
+      'There is no crew source in this workspace to undeploy.',
+    ]);
   });
 });
 
@@ -238,13 +243,49 @@ describe('SourceActions.deleteSource', () => {
     expect(recorded.info).toEqual([`Moved ${root} to the trash.`]);
   });
 
-  it('keeps the folder when the confirmation is dismissed, and ignores anything but a source', async () => {
+  it('keeps the folder when the confirmation is dismissed, and does nothing for a message row', async () => {
     const root = copyScaffold();
     const { actions } = actionsWith(() => []);
     await actions.deleteSource({ kind: 'source', entry: entryAt(root) });
     await actions.deleteSource({ kind: 'message', text: 'x' });
     expect(fs.existsSync(root)).toBe(true);
     expect(recorded.trashed).toEqual([]);
+  });
+
+  it('acts on the source of any node under it, not only the source row', async () => {
+    const root = copyScaffold();
+    const { actions } = actionsWith(() => []);
+    recorded.warningAnswers.push('Move to Trash');
+    await actions.deleteSource({ kind: 'declSection', entry: entryAt(root), section: {} as never, items: [] });
+    expect(recorded.warnings).toEqual(['Delete the crew source test?']);
+    expect(fs.existsSync(root)).toBe(false);
+  });
+
+  it('asks which source with no node, and says so when there is none', async () => {
+    const root = copyScaffold();
+    const { actions, sources } = actionsWith(() => []);
+    await actions.deleteSource();
+    expect(recorded.info).toEqual(['There is no crew source in this workspace to delete.']);
+    sources.known = [entryAt(root)];
+    recorded.quickPicks.push((items: unknown[]) => items[0]);
+    recorded.warningAnswers.push('Move to Trash');
+    await actions.deleteSource();
+    expect(fs.existsSync(root)).toBe(false);
+  });
+
+  it('offers a permanent delete when the trash is unavailable, and keeps the folder when declined', async () => {
+    const root = copyScaffold();
+    const { actions } = actionsWith(() => []);
+    recorded.trashFails = 'no trash on this connection';
+    recorded.warningAnswers.push('Move to Trash');
+    await actions.deleteSource({ kind: 'source', entry: entryAt(root) });
+    expect(recorded.warnings).toEqual(['Delete the crew source test?', `Delete ${root} permanently?`]);
+    expect(recorded.info).toEqual([`${root} was not deleted.`]);
+    expect(fs.existsSync(root)).toBe(true);
+    recorded.warningAnswers.push('Move to Trash', 'Delete Permanently');
+    await actions.deleteSource({ kind: 'source', entry: entryAt(root) });
+    expect(fs.existsSync(root)).toBe(false);
+    expect(recorded.info.at(-1)).toBe(`Deleted ${root} permanently.`);
   });
 
   it('refuses a workspace folder or a folder that holds another source', async () => {
@@ -380,7 +421,7 @@ describe('SourceActions.rename', () => {
     }
     await actions.rename({ kind: 'source', entry: { ...entryAt(root), crewName: undefined } });
     await actions.rename({ kind: 'message', text: 'x' });
-    expect(recorded.info).toEqual([]);
+    expect(recorded.info).toEqual(['test declares no Crew to rename.', 'There is no crew source in this workspace to rename.']);
     expect(crewOf(objectsIn(root))?.metadata.name).toBe('test');
   });
 

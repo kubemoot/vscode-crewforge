@@ -207,6 +207,8 @@ export const recorded = {
   folderListeners: [] as Listener<unknown>[],
   /** Paths moved to the trash (or deleted) through workspace.fs. */
   trashed: [] as string[],
+  /** When set, a delete with useTrash throws this message, as when the window's file system has no trash. */
+  trashFails: undefined as string | undefined,
   /** The editor window.activeTextEditor answers with. */
   activeEditor: undefined as { document: { uri: Uri; languageId: string; getText(range?: unknown): string }; selection: unknown } | undefined,
 };
@@ -255,6 +257,7 @@ export function resetFake(): void {
   recorded.watchers = [];
   recorded.folderListeners = [];
   recorded.trashed = [];
+  recorded.trashFails = undefined;
 }
 
 /** A workspace edit that records file renames. */
@@ -505,6 +508,7 @@ export const workspace = {
   /** The real file system, except that delete records the path and moves nothing to a real trash. */
   fs: {
     async delete(uri: Uri, options?: { recursive?: boolean; useTrash?: boolean }) {
+      if (options?.useTrash && recorded.trashFails) throw new Error(recorded.trashFails);
       recorded.trashed.push(`${uri.fsPath}${options?.useTrash ? ' (trash)' : ''}`);
       const nodeFs = await import('node:fs/promises');
       await nodeFs.rm(uri.fsPath, { recursive: options?.recursive ?? false, force: true });

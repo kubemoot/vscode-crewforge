@@ -184,13 +184,18 @@ describe('commands', () => {
     expect(recorded.shownDocuments).toEqual(['crewforge-manifest:/rendered/ns/Crew-demo.yaml (yaml)']);
   });
 
-  it('routes Undeploy, Delete Crew Source, and Rename Crew on a source, and ignores anything else', async () => {
+  it('routes Undeploy, Delete Crew Source, and Rename Crew on a source, and says why when there is nothing to act on', async () => {
     const entry = { source: { kind: 'helm', root: '/w/none', label: 'none' }, identity: { id: 'local:none' } };
     await run('crewforge.removeDeployment', { kind: 'source', entry });
     await run('crewforge.deleteSource', { kind: 'message', text: 'x' });
     await run('crewforge.renameCrew', { kind: 'source', entry });
     await run('crewforge.deleteSource');
-    expect(recorded.info).toEqual(['none is not deployed in this context.']);
+    expect(recorded.info).toEqual([
+      'none is not deployed in this context.',
+      'There is no crew source in this workspace to delete.',
+      'none declares no Crew to rename.',
+      'There is no crew source in this workspace to delete.',
+    ]);
     expect(recorded.warnings).toEqual([]);
   });
 

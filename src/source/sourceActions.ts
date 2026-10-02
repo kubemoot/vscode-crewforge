@@ -17,6 +17,7 @@ export interface SourceActionDeps {
 const UNDEPLOY_FIRST = 'Undeploy First';
 const KEEP_DEPLOYED = 'Keep It Deployed';
 const MOVE_TO_TRASH = 'Move to Trash';
+const DELETE_PERMANENTLY = 'Delete Permanently';
 const UNDEPLOY_THEN_RENAME = 'Undeploy, Then Rename';
 const RENAME_ONLY = 'Rename Only';
 
@@ -32,20 +33,21 @@ export class SourceActions {
   /** Removes a deployment of the source: the one given, the only one, or the one the developer picks. */
   async undeploy(node?: SourceNode): Promise<void> {
     if (node?.kind === 'deployment') return this.deps.deploy.removeDeployment(node);
-    if (node?.kind !== 'source') return;
-    const deployments = await this.deploymentsOf(node.entry);
+    const entry = await this.sourceFor(node, 'undeploy');
+    if (!entry) return;
+    const deployments = await this.deploymentsOf(entry);
     if (deployments.length === 0) {
-      void vscode.window.showInformationMessage(`${label(node.entry)} is not deployed in this context.`);
+      void vscode.window.showInformationMessage(`${label(entry)} is not deployed in this context.`);
       return;
     }
-    const chosen = deployments.length > 1 ? await pickDeployment(node.entry, deployments) : deployments[0];
+    const chosen = deployments.length > 1 ? await pickDeployment(entry, deployments) : deployments[0];
     if (chosen) await this.deps.deploy.removeDeployment(chosen);
   }
 
   /** Moves the source's folder to the trash after a confirmation that names it; a deployed crew is offered undeploy first. */
   async deleteSource(node?: SourceNode): Promise<void> {
-    if (node?.kind !== 'source') return;
-    const { entry } = node;
+    const entry = await this.sourceFor(node, 'delete');
+    if (!entry) return;
     const refusal = this.deleteRefusal(entry);
     if (refusal) {
       void vscode.window.showErrorMessage(`CrewForge: ${refusal}`);
@@ -57,9 +59,26 @@ export class SourceActions {
     const detail = `The folder ${entry.source.root} and everything in it move to the trash.${beside} Nothing in the cluster changes.`;
     const answer = await vscode.window.showWarningMessage(`Delete the crew source ${entry.source.label}?`, { modal: true, detail }, MOVE_TO_TRASH);
     if (answer !== MOVE_TO_TRASH) return;
-    await vscode.workspace.fs.delete(vscode.Uri.file(entry.source.root), { recursive: true, useTrash: true });
+    const done = await removeFolder(entry.source.root);
     await this.deps.sources.reload();
-    void vscode.window.showInformationMessage(`Moved ${entry.source.root} to the trash.`);
+    if (done) void vscode.window.showInformationMessage(done);
+  }
+
+  /**
+   * The crew source a command acts on: the one the node belongs to (any node in Crew
+   * Sources carries its source), or, with no node, the one the developer picks. Says so
+   * when there is nothing to act on rather than doing nothing silently.
+   */
+  private async sourceFor(node: SourceNode | undefined, verb: string): Promise<SourceEntry | undefined> {
+    if (node && 'entry' in node) return node.entry;
+    const known = this.deps.sources.known;
+    if (known.length === 0) {
+      void vscode.window.showInformationMessage(`There is no crew source in this workspace to ${verb}.`);
+      return undefined;
+    }
+    const items = known.map((entry) => ({ label: label(entry), description: entry.source.root, entry }));
+    const choice = await vscode.window.showQuickPick(items, { placeHolder: `${verb[0].toUpperCase()}${verb.slice(1)} which crew source?` });
+    return (choice as { entry?: SourceEntry } | undefined)?.entry;
   }
 
   /**
@@ -69,9 +88,14 @@ export class SourceActions {
    * name until it is undeployed, so the developer is offered that first.
    */
   async rename(node?: SourceNode): Promise<void> {
-    if (node?.kind !== 'source' || !node.entry.crewName || refuseIfDirty([node.entry.source.root, ...outsideFitness(node.entry)], 'renaming the crew; the rename rewrites its files')) return;
-    const { entry } = node;
-    const from = node.entry.crewName;
+    const entry = await this.sourceFor(node, 'rename');
+    if (!entry) return;
+    if (!entry.crewName) {
+      void vscode.window.showInformationMessage(`${label(entry)} declares no Crew to rename.`);
+      return;
+    }
+    if (refuseIfDirty([entry.source.root, ...outsideFitness(entry)], 'renaming the crew; the rename rewrites its files')) return;
+    const from = entry.crewName;
     const to = await askNewName(from);
     if (!to) return;
     const prompt = (where: string) => renamePrompt(from, to, where);
@@ -194,5 +218,27 @@ async function exists(file: string): Promise<boolean> {
     return true;
   } catch {
     return false;
+  }
+}
+
+/**
+ * Moves the folder to the trash. When the window's file system has no trash (a remote or
+ * WSL window may not), offers a permanent delete after saying why. Resolves the message
+ * to show when the folder is gone, or undefined when it stays.
+ */
+async function removeFolder(root: string): Promise<string | undefined> {
+  const uri = vscode.Uri.file(root);
+  try {
+    await vscode.workspace.fs.delete(uri, { recursive: true, useTrash: true });
+    return `Moved ${root} to the trash.`;
+  } catch (err) {
+    const detail = `Moving it to the trash failed: ${errorText(err)}. A permanent delete cannot be undone from the trash.`;
+    const answer = await vscode.window.showWarningMessage(`Delete ${root} permanently?`, { modal: true, detail }, DELETE_PERMANENTLY);
+    if (answer !== DELETE_PERMANENTLY) {
+      void vscode.window.showInformationMessage(`${root} was not deleted.`);
+      return undefined;
+    }
+    await vscode.workspace.fs.delete(uri, { recursive: true, useTrash: false });
+    return `Deleted ${root} permanently.`;
   }
 }
