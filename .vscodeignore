@@ -1,6 +1,7 @@
 **
 !dist/*.js
 !media/**
+!docs/screenshots/views.png
 !package.json
 !README.md
 !CHANGELOG.md

@@ -24,15 +24,15 @@ export function createArgs(request: CreateCrewRequest, context?: string): string
   return args;
 }
 
-/** The kmctl release whose `create --chart` scaffolds the starter crew of 1 to 5 specialists, as named to the user. */
-export const KMCTL_MIN_VERSION = '0.14.0';
+/** The kmctl release whose `create` takes `--display-name` and scaffolds the starter crew, as named to the user. */
+export const KMCTL_MIN_VERSION = '0.15.0';
 
 /**
- * The first kmctl build with the starter crew: release candidate 0.14.0-rc.2. By
- * semver precedence 0.14.0-rc.0 < 0.14.0-rc.2 < 0.14.0, so rc.0, which predates the
- * starter crew, is refused, while rc.2, later candidates, and every release pass.
+ * The first kmctl build whose `create` takes `--display-name`: release candidate
+ * 0.15.0-rc.4. By semver precedence 0.15.0-rc.0 < 0.15.0-rc.4 < 0.15.0, so earlier
+ * candidates are refused, while rc.4, later candidates, and every release pass.
  */
-export const KMCTL_MIN_BUILD = '0.14.0-rc.2';
+export const KMCTL_MIN_BUILD = '0.15.0-rc.4';
 
 export const KMCTL_RELEASES = 'https://github.com/kubemoot/kmctl/releases';
 

@@ -1116,7 +1116,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint src test",
     "test": "vitest run",
-    "package": "node esbuild.mjs --production && vsce package --no-dependencies",
+    "package": "node esbuild.mjs --production && vsce package --no-dependencies --no-rewrite-relative-links",
     "vscode:prepublish": "node esbuild.mjs --production",
     "test:coverage": "vitest run --coverage",
     "test:integration": "node esbuild.mjs --integration && node .vscode-test/out/runTest.js",
