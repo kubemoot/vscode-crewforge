@@ -5,7 +5,10 @@ import { badge, between, buttons, duration, escape, facts, note, section, SELECT
 
 /** What the fitness dashboard reads for one deployment. */
 export interface FitnessView {
+  /** The crew's technical name. */
   crew: string;
+  /** The name people read: the crew's display name, else its technical name. */
+  title: string;
   namespace: string;
   runs: FitnessRun[];
   /** The run shown in detail: the one asked for, else the newest. */
@@ -33,7 +36,8 @@ export function renderFitnessPage(v: FitnessView): string {
     ...(v.error ? [SELECT_CONTEXT_BUTTON] : []),
   ];
   const error = v.error ? `<p class="error">${escape(v.error)}</p>` : '';
-  return `<h1>Fitness: ${escape(v.crew)}</h1><p class="muted">${escape(v.namespace)}</p>${error}${buttons(top)}${runsSection(v)}${v.selected ? runSection(v, v.selected) : ''}`;
+  const where = v.title === v.crew ? v.namespace : `${v.crew} · ${v.namespace}`;
+  return `<h1>Fitness: ${escape(v.title)}</h1><p class="muted">${escape(where)}</p>${error}${buttons(top)}${runsSection(v)}${v.selected ? runSection(v, v.selected) : ''}`;
 }
 
 function runsSection(v: FitnessView): string {

@@ -66,7 +66,7 @@ describe('a live crew with its infrastructure', () => {
     expect(shown(leaves(d, 'fitness'))).toEqual(['lab-ops-smoke|CrewFitnessSuite · 1 scenario, 1 each']);
     expect(shown(leaves(d, 'deployment')).at(-1)).toBe('default|KubemootConfig · shared · operator defaults');
     expect(d.gateway?.metadata.name).toBe('lab-gateway');
-    expect((sectionsOf(summary, d) as Section[]).map((s) => sectionItem(s).description)).toEqual(['1 of 2 ready', '4, 1 ADL', '1', '3', '2', '5', '2', '2', '1', '1', undefined]);
+    expect((sectionsOf(summary, d) as Section[]).map((s) => sectionItem(s).description)).toEqual(['1 of 2 ready', '4, 1 ADL', '1', '3', '2', '5', '2', '2', '1', '0 scenarios · 1 run', undefined]);
   });
 
   it('marks a named object that is missing, and one a namespace account cannot read', async () => {
@@ -118,7 +118,7 @@ describe('a live crew with its infrastructure', () => {
 });
 
 describe('the Tools group of a live crew', () => {
-  const tree = () => new CrewTreeProvider(() => ({ source: '/k/config', context: 'lab', client: cluster as unknown as KubeClient }));
+  const tree = () => Object.assign(new CrewTreeProvider(() => ({ source: '/k/config', context: 'lab', client: cluster as unknown as KubeClient })), { grouped: true });
 
   async function toolsSection(provider: CrewTreeProvider): Promise<CrewNode> {
     const [ns] = await provider.getChildren();

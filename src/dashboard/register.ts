@@ -3,11 +3,14 @@ import { dashboardBase, namespaceFilter, type Connection } from '../connection';
 import { checkName } from '../k8s/paths';
 import { ConnectionStatus, showConnectionInfo } from '../connectionInfo';
 import type { CrewDetails } from '../crew/details';
+import { crewTitle } from '../crew/displayName';
 import { isGroup, type Group } from '../crew/groups';
 import { KubeTools } from '../deploy/deployer';
 import { liveDeployment, sourceForCrew } from '../deploy/liveCrew';
 import { ControlsReader, RunControls, type FitnessActivity } from '../fitness/controls';
 import { isRunning, listIterations, listRuns, type FitnessRun } from '../fitness/fitness';
+import { readDeployedScenarios } from '../fitness/deployed';
+import type { KubeTransport } from '../k8s/request';
 import { listCrews, type CrewSummary } from '../k8s/crews';
 import { DashboardApi } from '../kubemoot/dashboardApi';
 import { redeployTarget, type LoopMemory } from '../loop/state';
@@ -166,10 +169,10 @@ export class Dashboards implements vscode.Disposable {
   /** What the fitness dashboard shows for a deployment. */
   async fitnessView(at: { entry?: SourceEntry; deployment: Deployment }, selectedName?: string): Promise<FitnessView> {
     const { deployment } = at;
-    const base: FitnessView = { crew: deployment.crew.name, namespace: deployment.namespace, runs: [], iterations: [], controls: { suspend: false, cancel: false } };
-    base.cannotRun = at.entry ? undefined : 'No workspace source renders this crew, so CrewForge has no fitness definitions to run.';
+    const base: FitnessView = { crew: deployment.crew.name, title: fitnessTitle(at), namespace: deployment.namespace, runs: [], iterations: [], controls: { suspend: false, cancel: false } };
     try {
       const { client } = this.parts.connect();
+      base.cannotRun = await this.cannotRun(at, client);
       const kinds = await this.parts.service.kinds(client);
       const runs = await listRuns(client, kinds, deployment.namespace, deployment.crew.name);
       this.parts.activity.record(deployment.namespace, deployment.crew.name, runs);
@@ -178,6 +181,13 @@ export class Dashboards implements vscode.Disposable {
     } catch (err) {
       return { ...base, error: `Cannot read the fitness runs: ${errorText(err)}` };
     }
+  }
+
+  /** Why Run does nothing for a deployment: no workspace source and no deployed scenarios; undefined when it can run. */
+  private async cannotRun(at: { entry?: SourceEntry; deployment: Deployment }, client: KubeTransport): Promise<string | undefined> {
+    if (at.entry) return undefined;
+    const deployed = await readDeployedScenarios(client, at.deployment.namespace, at.deployment.crew.name).catch(() => []);
+    return deployed.length ? undefined : 'The crew carries no fitness scenarios and no workspace source renders it, so CrewForge has nothing to run.';
   }
 
   private async suiteDetail(run: FitnessRun | undefined, kinds: Awaited<ReturnType<SourceService['kinds']>>): Promise<Partial<FitnessView>> {
@@ -222,7 +232,7 @@ class CrewDashboard implements PageModel {
   ) {}
 
   title(): string {
-    return this.vitals?.name ?? this.target.entry?.crewName ?? this.target.crew?.name ?? this.target.entry?.source.label ?? 'Crew';
+    return this.vitals?.title ?? (crewTitle(this.target) || 'Crew');
   }
 
   async render(): Promise<string> {
@@ -362,6 +372,11 @@ class CrewsOverview implements PageModel {
   };
 }
 
+/** The name people read for the crew of a deployment: the source's display name, else the live crew's, else its name. */
+function fitnessTitle(at: { entry?: SourceEntry; deployment: Deployment }): string {
+  return crewTitle({ entry: at.entry, crew: at.deployment.crew });
+}
+
 /** The fitness runs of one deployment, with the selected run in detail; reads every few seconds while a run is going. */
 class FitnessDashboard implements PageModel {
   private view?: FitnessView;
@@ -378,7 +393,7 @@ class FitnessDashboard implements PageModel {
   }
 
   title(): string {
-    return `${this.at.deployment.crew.name} fitness`;
+    return `${fitnessTitle(this.at)} fitness`;
   }
 
   async render(): Promise<string> {

@@ -3,13 +3,15 @@ import { connect, namespaceFilter, type Connection } from '../connection';
 import { loadCrewDetails, type CrewDetails } from '../crew/details';
 import type { Group } from '../crew/groups';
 import { readToolCatalog, type ToolCatalog } from '../crew/toolCatalog';
-import { listCrews, type CrewSummary } from '../k8s/crews';
+import { scenariosDiffer } from '../fitness/deployed';
+import { titleOf } from '../crew/displayName';
+import { listCrewsEach, type CrewListing, type CrewSummary } from '../k8s/crews';
 import { channelOf } from '../source/deployments';
 import { discoverKinds, type KubemootKind } from '../source/live';
 import { memberItem, membersOf, readyIcon, sectionItem, sectionsOf, type DetailNode } from './crewDetailsTree';
-import { errorItems, errorLabel, type MessageNode } from './errors';
+import { errorDetail, errorItems, errorLabel, errorText, type MessageNode } from './errors';
 import { ReadingNotice } from './readingNotice';
-import { crewDescription, crewTooltip, groupByNamespace, type NamespaceGroup } from './treeModel';
+import { crewDescription, crewTooltip, groupByNamespace, sortCrews, type NamespaceGroup } from './treeModel';
 
 export type CrewNode =
   | { kind: 'connection'; label: string; tooltip: string }
@@ -22,7 +24,10 @@ export type LiveCrewNode = Extract<CrewNode, { kind: 'crew' }>;
 
 const crewKey = (crew: CrewSummary) => `${crew.namespace}/${crew.name}`;
 
-/** The Deployed Crews view: namespaces, the crews in each with their readiness, and what each crew is made of. */
+/**
+ * The Deployed Crews view: the crews with their readiness, as one flat list or grouped
+ * under their namespaces, and what each crew is made of.
+ */
 export class CrewTreeProvider implements vscode.TreeDataProvider<CrewNode> {
   private readonly changed = new vscode.EventEmitter<CrewNode | undefined>();
   readonly onDidChangeTreeData = this.changed.event;
@@ -43,6 +48,10 @@ export class CrewTreeProvider implements vscode.TreeDataProvider<CrewNode> {
     (text) => this.onMessage(text),
     () => (this.connection ?? this.connectTo()).context,
   );
+  /** The fitness scenario scripts the workspace source of a crew defines; undefined without a source. */
+  sourceScenarios?: (crew: CrewSummary) => Promise<{ name: string; content: string }[] | undefined>;
+  /** Crews grouped under their namespaces; false lists them flat, one row each. */
+  grouped = false;
   /** Whether a workspace source renders a crew, shown on its line; unknown (nothing shown) until set. */
   sourceOpen?: (crew: CrewSummary) => boolean | undefined;
 
@@ -83,7 +92,7 @@ export class CrewTreeProvider implements vscode.TreeDataProvider<CrewNode> {
   /** A crew's namespace, so a crew can be revealed, and a group's crew; namespaces and messages are roots. */
   getParent(node: CrewNode): CrewNode | undefined {
     if (node.kind === 'section') return { kind: 'crew', crew: node.crew };
-    if (node.kind !== 'crew') return undefined;
+    if (node.kind !== 'crew' || !this.grouped) return undefined;
     const group = groupByNamespace(this.crews).find((g) => g.namespace === node.crew.namespace);
     return group && { kind: 'namespace', group };
   }
@@ -102,7 +111,7 @@ export class CrewTreeProvider implements vscode.TreeDataProvider<CrewNode> {
       case 'namespace':
         return namespaceItem(node.group);
       case 'crew':
-        return crewItem(node.crew, this.details.get(crewKey(node.crew))?.archetype, this.fitnessBusy(node.crew.namespace, node.crew.name), this.sourceOpen?.(node.crew));
+        return crewItem(node.crew, { archetype: this.details.get(crewKey(node.crew))?.archetype, busy: this.fitnessBusy(node.crew.namespace, node.crew.name), sourceOpen: this.sourceOpen?.(node.crew), flat: !this.grouped });
       case 'section':
         return sectionItem(node);
       case 'member':
@@ -132,8 +141,15 @@ export class CrewTreeProvider implements vscode.TreeDataProvider<CrewNode> {
       if (this.kinds === kinds) this.kinds = undefined;
     });
     const details = await loadCrewDetails(connection.client, await kinds, crew.namespace, crew.name);
+    details.scenariosChanged = await this.scenariosChanged(crew, details);
     this.details.set(crewKey(crew), details);
     return details;
+  }
+
+  /** Whether the open source's scenarios differ from those the crew carries; unknown without a source, or when it cannot be read. */
+  private async scenariosChanged(crew: CrewSummary, details: CrewDetails): Promise<boolean | undefined> {
+    const source = await this.sourceScenarios?.(crew).catch(() => undefined);
+    return source && scenariosDiffer(details.scenarios ?? [], source);
   }
 
   private async loadCrew(crew: CrewSummary): Promise<CrewNode[]> {
@@ -147,17 +163,22 @@ export class CrewTreeProvider implements vscode.TreeDataProvider<CrewNode> {
   }
 
   private async loadRoot(): Promise<CrewNode[]> {
+    let failed: CrewListing['failed'];
     try {
       this.connection = this.connectTo();
       this.kinds = undefined;
-      this.crews = await listCrews(this.connection.client, namespaceFilter());
+      ({ crews: this.crews, failed } = await listCrewsEach(this.connection.client, namespaceFilter()));
     } catch (err) {
       this.crews = [];
       return errorItems(err);
     }
     const connection = this.connectionItem();
     const head: CrewNode[] = connection ? [{ kind: 'connection', ...connection }] : [];
-    return [...head, ...groupByNamespace(this.crews).map((group): CrewNode => ({ kind: 'namespace', group }))];
+    const unread = failed.map(({ namespace, error }): CrewNode => ({ kind: 'message', text: `Cannot read namespace ${namespace}: ${errorLabel(errorText(error))}`, detail: errorDetail(error) }));
+    const crews = this.grouped
+      ? groupByNamespace(this.crews).map((group): CrewNode => ({ kind: 'namespace', group }))
+      : sortCrews(this.crews).map((crew): CrewNode => ({ kind: 'crew', crew }));
+    return [...head, ...unread, ...crews];
   }
 }
 
@@ -199,12 +220,21 @@ export function sourceText(open: boolean | undefined): string {
   return open ? ' · source open' : ' · no local source';
 }
 
-function crewItem(crew: CrewSummary, archetype: string | undefined, busy: boolean, sourceOpen: boolean | undefined): vscode.TreeItem {
-  const item = new vscode.TreeItem(crew.name, vscode.TreeItemCollapsibleState.Collapsed);
+/** How a crew's row reads beyond the crew itself. */
+interface CrewRow {
+  archetype?: string;
+  busy: boolean;
+  sourceOpen?: boolean;
+  /** In the flat list, so its description names its namespace. */
+  flat: boolean;
+}
+
+function crewItem(crew: CrewSummary, row: CrewRow): vscode.TreeItem {
+  const item = new vscode.TreeItem(titleOf(crew), vscode.TreeItemCollapsibleState.Collapsed);
   item.id = `crew:${crew.namespace}/${crew.name}`;
-  item.description = `${crewDescription(crew)}${sourceText(sourceOpen)}`;
-  item.tooltip = crewTooltip(crew, archetype);
-  item.contextValue = `${crewContext(crew)}${busy ? '-running' : ''}`;
+  item.description = `${crewDescription(crew, row.flat)}${sourceText(row.sourceOpen)}`;
+  item.tooltip = crewTooltip(crew, row.archetype);
+  item.contextValue = `${crewContext(crew)}${row.busy ? '-running' : ''}`;
   const { icon, color } = readyIcon(crew.ready);
   item.iconPath = new vscode.ThemeIcon(icon, color ? new vscode.ThemeColor(color) : undefined);
   item.command = { command: 'crewforge.openCrewDashboard', title: 'Open Dashboard', arguments: [{ kind: 'crew', crew }] };

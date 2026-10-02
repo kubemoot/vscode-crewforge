@@ -88,6 +88,8 @@ export class FakeCluster implements KubeTransport {
       if (!this.namespaces.has(namespace)) throw new KubeError(`namespaces "${namespace}" not found`, 404);
       return { metadata: { name: namespace } };
     }
+    const configMaps = /^\/api\/v1\/namespaces\/([^/]+)\/configmaps\?labelSelector=(.*)$/.exec(path);
+    if (configMaps) return { items: this.labeled('ConfigMap', configMaps[1], decodeURIComponent(configMaps[2])) };
     const everywhere = /^\/apis\/kubemoot\.ai\/v1alpha1\/([a-z]+)$/.exec(path)?.[1];
     if (everywhere) return { items: this.objects.filter((o) => KINDS[o.kind] === everywhere) };
     const clusterObject = /^\/apis\/kubemoot\.ai\/v1alpha1\/([a-z]+)\/([^/]+)$/.exec(path);
@@ -95,6 +97,12 @@ export class FakeCluster implements KubeTransport {
     const m = /^\/apis\/kubemoot\.ai\/v1alpha1\/namespaces\/([^/]+)\/([^/]+)(?:\/([^/]+))?$/.exec(path);
     if (!m) throw new Error(`FakeCluster: no route for GET ${path}`);
     return this.namespaced(m[1], m[2], m[3]);
+  }
+
+  /** The objects of a kind in a namespace that carry every label of a `k=v,k=v` selector. */
+  private labeled(kind: string, ns: string, selector: string): Manifest[] {
+    const wanted = selector.split(',').map((pair) => pair.split('='));
+    return this.objects.filter((o) => o.kind === kind && o.metadata.namespace === ns && wanted.every(([k, v]) => o.metadata.labels?.[k] === v));
   }
 
   /** A namespace's objects of a kind, or one of them by name. */

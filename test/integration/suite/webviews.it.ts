@@ -13,7 +13,7 @@ describe('CrewForge webviews in a real VS Code', () => {
 
   it('the Crews Overview shows the crews, not "Reading..."', async () => {
     await vscode.commands.executeCommand('crewforge.openCrewsOverview');
-    const shown = await pageShows(api, 'overview', ['Crews Overview', 'lab-ops', 'demo', 'kind-fake']);
+    const shown = await pageShows(api, 'overview', ['Crews Overview', 'lab-ops', 'Demo Crew', 'demo', 'kind-fake']);
     assert.ok(!shown.includes('Reading...'), shown);
     const page = api.pages().find((p) => p.key === 'overview');
     assert.equal(page?.title, 'Crews Overview');
@@ -40,7 +40,7 @@ describe('CrewForge webviews in a real VS Code', () => {
     await vscode.commands.executeCommand('crewforge.openCrewDashboard', node);
     const key = `crew:${node.entry.source.root}`;
     await pageShows(api, key, ['demo', 'Source', 'somewhere']);
-    assert.equal(api.pages().find((p) => p.key === key)?.title, 'demo');
+    assert.equal(api.pages().find((p) => p.key === key)?.title, 'Demo Crew');
   });
 
   it('the crew dashboard of a source shows its Source, Live, and Diff tabs', async () => {
@@ -69,11 +69,11 @@ describe('CrewForge webviews in a real VS Code', () => {
     await pageShows(api, key, ['No local source is open', "Open the Crew's Source Folder..."]);
   });
 
-  it('the fitness dashboard lists the runs, titled "<name> fitness"', async () => {
+  it('the fitness dashboard lists the runs, titled "<display name> fitness"', async () => {
     const node = await liveCrew(api, 'somewhere', 'demo');
     await vscode.commands.executeCommand('crewforge.openFitnessDashboard', node);
     await pageShows(api, 'fitness:somewhere/demo', ['Runs', 'demo-smoke']);
-    assert.equal(api.pages().find((p) => p.key === 'fitness:somewhere/demo')?.title, 'demo fitness');
+    assert.equal(api.pages().find((p) => p.key === 'fitness:somewhere/demo')?.title, 'Demo Crew fitness');
   });
 
   it('the chat opens and shows the crew', async () => {

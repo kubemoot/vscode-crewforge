@@ -11,7 +11,7 @@ import { FakeCluster, obj, seedCrew } from './fakeCluster';
 const entry = { source: { kind: 'helm', root: '/w/demo', label: 'demo' }, identity: { id: 'local:demo' }, crewName: 'demo' } as SourceEntry;
 const crew = { name: 'demo', namespace: 'crew-demo', ready: true, phase: 'Ready' };
 const deployment = { namespace: 'crew-demo', crew, channel: 'helm' as const, linked: true };
-const base = { name: 'demo', context: 'lab', agents: [], agentsFrom: 'none', models: [], conversations: { total: 0, turns: 0, errors: [] }, fitnessRunning: false } as unknown as CrewVitals;
+const base = { name: 'demo', title: 'demo', context: 'lab', agents: [], agentsFrom: 'none', models: [], conversations: { total: 0, turns: 0, errors: [] }, fitnessRunning: false } as unknown as CrewVitals;
 
 const rendered = obj('Agent', 'demo-coordinator', 'crew-demo', { discussRole: 'coordinator', capabilities: ['reasoning'] });
 const live = { ...obj('Agent', 'demo-coordinator', 'crew-demo', { discussRole: 'coordinator', capabilities: ['tool-calling'] }), status: { ready: true } };

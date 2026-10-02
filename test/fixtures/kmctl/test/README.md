@@ -22,7 +22,7 @@ networking, config, and a reviewer.
 
 ```bash
 helm upgrade --install test . --namespace crew-test --create-namespace
-kmctl crew status test -n crew-test   # wait for Ready
+kmctl crew get test -n crew-test   # wait for Ready
 ```
 
 **2. Ask it something.**
@@ -66,9 +66,21 @@ same question: the answer now ends with that line.
   `values.yaml` to let it read every namespace.
 - `templates/models.yaml`: the Models the scheduler binds agents to.
 - `fitness/fitness.yaml`: the fitness suite, outside `templates/` so installing does not start a run.
+- `templates/fitness-scenarios.yaml`: a ConfigMap built from `fitness/`, so the deployed crew carries
+  its tests; CrewForge runs them from the live crew.
 
 Model family: `qwen`.
 Model providers: `ollama`.
+
+## What it can read
+
+By default the crew reads only the namespace it is installed into: its Role covers that
+namespace, and its prompts say so. Every answer names the namespace, and a question about
+other namespaces or the whole cluster gets a plain "this crew reads only ..." with the way
+to widen it. Set `access.clusterWide: true` in `values.yaml` and redeploy (the `helm upgrade` above) to
+widen both: a ClusterRole lets the tool server read every namespace, still read-only and
+without Secrets, and the prompts tell the crew to name the namespace of each resource it
+reports.
 
 ## Read-only by design
 

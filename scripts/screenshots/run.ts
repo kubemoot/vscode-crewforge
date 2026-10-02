@@ -7,7 +7,7 @@
  * cluster that has that crew deployed (with a fitness run in progress), starts VS Code with
  * CrewForge against a local fake API server, and lets suite.ts drive the editor and capture
  * each shot through VS Code's own debugging port. No real cluster, hostname, or person
- * appears in a picture. Needs `kmctl` 0.12.0 or later, `helm`, `git`, and a display
+ * appears in a picture. Needs a `kmctl` whose create takes --display-name, `helm`, `git`, and a display
  * (WSLg, or `xvfb-run -a npm run screenshots` on a headless machine).
  *
  *   --out <dir>     where the PNG files go (default .vscode-test/screenshots/out)
@@ -28,6 +28,7 @@ import type { Manifest } from '../../src/source/manifests';
 
 const repo = path.resolve(__dirname, '..', '..');
 const CREW = 'helpdesk';
+const DISPLAY_NAME = 'Help Desk';
 const NAMESPACE = 'crew-helpdesk';
 const CONTEXT = 'kind-dev';
 // Another program may hold the default port; CREWFORGE_SHOTS_PORT picks another.
@@ -46,7 +47,7 @@ function run(cmd: string, args: string[], cwd: string): string {
 /** A git workspace holding a crew chart scaffolded by kmctl, committed as it came. */
 function scaffold(workspace: string): string {
   fs.mkdirSync(workspace, { recursive: true });
-  run('kmctl', ['create', CREW, '--chart', '--members', '2', '--model-family', 'qwen', '--providers', 'ollama', '--no-input', '-o', workspace], workspace);
+  run('kmctl', ['create', CREW, '--display-name', DISPLAY_NAME, '--chart', '--members', '2', '--model-family', 'qwen', '--providers', 'ollama', '--no-input', '-o', workspace], workspace);
   const git = (...args: string[]) => run('git', ['-c', 'user.name=Docs', '-c', 'user.email=docs@example.org', ...args], workspace);
   git('init', '-q', '-b', 'main');
   git('remote', 'add', 'origin', REPO_URL);
@@ -261,7 +262,7 @@ async function main(): Promise<void> {
       extensionDevelopmentPath: repo,
       extensionTestsPath: path.join(__dirname, 'suite.js'),
       launchArgs: [workspace, '--user-data-dir', userData, '--disable-extensions', '--disable-workspace-trust', '--skip-welcome', '--skip-release-notes', '--disable-gpu', `--remote-debugging-port=${DEBUG_PORT}`],
-      extensionTestsEnv: { CREWFORGE_SHOTS_OUT: out, CREWFORGE_SHOTS_PORT: DEBUG_PORT, CREWFORGE_SHOTS_CHART: chart, CREWFORGE_SHOTS_NAMESPACE: NAMESPACE, CREWFORGE_SHOTS_CREW: CREW },
+      extensionTestsEnv: { CREWFORGE_SHOTS_OUT: out, CREWFORGE_SHOTS_PORT: DEBUG_PORT, CREWFORGE_SHOTS_CHART: chart, CREWFORGE_SHOTS_NAMESPACE: NAMESPACE, CREWFORGE_SHOTS_CREW: CREW, CREWFORGE_SHOTS_TITLE: DISPLAY_NAME },
     });
     optimize(out);
     console.log(`Screenshots written to ${out}`);

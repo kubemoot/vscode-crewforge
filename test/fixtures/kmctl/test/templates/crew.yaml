@@ -6,6 +6,7 @@ metadata:
     kubemoot.ai/crew: test
   annotations:
     kubemoot.ai/manage-namespace: "true"
+    kubemoot.ai/display-name: "test"
 spec:
   description: "A read-only guide to its own Kubernetes namespace, scaffolded by kmctl create."
   discussion:

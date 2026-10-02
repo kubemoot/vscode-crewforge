@@ -1,5 +1,5 @@
 import { dump } from 'js-yaml';
-import { namespacedCrewsPath } from '../k8s/paths';
+import { crewPath } from '../k8s/paths';
 import { KubeError, type KubeTransport } from '../k8s/request';
 import { ANNOTATIONS, type Channel, type Deployment } from '../source/deployments';
 import type { SourceIdentity } from '../source/identity';
@@ -143,10 +143,6 @@ function stamp(identity: SourceIdentity, channel: Channel, now = new Date()): Re
   if (identity.owner) annotations[ANNOTATIONS.owner] = identity.owner;
   if (identity.revision) annotations[ANNOTATIONS.revision] = identity.revision;
   return annotations;
-}
-
-function crewPath(namespace: string, crew: string): string {
-  return `${namespacedCrewsPath(namespace)}/${encodeURIComponent(crew)}`;
 }
 
 /** Objects as one multi-document YAML stream, for kubectl's standard input. */

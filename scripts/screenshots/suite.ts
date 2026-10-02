@@ -13,6 +13,8 @@ const port = process.env.CREWFORGE_SHOTS_PORT ?? '9333';
 const chart = process.env.CREWFORGE_SHOTS_CHART ?? '';
 const namespace = process.env.CREWFORGE_SHOTS_NAMESPACE ?? '';
 const crew = process.env.CREWFORGE_SHOTS_CREW ?? '';
+/** The crew's display name, which titles its pages. */
+const title = process.env.CREWFORGE_SHOTS_TITLE ?? crew;
 
 const WIDTH = 1400;
 const HEIGHT = 900;
@@ -277,9 +279,17 @@ export async function run(): Promise<void> {
   await sleep(2500);
   await dev.shoot('views', await dev.box(SIDEBAR));
 
+  await vscode.commands.executeCommand('workbench.actions.treeView.crewforge.crews.collapseAll');
+  await vscode.commands.executeCommand('workbench.actions.treeView.crewforge.sources.collapseAll');
+  await api.crewsView.reveal(await api.crews.sectionNode(live.crew, 'fitness'), { expand: true, select: true, focus: true });
+  await clearNotifications();
+  await dev.mouse('mouseMoved', 900, 600);
+  await sleep(2000);
+  await dev.shoot('live-fitness', await dev.box(SIDEBAR));
+
   await vscode.commands.executeCommand('workbench.action.closeSidebar');
   await vscode.commands.executeCommand('crewforge.openCrewDashboard', source);
-  const key = await pageOf(api, crew, ['Overview']);
+  const key = await pageOf(api, title, ['Overview']);
   await dev.fixSize(1140, 1000);
   await clearNotifications();
   await sleep(2500);
@@ -287,7 +297,7 @@ export async function run(): Promise<void> {
   await dev.fixSize();
 
   await vscode.commands.executeCommand('crewforge.openFitnessDashboard', live);
-  const fitnessKey = await pageOf(api, `${crew} fitness`, ['Pause', 'honest-no-fabrication']);
+  const fitnessKey = await pageOf(api, `${title} fitness`, ['Pause', 'honest-no-fabrication']);
   await clearNotifications();
   await sleep(2500);
   await dev.fixSize(780, 1000);

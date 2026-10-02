@@ -8,7 +8,7 @@ import { startFakeApi, type FakeApi } from './fakeApiServer';
 import { FakeCluster, seedCrew } from './fakeCluster';
 import { recorded, resetFake, ThemeIcon, TreeItem, TreeItemCollapsibleState } from './vscodeFake';
 
-const onCluster = (cluster: FakeCluster) => new CrewTreeProvider(() => ({ source: '/k/config', context: 'lab', client: cluster as unknown as KubeClient }));
+const onCluster = (cluster: FakeCluster) => Object.assign(new CrewTreeProvider(() => ({ source: '/k/config', context: 'lab', client: cluster as unknown as KubeClient })), { grouped: true });
 
 let api: FakeApi;
 beforeAll(async () => (api = await startFakeApi()));
@@ -33,7 +33,7 @@ describe('CrewTreeProvider', () => {
   });
 
   it('lists namespaces, then the crews in each, with their readiness', async () => {
-    const tree = new CrewTreeProvider();
+    const tree = Object.assign(new CrewTreeProvider(), { grouped: true });
     const roots = await tree.getChildren();
     expect(roots.map((n) => n.kind === 'namespace' && n.group.namespace)).toEqual(['team-a', 'team-b']);
     const ns = tree.getTreeItem(roots[0]);
@@ -56,7 +56,7 @@ describe('CrewTreeProvider', () => {
 
   it('shows why when the cluster cannot be read', async () => {
     recorded.settings.set('crewforge.kubeconfig', path.join(os.tmpdir(), 'no-such-kubeconfig'));
-    const tree = new CrewTreeProvider();
+    const tree = Object.assign(new CrewTreeProvider(), { grouped: true });
     const [node] = await tree.getChildren();
     expect(node.kind).toBe('message');
     const item = tree.getTreeItem(node);
@@ -136,7 +136,7 @@ describe('CrewTreeProvider', () => {
 
   it('asks only the namespaces in the filter setting', async () => {
     recorded.settings.set('crewforge.namespaces', ['team-a', ' ']);
-    const tree = new CrewTreeProvider();
+    const tree = Object.assign(new CrewTreeProvider(), { grouped: true });
     const [node] = await tree.getChildren();
     // the fake API only answers the cluster-wide list, so a per-namespace ask fails visibly
     expect(node.kind).toBe('message');

@@ -46,6 +46,22 @@ describe('activate', () => {
     expect(recorded.treeViews.map((v) => v.id)).toEqual(['crewforge.crews', 'crewforge.sources']);
   });
 
+  it('lists Deployed Crews flat until Group by Namespace, remembers the choice, and switches the title bar toggle', async () => {
+    expect(exported.crews.grouped).toBe(false);
+    expect(recorded.contexts.get('crewforge.groupByNamespace')).toBe(false);
+    await run('crewforge.groupByNamespace');
+    expect(exported.crews.grouped).toBe(true);
+    expect(recorded.contexts.get('crewforge.groupByNamespace')).toBe(true);
+    expect(workspaceState.get('crewforge.groupByNamespace')).toBe(true);
+    for (const s of subscriptions) s.dispose();
+    deactivate();
+    const again = activate({ globalStorageUri: Uri.file(storage), extensionUri: Uri.file('/ext'), subscriptions: [], workspaceState } as never);
+    expect(again.crews.grouped).toBe(true);
+    await run('crewforge.listFlat');
+    expect(again.crews.grouped).toBe(false);
+    expect(workspaceState.get('crewforge.groupByNamespace')).toBe(false);
+  });
+
   it('refreshes the Deployed Crews view on the command and on a CrewForge setting change', () => {
     const view = recorded.treeViews[0];
     const provider = view.options.treeDataProvider as { onDidChangeTreeData: (l: () => void) => void };
@@ -229,6 +245,22 @@ describe('commands', () => {
     await run('crewforge.showLiveYamlRaw', { kind: 'message', text: 'x' });
     await run('crewforge.showLiveYamlRaw');
     expect(recorded.shownDocuments).toEqual(['crewforge-live:/team-a/Crew/lab-ops.raw.yaml (yaml)']);
+  });
+
+  it('runs the live Fitness group commands only on their own nodes, and compares scenarios only with an open source', async () => {
+    for (const id of ['crewforge.runDeployedFitness', 'crewforge.runDeployedScenario', 'crewforge.showDeployedScenario', 'crewforge.pauseRun', 'crewforge.resumeRun', 'crewforge.stopRun', 'crewforge.runScenarioBatch']) {
+      await run(id);
+      await run(id, { kind: 'message', text: 'x' });
+    }
+    await run('crewforge.runSelectedScenarios');
+    await run('crewforge.runSelectedScenarios', { kind: 'fitness', entry: {}, deployment: {} }, []);
+    expect(recorded.info).toEqual([
+      'No scenarios are selected. Select scenario rows under a Fitness group, then choose Run Selected Scenarios.',
+      'No scenarios are selected. Select scenario rows under Fitness Scenarios, then choose Run Selected Scenarios.',
+    ]);
+    expect(recorded.errors).toEqual([]);
+    expect(recorded.shownDocuments).toEqual([]);
+    expect(await exported.crews.sourceScenarios?.({ name: 'lab-ops', namespace: 'team-a', ready: true, phase: 'Ready' })).toBeUndefined();
   });
 
   it('runs the lifecycle commands on a live crew from the Deployed Crews view', async () => {

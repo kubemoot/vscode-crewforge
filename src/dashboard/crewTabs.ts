@@ -116,8 +116,8 @@ export interface TabReads {
 
 /** Why there is no deployment to show: it could not be read, or there is none. */
 function notDeployed(v: CrewVitals): Missing {
-  if (v.deploymentError) return { why: `Cannot tell where ${v.name} is deployed: ${v.deploymentError}`, action: { ...SELECT_CONTEXT_BUTTON, primary: true } };
-  return { why: `${v.name} is not deployed in ${v.context}.`, action: v.source?.crewName ? DEPLOY_TO_NAMESPACE : undefined };
+  if (v.deploymentError) return { why: `Cannot tell where ${v.title} is deployed: ${v.deploymentError}`, action: { ...SELECT_CONTEXT_BUTTON, primary: true } };
+  return { why: `${v.title} is not deployed in ${v.context}.`, action: v.source?.crewName ? DEPLOY_TO_NAMESPACE : undefined };
 }
 
 const NO_SOURCE: Missing = { why: 'No local source is open for this crew, so there is nothing to show from it.', action: OPEN_SOURCE_FOLDER };

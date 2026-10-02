@@ -59,14 +59,21 @@ function fixedRoute(method: string, url: string, body: string, posts: FakeApi['p
   return undefined;
 }
 
+/** The path the cluster answers for a request: a Kubemoot group path, or a ConfigMap list with its label selector; undefined for anything else. */
+function clusterPath(route: string, url: string): string | undefined {
+  if (route.startsWith('/apis/kubemoot.ai/')) return route;
+  return /^\/api\/v1\/namespaces\/[^/]+\/configmaps$/.test(route) ? url : undefined;
+}
+
 /** A Kubemoot group request answered by the cluster, or a GET of a path the cluster has a body for (a service proxy path), with a Kubernetes Status body on failure. */
 async function clusterRoute(cluster: FakeCluster, method: string, url: string, body: string): Promise<Reply> {
   const route = url.split('?')[0];
   const proxied = method === 'GET' ? cluster.bodies.get(route) : undefined;
   if (proxied !== undefined) return { status: 200, body: proxied };
-  if (!route.startsWith('/apis/kubemoot.ai/')) return json({ kind: 'Status', message: `the fake API server has no ${route}` }, 404);
+  const asked = clusterPath(route, url);
+  if (!asked) return json({ kind: 'Status', message: `the fake API server has no ${route}` }, 404);
   try {
-    return { status: 200, body: await cluster.request(method, route, body ? JSON.parse(body) : undefined) };
+    return { status: 200, body: await cluster.request(method, asked, body ? JSON.parse(body) : undefined) };
   } catch (err) {
     const status = err instanceof KubeError && err.status ? err.status : 404;
     return json({ kind: 'Status', message: err instanceof Error ? err.message : String(err) }, status);

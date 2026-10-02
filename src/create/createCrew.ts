@@ -4,7 +4,7 @@ import type { Connection } from '../connection';
 import type { Exec } from '../source/render';
 import type { SourceNode } from '../views/sourceTree';
 import { kmctlProblem, scaffoldCrew, type CreateCrewRequest } from './scaffold';
-import { nameProblem } from '../k8s/paths';
+import { crewNameProblem, deriveCrewName, displayNameProblem } from '../crew/displayName';
 
 /** The families kmctl's scaffold has model sizes for. */
 const MODEL_FAMILIES = ['qwen', 'gemma', 'llama', 'mistral'];
@@ -22,7 +22,7 @@ export const CREW_SIZES: readonly { label: string; description: string }[] = [
 ];
 
 /**
- * Checks kmctl first, then asks for a name, a size, and a model family, and scaffolds
+ * Checks kmctl first, then asks for a display name and the technical name it suggests, a size, and a model family, and scaffolds
  * the crew as a chart in `folder` (New Kubemoot Crew Here in the Explorer) or in a folder the
  * developer picks. A missing or old kmctl, or a failed scaffold, is a modal error, so it
  * is seen before or instead of a toast that fades. `afterCreate` gets the new chart's folder.
@@ -39,7 +39,7 @@ export async function createCrewCommand(exec: Exec, connection: Pick<Connection,
   try {
     created = await scaffoldCrew(exec, request, connection);
   } catch (err) {
-    void vscode.window.showErrorMessage(`CrewForge could not create ${request.name}. ${err instanceof Error ? err.message : String(err)}`, { modal: true });
+    void vscode.window.showErrorMessage(`CrewForge could not create ${request.displayName}. ${err instanceof Error ? err.message : String(err)}`, { modal: true });
     return;
   }
   if (created.warnings) void vscode.window.showWarningMessage(created.warnings);
@@ -77,15 +77,36 @@ export async function showCreatedCrew(root: string, deps: CreatedDeps): Promise<
 async function askRequest(folder?: string): Promise<CreateCrewRequest | undefined> {
   const parent = folder ?? (await pickParent());
   if (!parent) return;
-  const name = await vscode.window.showInputBox({ title: `Create a crew in ${parent}`, prompt: 'Crew name (lowercase letters, digits, hyphens)', validateInput: (value) => nameProblem('crew', value) });
-  if (!name) return;
+  const names = await askNames(parent);
+  if (!names) return;
   const size = await vscode.window.showQuickPick(CREW_SIZES, { placeHolder: 'How many specialists beside the coordinator? Each size is a working crew that reads its own namespace.' });
   if (!size) return;
   const family = await vscode.window.showQuickPick([...MODEL_FAMILIES.map((f) => ({ label: f })), { label: 'none', description: 'add Models yourself' }], {
     placeHolder: 'Which model family should its Models use?',
   });
   if (!family) return;
-  return { name, parent, members: Number(size.label), modelFamily: family.label === 'none' ? undefined : family.label };
+  return { ...names, parent, members: Number(size.label), modelFamily: family.label === 'none' ? undefined : family.label };
+}
+
+/**
+ * Asks for the name people read, any text, then for the technical name, suggested from it
+ * the way a deploy suggests its namespace, and editable.
+ */
+async function askNames(parent: string): Promise<{ displayName: string; name: string } | undefined> {
+  const display = await vscode.window.showInputBox({
+    title: `Create a crew in ${parent}`,
+    prompt: 'Crew name, as people will read it: any text, such as "Homelab Health Guide"',
+    validateInput: displayNameProblem,
+  });
+  const displayName = display?.trim();
+  if (!displayName) return undefined;
+  const name = await vscode.window.showInputBox({
+    title: `Kubernetes name for ${displayName}`,
+    prompt: "Use lowercase letters, digits and hyphens; it becomes the Kubernetes name of the crew's objects and its chart's folder.",
+    value: deriveCrewName(displayName),
+    validateInput: crewNameProblem,
+  });
+  return name?.trim() ? { displayName, name: name.trim() } : undefined;
 }
 
 const BROWSE = '$(folder-opened) Browse...';

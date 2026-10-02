@@ -5,6 +5,7 @@ import { byCodeUnits, LINE_BREAK } from '../text';
 import { clusterPath, isOwned, listKind, objectPath, type KubemootKind } from '../source/live';
 import { KUBEMOOT_GROUP, type Manifest } from '../source/manifests';
 import { errorText } from '../views/errors';
+import { readDeployedScenarios, type DeployedScenario } from '../fitness/deployed';
 import { CREW_LABEL, liveOwn, relatedOf, SYSTEM_NAMESPACE, type RelatedGroups } from './related';
 
 export { CREW_LABEL } from './related';
@@ -82,6 +83,10 @@ export interface CrewDetails {
   gateway?: Manifest;
   /** Kinds that could not be read, such as a PromptModule list the account may not see. */
   problems: string[];
+  /** The fitness scenarios deployed with the crew, from its scenario ConfigMaps. */
+  scenarios?: DeployedScenario[];
+  /** True when the workspace source's scenarios differ from the deployed ones; unknown without a source. */
+  scenariosChanged?: boolean;
 }
 
 type Obj = Manifest & { spec?: Record<string, unknown>; status?: Record<string, unknown> };
@@ -272,7 +277,14 @@ export async function loadCrewDetails(client: KubeTransport, kinds: Map<string, 
   const crewKind = kinds.get('Crew') ?? { kind: 'Crew', plural: 'crews', namespaced: true };
   const raw = JSON.parse(await client.request('GET', objectPath(crewKind, namespace, name))) as Obj;
   const crew: Obj = { ...raw, apiVersion: raw.apiVersion ?? `${KUBEMOOT_GROUP}/v1alpha1`, kind: raw.kind ?? 'Crew' };
-  const [members, extra] = await Promise.all([Promise.all(MEMBER_KINDS.map((k) => listOptional(client, kinds, k, namespace))), readPool(client, kinds, namespace)]);
+  const [members, extra, deployed] = await Promise.all([
+    Promise.all(MEMBER_KINDS.map((k) => listOptional(client, kinds, k, namespace))),
+    readPool(client, kinds, namespace),
+    readDeployedScenarios(client, namespace, name).then(
+      (scenarios) => ({ scenarios, problem: undefined }),
+      (err: unknown) => ({ scenarios: [], problem: `fitness scenario ConfigMaps: ${errorText(err)}` }),
+    ),
+  ]);
   const [agents, skills, modules, servers, policies] = members;
   const member = (o: Obj) => o.metadata.labels?.[CREW_LABEL] === name;
   const agentObjects = agents.items.filter(member);
@@ -292,7 +304,8 @@ export async function loadCrewDetails(client: KubeTransport, kinds: Map<string, 
     archetype: archetypeOf(name, policies.items),
     related: relatedOf({ crew: name, namespace, agents: agentObjects, skills: skillObjects, servers: mcpServers.map((s) => s.name), pool: extra.pool, own: liveOwn(crew), missing: missingText(extra.unreadable) }),
     gateway,
-    problems: [...members.map((l) => l.problem), ...extra.problems].filter((p): p is string => p !== undefined),
+    problems: [...members.map((l) => l.problem), ...extra.problems, deployed.problem].filter((p): p is string => p !== undefined),
+    scenarios: deployed.scenarios,
   };
 }
 

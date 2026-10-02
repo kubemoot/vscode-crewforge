@@ -2,17 +2,23 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import type { DeployCommands } from '../deploy/commands';
-import { nameProblem } from '../k8s/paths';
+import { crewNameProblem, DISPLAY_NAME_ANNOTATION, displayNameProblem } from '../crew/displayName';
 import type { DeploymentNode, SourceNode, SourceTreeProvider } from '../views/sourceTree';
 import { errorText } from '../views/errors';
 import { refuseIfDirty, renameWithEdit } from './fsEdit';
+import { setChartDisplayName, setCrewDisplayName } from './displayNameEdit';
 import { renameCrewFiles } from './rename';
-import { fitnessFolders, type SourceEntry } from './service';
+import { fitnessFolders, sourceTitle, type SourceEntry } from './service';
 
 export interface SourceActionDeps {
   sources: Pick<SourceTreeProvider, 'loadDeployments' | 'reload' | 'known'>;
   deploy: Pick<DeployCommands, 'removeDeployment'>;
+  /** Merges annotations into a live Crew. */
+  annotateCrew: (namespace: string, crew: string, annotations: Record<string, string>) => Promise<void>;
 }
+
+/** The two ways to rename a crew, as the picker offers them. */
+type RenameChoice = vscode.QuickPickItem & { change: 'display' | 'technical' };
 
 const UNDEPLOY_FIRST = 'Undeploy First';
 const KEEP_DEPLOYED = 'Keep It Deployed';
@@ -82,10 +88,8 @@ export class SourceActions {
   }
 
   /**
-   * Renames the crew in its source: the chart's name, the Crew, and every name built on
-   * the crew's (its Agents, PromptModules, policy, fitness suites) and the references to
-   * them; the folder too when it carries the crew's name. A deployed crew keeps its old
-   * name until it is undeployed, so the developer is offered that first.
+   * Renames a crew: its display name (the default, an annotation edit that needs no
+   * redeploy), or its technical name (every object built on it, the heavier path).
    */
   async rename(node?: SourceNode): Promise<void> {
     const entry = await this.sourceFor(node, 'rename');
@@ -94,8 +98,57 @@ export class SourceActions {
       void vscode.window.showInformationMessage(`${label(entry)} declares no Crew to rename.`);
       return;
     }
+    const choice = await vscode.window.showQuickPick(renameChoices(entry, entry.crewName), { placeHolder: `Rename ${sourceTitle(entry)}: which name?` });
+    if (choice?.change === 'display') await this.renameDisplay(entry, entry.crewName);
+    if (choice?.change === 'technical') await this.renameTechnical(entry, entry.crewName);
+  }
+
+  /**
+   * Changes the display name: the Crew's annotation in its source file (and a chart's
+   * Chart.yaml), and on each deployed copy, so it shows without a redeploy. A copy Flux
+   * deploys takes it from git.
+   */
+  private async renameDisplay(entry: SourceEntry, crewName: string): Promise<void> {
+    const crewFile = entry.rendered?.find((r) => r.manifest.kind === 'Crew' && r.manifest.metadata.name === crewName)?.file;
+    if (!crewFile) {
+      void vscode.window.showErrorMessage(`CrewForge cannot tell which file holds the Crew ${crewName}; add the annotation ${DISPLAY_NAME_ANNOTATION} to it by hand.`);
+      return;
+    }
+    const files = [crewFile, ...chartFileOf(entry)];
+    if (refuseIfDirty(files, 'changing the display name; it rewrites the file')) return;
+    const value = await askDisplayName(sourceTitle(entry), crewName);
+    if (!value) return;
+    try {
+      const changed = await writeDisplayName(entry, crewFile, value);
+      const live = await this.annotateDeployed(entry, crewName, value);
+      void vscode.window.showInformationMessage(`Changed the display name of ${crewName} to "${value}" in ${changed.map((f) => path.basename(f)).join(' and ')}.${live}`);
+    } catch (err) {
+      void vscode.window.showErrorMessage(`CrewForge: changing the display name of ${crewName} failed: ${errorText(err)}`);
+    } finally {
+      await this.deps.sources.reload();
+    }
+  }
+
+  /** Sets the display name on each deployed copy of the crew outside Flux; says where it shows now and where git deploys it. */
+  private async annotateDeployed(entry: SourceEntry, crewName: string, value: string): Promise<string> {
+    const deployments = await this.deploymentsOf(entry);
+    const flux = deployments.filter((d) => d.deployment.channel === 'flux');
+    const direct = deployments.filter((d) => d.deployment.channel !== 'flux');
+    for (const d of direct) await this.deps.annotateCrew(d.deployment.namespace, crewName, { [DISPLAY_NAME_ANNOTATION]: value });
+    const shown = direct.length ? ` The deployed crew in ${namespacesOf(direct)} shows it now, without a redeploy.` : '';
+    const git = flux.length ? ` Flux deploys ${namespacesOf(flux)} from git: commit and push the change.` : '';
+    return shown + git;
+  }
+
+  /**
+   * Renames the crew in its source: the chart's name, the Crew, and every name built on
+   * the crew's (its Agents, PromptModules, policy, fitness suites) and the references to
+   * them; the folder too when it carries the crew's name. A display name that was the old
+   * name becomes the new one. A deployed crew keeps its old name until it is undeployed,
+   * so the developer is offered that first.
+   */
+  private async renameTechnical(entry: SourceEntry, from: string): Promise<void> {
     if (refuseIfDirty([entry.source.root, ...outsideFitness(entry)], 'renaming the crew; the rename rewrites its files')) return;
-    const from = entry.crewName;
     const to = await askNewName(from);
     if (!to) return;
     const prompt = (where: string) => renamePrompt(from, to, where);
@@ -107,14 +160,22 @@ export class SourceActions {
     const changed: string[] = [];
     try {
       await renameCrewFiles(entry.source.root, from, to, outsideFitness(entry), changed);
+      await this.followDisplayName(entry, from, to, changed);
       const moved = isWorkspaceFolder(entry.source.root) ? undefined : await renameFolder(entry.source.root, from, to);
       const folder = moved ? ` and its folder to ${moved}` : '';
-      void vscode.window.showInformationMessage(`Renamed crew ${from} to ${to} in ${files(changed.length)}${folder}. Redeploy to deploy it as ${to}.`);
+      void vscode.window.showInformationMessage(`Renamed crew ${from} to ${to} in ${files(new Set(changed).size)}${folder}. Redeploy to deploy it as ${to}.`);
     } catch (err) {
-      void vscode.window.showErrorMessage(`CrewForge: renaming ${from} stopped after changing ${files(changed.length)}: ${errorText(err)}. git checkout restores them.`);
+      void vscode.window.showErrorMessage(`CrewForge: renaming ${from} stopped after changing ${files(new Set(changed).size)}: ${errorText(err)}. git checkout restores them.`);
     } finally {
       await this.deps.sources.reload();
     }
+  }
+
+  /** A display name that is the old technical name becomes the new one, so it never names a crew that is gone. */
+  private async followDisplayName(entry: SourceEntry, from: string, to: string, changed: string[]): Promise<void> {
+    const crewFile = entry.rendered?.find((r) => r.manifest.kind === 'Crew')?.file;
+    if (entry.displayName !== from || !crewFile) return;
+    changed.push(...(await writeDisplayName(entry, crewFile, to)));
   }
 
   /** Why a source's folder must not go to the trash: it is a workspace folder, or holds another crew source. */
@@ -166,14 +227,65 @@ function renamePrompt(from: string, to: string, where: string): { message: strin
   };
 }
 
+function renameChoices(entry: SourceEntry, crewName: string): RenameChoice[] {
+  return [
+    {
+      label: 'Change the Display Name',
+      description: 'what people read; no redeploy',
+      detail: `Now "${sourceTitle(entry)}". Edits the Crew's ${DISPLAY_NAME_ANNOTATION} annotation in the source and on each deployed copy.`,
+      change: 'display',
+    },
+    {
+      label: 'Change the Kubernetes Name...',
+      description: 'renames every object built on it',
+      detail: `Now ${crewName}. The chart, the Crew, its agents, prompt modules, policy, and fitness suites change with it; a deployed crew keeps the old name until it is redeployed as a new crew.`,
+      change: 'technical',
+    },
+  ];
+}
+
 async function askNewName(from: string): Promise<string | undefined> {
   const value = await vscode.window.showInputBox({
     title: `Rename crew ${from}`,
-    prompt: 'The new crew name. The chart, the Crew, and the names built on it (agents, prompt modules, policy, fitness suites) change with it.',
+    prompt: 'The new Kubernetes name. The chart, the Crew, and the names built on it (agents, prompt modules, policy, fitness suites) change with it.',
     value: from,
-    validateInput: (v) => (v.trim() === from ? 'Enter a different name.' : nameProblem('crew', v)),
+    validateInput: (v) => (v.trim() === from ? 'Enter a different name.' : crewNameProblem(v)),
   });
   return value?.trim() || undefined;
+}
+
+async function askDisplayName(current: string, crewName: string): Promise<string | undefined> {
+  const value = await vscode.window.showInputBox({
+    title: `Display name of ${crewName}`,
+    prompt: 'The name people read: any text. The Kubernetes name stays the same.',
+    value: current,
+    validateInput: (v) => (v.trim() === current ? 'Enter a different name.' : displayNameProblem(v)),
+  });
+  return value?.trim() || undefined;
+}
+
+/** A chart's Chart.yaml, which carries the display name too; none for a bundle. */
+function chartFileOf(entry: SourceEntry): string[] {
+  return entry.source.kind === 'helm' ? [path.join(entry.source.root, 'Chart.yaml')] : [];
+}
+
+/** Writes the display name into the Crew's file and a chart's Chart.yaml; returns the files changed. */
+async function writeDisplayName(entry: SourceEntry, crewFile: string, value: string): Promise<string[]> {
+  const helm = entry.source.kind === 'helm';
+  const edits: [string, (text: string) => string | undefined][] = [
+    [crewFile, (text) => setCrewDisplayName(text, value, helm)],
+    ...chartFileOf(entry).map((file): [string, (text: string) => string | undefined] => [file, (text) => setChartDisplayName(text, value)]),
+  ];
+  const changed: string[] = [];
+  for (const [file, edit] of edits) {
+    const before = await fs.readFile(file, 'utf8');
+    const after = edit(before);
+    if (after === undefined) throw new Error(`${path.basename(file)} holds its annotations in a form CrewForge leaves to you; add ${DISPLAY_NAME_ANNOTATION} to them by hand`);
+    if (after === before) continue;
+    await fs.writeFile(file, after, 'utf8');
+    changed.push(file);
+  }
+  return changed;
 }
 
 async function pickDeployment(entry: SourceEntry, deployments: DeploymentNode[]): Promise<DeploymentNode | undefined> {

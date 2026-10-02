@@ -4,6 +4,7 @@ import * as vscode from 'vscode';
 import { connect, type Connection } from './connection';
 import { loadKubeconfig } from './k8s/kubeconfig';
 import type { CrewSummary } from './k8s/crews';
+import { crewPath } from './k8s/paths';
 import { ChatPanel, type ChatLinks } from './panels/chatPanel';
 import { selectionPrompt } from './panels/selectionPrompt';
 import { createCrewCommand, showCreatedCrew } from './create/createCrew';
@@ -22,7 +23,11 @@ import { execProgram, listScripts, readText, readYamlFiles } from './source/node
 import { connectionLines } from './connectionInfo';
 import { Dashboards } from './dashboard/register';
 import { PagePanel, type PageState } from './dashboard/pagePanel';
-import { FitnessActivity } from './fitness/controls';
+import { FitnessActivity, RunControls } from './fitness/controls';
+import { LiveFitness } from './fitness/liveFitness';
+import { FitnessBatches } from './fitness/batch';
+import { SourceFitness } from './fitness/sourceFitness';
+import { readDeployedScenarios } from './fitness/deployed';
 import { registerScenarioCommands } from './fitness/scenarioCommands';
 import { ScenarioFiles } from './fitness/scenarios';
 import { LoopMemory } from './loop/state';
@@ -42,6 +47,22 @@ import { showError } from './views/notify';
 
 const REFRESH_MS = 30_000;
 
+/** True for a Crew Sources node: every one carries its source entry; Deployed Crews nodes never do. */
+export function isSourceNode(node: CrewNode | SourceNode | undefined): node is SourceNode {
+  return node !== undefined && 'entry' in node;
+}
+
+/** The context key and workspace memory of Deployed Crews' grouping: true groups crews under their namespaces. */
+export const GROUP_BY_NAMESPACE = 'crewforge.groupByNamespace';
+
+/** Lists Deployed Crews flat or grouped by namespace, remembers it for the workspace, and switches the title bar's toggle. */
+export async function setGrouping(context: Pick<vscode.ExtensionContext, 'workspaceState'>, tree: CrewTreeProvider, grouped: boolean): Promise<void> {
+  tree.grouped = grouped;
+  await context.workspaceState.update(GROUP_BY_NAMESPACE, grouped);
+  await vscode.commands.executeCommand('setContext', GROUP_BY_NAMESPACE, grouped);
+  tree.refresh();
+}
+
 /**
  * What CrewForge hands other code once it is active: its views and what each open page
  * shows. The integration tests read it to check what a person would see.
@@ -60,7 +81,8 @@ export interface CrewForgeApi {
 export function activate(context: vscode.ExtensionContext): CrewForgeApi {
   const store = new ConversationStore(path.join(context.globalStorageUri.fsPath, 'conversations'));
   const tree = new CrewTreeProvider();
-  const view = vscode.window.createTreeView('crewforge.crews', { treeDataProvider: tree, showCollapseAll: true });
+  void guard(() => setGrouping(context, tree, context.workspaceState.get<boolean>(GROUP_BY_NAMESPACE, false)));
+  const view = vscode.window.createTreeView('crewforge.crews', { treeDataProvider: tree, showCollapseAll: true, canSelectMany: true });
   const service = new SourceService({ exec: execProgram, readText, readYamlFiles, listFiles: listWorkspaceFiles, listScripts });
   const sources = new SourceTreeProvider(service);
   const links: ChatLinks = {
@@ -81,7 +103,7 @@ export function activate(context: vscode.ExtensionContext): CrewForgeApi {
   tree.fitnessBusy = busy;
   tree.sourceOpen = (crew) => (sources.hasLoaded ? sourceForCrew(crew, sources.known) !== undefined : undefined);
   sources.onRuns = (namespace, crew, runs) => activity.record(namespace, crew, runs);
-  const sourcesView = vscode.window.createTreeView('crewforge.sources', { treeDataProvider: sources, showCollapseAll: true });
+  const sourcesView = vscode.window.createTreeView('crewforge.sources', { treeDataProvider: sources, showCollapseAll: true, canSelectMany: true });
   tree.onMessage = (text) => (view.message = text);
   sources.onMessage = (text) => (sourcesView.message = text);
   const documents = new ManifestDocuments();
@@ -93,13 +115,37 @@ export function activate(context: vscode.ExtensionContext): CrewForgeApi {
     sources.refresh();
     tree.refresh();
   });
-  const actions = new SourceActions({ sources, deploy });
+  const actions = new SourceActions({
+    sources,
+    deploy,
+    annotateCrew: async (namespace, crew, annotations) => {
+      await (tree.connection ?? connect()).client.request('PATCH', crewPath(namespace, crew), { metadata: { annotations } });
+    },
+  });
   const liveDocuments = new LiveDocuments(() => tree.connection ?? connect());
   const yaml = new YamlCommands(documents, liveDocuments, service);
+  tree.sourceScenarios = async (crew) => {
+    const entry = sourceForCrew(crew, sources.known);
+    return entry && service.scenarioScripts(entry, crew.namespace);
+  };
+  const batches = new FitnessBatches({
+    runDefinition: (deployment, definition) => fitness.runDefinition(deployment, definition),
+    openDashboard: (deployment, run) => {
+      dashboards.openFitness({ kind: 'crew', crew: deployment.crew }, run);
+      tree.refresh();
+    },
+  });
+  const liveFitness = new LiveFitness({
+    batches,
+    controls: new RunControls(() => (tree.connection ?? connect()).client, (client) => service.kinds(client)),
+    scenarios: (crew) => readDeployedScenarios((tree.connection ?? connect()).client, crew.namespace, crew.name),
+    refresh: () => tree.refresh(),
+  });
   const live = new LiveCrewActions({
     sources: async () => (sources.known.length ? sources.known : service.load()),
     deploy,
     fitness,
+    deployedFitness: (crew) => liveFitness.runCrew(crew),
     details: (crew) => tree.detailsOf(crew),
     follow: (deployment) => followDeployment(deployment, () => tree.refresh()),
   });
@@ -115,6 +161,12 @@ export function activate(context: vscode.ExtensionContext): CrewForgeApi {
     output,
     guard,
   });
+  const sourceFitness = new SourceFitness({ batches, scenarioScripts: (entry, namespace) => service.scenarioScripts(entry, namespace), redeployTarget: (node) => loop.redeployTargetOf(node) });
+  /** Run Scenarios... on a Fitness node: a source's scenarios in Crew Sources, a live crew's deployed ones in Deployed Crews. */
+  const chooseBatch = (node?: CrewNode | SourceNode): Promise<void> => {
+    if (isSourceNode(node)) return sourceFitness.choose(node);
+    return liveFitness.choose(node?.kind === 'section' ? node : undefined);
+  };
   const dashboards = new Dashboards({
     extensionUri: context.extensionUri,
     crewforgeVersion: (context.extension?.packageJSON as { version?: string } | undefined)?.version ?? 'dev',
@@ -204,7 +256,7 @@ export function activate(context: vscode.ExtensionContext): CrewForgeApi {
       }),
     ),
     vscode.commands.registerCommand('crewforge.showConnectionInfo', () => guard(() => dashboards.showConnection())),
-    ...registerScenarioCommands({ files: new ScenarioFiles(), fitness, redeployTarget: (node) => loop.redeployTargetOf(node), readText, reload: () => sources.reload(), guard }),
+    ...registerScenarioCommands({ files: new ScenarioFiles(), runScenario: (node) => sourceFitness.runOne(node), reload: () => sources.reload(), guard }),
     sourcesView,
     new SourceWatcher(() => sources.known.map((e) => e.source.root), () => sources.reload()),
     vscode.languages.registerCodeLensProvider({ language: 'yaml' }, new CrewCodeLens(sources)),
@@ -231,6 +283,16 @@ export function activate(context: vscode.ExtensionContext): CrewForgeApi {
       ),
     ),
     vscode.commands.registerCommand('crewforge.showRun', (node?: SourceNode) => guard(() => fitness.showRun(node))),
+    vscode.commands.registerCommand('crewforge.runDeployedFitness', (node?: CrewNode) => guard(() => liveFitness.runAll(node?.kind === 'section' ? node : undefined))),
+    vscode.commands.registerCommand('crewforge.runDeployedScenario', (node?: CrewNode) => guard(() => liveFitness.runOne(node?.kind === 'member' ? node : undefined))),
+    vscode.commands.registerCommand('crewforge.runScenarioBatch', (node?: CrewNode | SourceNode) => guard(() => chooseBatch(node))),
+    vscode.commands.registerCommand('crewforge.runSelectedScenarios', (clicked?: CrewNode | SourceNode, selected?: (CrewNode | SourceNode)[]) =>
+      guard(() => (isSourceNode(clicked) ? sourceFitness.runSelected(clicked, selected as SourceNode[]) : liveFitness.runSelected(clicked, selected as CrewNode[]))),
+    ),
+    vscode.commands.registerCommand('crewforge.showDeployedScenario', (node?: CrewNode) => guard(() => liveFitness.show(node?.kind === 'member' ? node : undefined))),
+    vscode.commands.registerCommand('crewforge.pauseRun', (node?: CrewNode) => guard(() => liveFitness.pause(node?.kind === 'member' ? node : undefined))),
+    vscode.commands.registerCommand('crewforge.resumeRun', (node?: CrewNode) => guard(() => liveFitness.resume(node?.kind === 'member' ? node : undefined))),
+    vscode.commands.registerCommand('crewforge.stopRun', (node?: CrewNode) => guard(() => liveFitness.stop(node?.kind === 'member' ? node : undefined))),
     vscode.commands.registerCommand('crewforge.followRollout', either((crew) => live.followRollout(crew), (node) => followRolloutCommand(node, () => sources.refresh()))),
     vscode.commands.registerCommand('crewforge.removeDeployment', either((crew) => live.remove(crew), (node) => actions.undeploy(node))),
     vscode.commands.registerCommand('crewforge.deleteSource', (node?: SourceNode) => guard(() => actions.deleteSource(node))),
@@ -248,6 +310,8 @@ export function activate(context: vscode.ExtensionContext): CrewForgeApi {
     ),
     vscode.commands.registerCommand('crewforge.removeFromSource', (node?: SourceNode) => guard(() => definitions.remove(node))),
     vscode.commands.registerCommand('crewforge.refreshCrews', () => tree.refresh()),
+    vscode.commands.registerCommand('crewforge.groupByNamespace', () => setGrouping(context, tree, true)),
+    vscode.commands.registerCommand('crewforge.listFlat', () => setGrouping(context, tree, false)),
     vscode.commands.registerCommand('crewforge.askCrew', (node?: CrewNode) => commands.askCrew(node)),
     vscode.commands.registerCommand('crewforge.askAboutSelection', () => commands.askAboutSelection()),
     vscode.commands.registerCommand('crewforge.continueConversation', () => commands.continueConversation()),

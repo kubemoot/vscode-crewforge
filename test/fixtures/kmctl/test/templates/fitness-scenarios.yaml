@@ -1,0 +1,13 @@
+# The crew's fitness scenarios, deployed with it so the live crew carries its tests.
+# CrewForge lists and runs them from here; nothing runs until someone starts a run.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: test-fitness
+  labels:
+    kubemoot.ai/crew: test
+    kubemoot.ai/fitness-kind: scenarios
+data:
+{{- range $path, $bytes := .Files.Glob "fitness/*" }}
+  {{ base $path | quote }}: {{ toString $bytes | quote }}
+{{- end }}

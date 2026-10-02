@@ -1,3 +1,4 @@
+import { crewTitle, technicalName } from '../crew/displayName';
 import { toAgent, type AgentInfo, type CrewDetails } from '../crew/details';
 import { liveCounts, type GroupCount } from '../crew/groups';
 import type { Declarations } from '../source/declared';
@@ -38,7 +39,10 @@ export interface HelmInfo {
 }
 
 export interface CrewVitals {
+  /** The crew's technical name, its Kubernetes name. */
   name: string;
+  /** The name people read: the display name, else the technical name. */
+  title: string;
   description?: string;
   context: string;
   source?: SourceEntry;
@@ -89,8 +93,7 @@ export async function gatherVitals(target: CrewTarget, deps: VitalsDeps): Promis
   const { deployment, deploymentError, drift, driftError } = await deploymentFor(target, deps);
   const declared = await declaredOf(target.entry, deps);
   const vitals: CrewVitals = {
-    name: nameOf(target, deployment),
-    description: deployment?.crew.description ?? declared.description ?? target.entry?.chart?.description,
+    ...headerOf(target, declared, deployment),
     context: deps.context(),
     source: target.entry,
     sourceAt: declared.at,
@@ -109,9 +112,14 @@ export async function gatherVitals(target: CrewTarget, deps: VitalsDeps): Promis
   return deployment ? withLive(vitals, deployment, deps) : vitals;
 }
 
-/** The crew's name: the one its source renders, else the live crew's, else the source folder's. */
-function nameOf(target: CrewTarget, deployment?: Deployment): string {
-  return target.entry?.crewName ?? deployment?.crew.name ?? target.crew?.name ?? target.entry?.source.label ?? '';
+/** What heads the dashboard: the technical name, the name people read, and the description, live first, then the source's. */
+function headerOf(target: CrewTarget, declared: Declared, deployment?: Deployment): Pick<CrewVitals, 'name' | 'title' | 'description'> {
+  const sources = { entry: target.entry, crew: deployment?.crew ?? target.crew };
+  return {
+    name: technicalName(sources),
+    title: crewTitle(sources),
+    description: deployment?.crew.description ?? declared.description ?? target.entry?.chart?.description,
+  };
 }
 
 type Found = Pick<CrewVitals, 'deployment' | 'deploymentError' | 'drift' | 'driftError'>;

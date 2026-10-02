@@ -9,7 +9,7 @@ import { fluxSummary, type FluxState } from '../gitops/flux';
 import { GROUPS, type GroupInfo } from '../crew/groups';
 import type { DeclaredItem, DeclaredSection } from '../source/declared';
 import { locationOf } from '../source/render';
-import { sourceOf, type SourceEntry, type SourceService } from '../source/service';
+import { sourceOf, sourceTitle, type SourceEntry, type SourceService } from '../source/service';
 import { errorItems, errorText, type MessageNode } from './errors';
 import { ReadingNotice } from './readingNotice';
 
@@ -363,15 +363,26 @@ export function openAt(file: string, line: number): vscode.Command {
   return { command: 'vscode.open', title: 'Open', arguments: [vscode.Uri.file(file), { selection: at }] };
 }
 
+/** What a source is, beside its name: its Kubernetes name when people read another, its kind, and its folder when that is not named after the crew. */
+function sourceWhat(entry: SourceEntry): string {
+  const folder = entry.crewName && entry.crewName !== entry.source.label ? ` in ${entry.source.label}` : '';
+  const technical = entry.crewName && entry.crewName !== sourceTitle(entry) ? `${entry.crewName} · ` : '';
+  return `${technical}${entry.source.kind}${folder}`;
+}
+
+function sourceTooltip(entry: SourceEntry): string {
+  const named = entry.crewName ? `Kubernetes name: ${entry.crewName}` : '';
+  const lines = [entry.source.root, named, entry.identity.id, entry.identity.revision ? `revision ${entry.identity.revision}` : '', 'Click for the crew dashboard; expand for what it declares and where it runs.'];
+  return lines.filter(Boolean).join('\n');
+}
+
 function sourceItem(node: Extract<SourceNode, { kind: 'source' }>, state: SourceState | undefined, busy: boolean): vscode.TreeItem {
   const { entry } = node;
-  const item = new vscode.TreeItem(entry.crewName ?? entry.source.label, vscode.TreeItemCollapsibleState.Collapsed);
+  const item = new vscode.TreeItem(sourceTitle(entry), vscode.TreeItemCollapsibleState.Collapsed);
   item.id = `source:${entry.source.root}`;
-  const folder = entry.crewName && entry.crewName !== entry.source.label ? ` in ${entry.source.label}` : '';
-  const what = `${entry.source.kind}${folder}`;
+  const what = sourceWhat(entry);
   item.description = state ? `${state.text} · ${what}` : what;
-  const lines = [entry.source.root, entry.identity.id, entry.identity.revision ? `revision ${entry.identity.revision}` : '', 'Click for the crew dashboard; expand for what it declares and where it runs.'];
-  item.tooltip = lines.filter(Boolean).join('\n');
+  item.tooltip = sourceTooltip(entry);
   item.iconPath = new vscode.ThemeIcon(entry.source.kind === 'helm' ? 'package' : 'files');
   item.contextValue = `source-${entry.source.kind}${state?.changed ? '-changed' : ''}${running(busy)}`;
   item.command = { command: 'crewforge.openCrewDashboard', title: 'Open Dashboard', arguments: [node] };

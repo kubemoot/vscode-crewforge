@@ -8,9 +8,12 @@ import { compare, type ResourceDrift } from './drift';
 import { identify, type SourceIdentity } from './identity';
 import { discoverKinds, liveObjects, type KubemootKind } from './live';
 import { isFitness, listRuns, type FitnessRun } from '../fitness/fitness';
+import { scriptsOf, uniqueByName } from '../fitness/deployed';
 import { helmReleaseRef, readHelmRelease, type FluxState } from '../gitops/flux';
 import { crewOf, objectKey, parseManifests, type Manifest } from './manifests';
 import { declarationsOf, type Declarations } from './declared';
+import { scriptName } from './scripts';
+import { crewTitle, displayNameIn } from '../crew/displayName';
 import { locate, type Located } from './locate';
 import { locationOf, render, renderWithOrigins, type Rendered, type RenderDeps, type SourceLocation } from './render';
 
@@ -28,6 +31,8 @@ export interface SourceEntry {
   identity: SourceIdentity;
   /** The name of the Crew it renders; absent when rendering failed. */
   crewName?: string;
+  /** The display name of the Crew it renders, from its annotation; absent when it has none. */
+  displayName?: string;
   error?: string;
   /** Where a failed render points, when it says. */
   errorAt?: SourceLocation;
@@ -54,6 +59,11 @@ export async function readChart(root: string, readText: ReadText): Promise<Chart
   } catch {
     return undefined;
   }
+}
+
+/** What people call a source: its Crew's display name, else the Crew's name, else the folder's. */
+export function sourceTitle(entry: SourceEntry): string {
+  return crewTitle({ entry });
 }
 
 /** The crew source a file or folder belongs to: the innermost source folder that is it or holds it. */
@@ -131,6 +141,13 @@ export class SourceService {
     return locate(rendered, this.deps.readText);
   }
 
+  /** The scenario scripts a source defines for a namespace, by name: those of its fitness manifests, then its loose script files. */
+  async scenarioScripts(entry: SourceEntry, namespace: string): Promise<{ name: string; content: string }[]> {
+    const fromManifests = scriptsOf(await this.fitnessDefinitions(entry, namespace), entry.crewName ?? '');
+    const loose = await Promise.all((await this.scripts(entry)).map(async (file) => ({ name: scriptName(file), content: await this.deps.readText(file) })));
+    return uniqueByName([...fromManifests, ...loose]);
+  }
+
   /** The loose fitness scripts of a source, from its fitness folders. */
   async scripts(entry: SourceEntry): Promise<string[]> {
     const list = this.deps.listScripts;
@@ -162,7 +179,8 @@ export class SourceService {
     try {
       const rendered = await renderWithOrigins(source, { namespace: PROBE_NAMESPACE }, this.deps);
       const crew = crewOf(rendered.map((r) => r.manifest));
-      return crew ? { source, identity, chart, crewName: crew.metadata.name, rendered } : { source, identity, chart, error: 'renders no Crew' };
+      if (!crew) return { source, identity, chart, error: 'renders no Crew' };
+      return { source, identity, chart, crewName: crew.metadata.name, displayName: displayNameIn(crew.metadata.annotations), rendered };
     } catch (err) {
       return { source, identity, chart, error: err instanceof Error ? err.message : String(err), errorAt: locationOf(err) };
     }

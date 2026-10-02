@@ -286,7 +286,7 @@ describe('the fitness dashboard', () => {
     dashboards.openFitness({ kind: 'crew', crew: liveCrew() });
     const [panel] = recorded.panels;
     const html = await body(panel);
-    expect(html).toContain('No workspace source renders this crew');
+    expect(html).toContain('The crew carries no fitness scenarios and no workspace source renders it');
     expect(html).toContain('Judge: skipped, since the suite was cancelled');
     await press(panel, 'xlsx');
     await press(panel, 'run');
@@ -296,6 +296,16 @@ describe('the fitness dashboard', () => {
     const broken = new Dashboards({ ...parts, service: { ...parts.service, kinds: async () => Promise.reject(new Error('discovery down')) } });
     broken.openFitness({ kind: 'crew', crew: { ...liveCrew(), name: 'x' } });
     expect(await body(recorded.panels[1])).toContain('Cannot read the fitness runs: discovery down');
+  });
+
+  it('runs a live crew without a source when it carries its scenarios', async () => {
+    const crew = liveCrew();
+    cluster.add({ apiVersion: 'v1', kind: 'ConfigMap', metadata: { name: `${crew.name}-fitness`, namespace: crew.namespace, labels: { 'kubemoot.ai/crew': crew.name, 'kubemoot.ai/fitness-kind': 'scenarios' } }, data: { 'a.adl': 'DESCRIPTION a' } } as never);
+    const dashboards = new Dashboards({ ...parts, sources: { ...parts.sources, known: [] } });
+    dashboards.openFitness({ kind: 'crew', crew });
+    const html = await body(recorded.panels[0]);
+    expect(html).not.toContain('carries no fitness scenarios');
+    expect(html).not.toMatch(/data-action="run"[^>]*disabled/);
   });
 
   it('shows a Connection Info quick pick', async () => {

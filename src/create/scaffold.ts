@@ -3,7 +3,10 @@ import type { Connection } from '../connection';
 import type { Exec } from '../source/render';
 
 export interface CreateCrewRequest {
+  /** The technical name: a DNS label, the Kubernetes name of the crew's objects. */
   name: string;
+  /** The name people read, any one line of text; kmctl stores it as the Crew's display-name annotation. */
+  displayName: string;
   parent: string;
   members: number;
   modelFamily?: string;
@@ -15,7 +18,7 @@ export interface CreateCrewRequest {
  * ModelProvider it finds through the kubeconfig.
  */
 export function createArgs(request: CreateCrewRequest, context?: string): string[] {
-  const args = ['create', request.name, '--chart', '--no-input', '--members', String(request.members), '-o', request.parent];
+  const args = ['create', request.name, '--display-name', request.displayName, '--chart', '--no-input', '--members', String(request.members), '-o', request.parent];
   if (request.modelFamily) args.push('--model-family', request.modelFamily);
   if (context) args.push('--context', context);
   return args;
@@ -92,10 +95,13 @@ function missingKmctl(): string {
   return `Creating a crew needs kmctl ${KMCTL_MIN_VERSION} or later on your PATH, and none was found. Install it from ${KMCTL_RELEASES}`;
 }
 
+/** The flag of `kmctl create` that stores the crew's display name. */
+export const DISPLAY_NAME_FLAG = '--display-name';
+
 /**
  * Why kmctl cannot scaffold a chart here, or undefined when it can: missing from the
- * PATH, or older than the release with the starter crew. A development build
- * ("dev") cannot be compared and is trusted.
+ * PATH, older than the release with the starter crew, or without display names. A
+ * development build ("dev") cannot be compared by version; its help says what it can do.
  */
 export async function kmctlProblem(exec: Exec): Promise<string | undefined> {
   const result = await exec('kmctl', ['version', '--short']);
@@ -103,8 +109,18 @@ export async function kmctlProblem(exec: Exec): Promise<string | undefined> {
   const found = result.stdout.trim();
   if (result.code !== 0) return `Creating a crew needs kmctl ${KMCTL_MIN_VERSION} or later; \`kmctl version\` failed: ${result.stderr.trim() || found}. Install a current release from ${KMCTL_RELEASES}`;
   const version = parseVersion(found);
-  if (!version || atLeast(version, MINIMUM)) return undefined;
-  return `Creating a crew needs kmctl ${KMCTL_MIN_VERSION} or later (for the starter crew); found kmctl ${found}. Install a current release from ${KMCTL_RELEASES}`;
+  if (version && !atLeast(version, MINIMUM)) return `Creating a crew needs kmctl ${KMCTL_MIN_VERSION} or later (for the starter crew); found kmctl ${found}. Install a current release from ${KMCTL_RELEASES}`;
+  return lacksDisplayNames(exec, found);
+}
+
+/**
+ * Why kmctl cannot store a display name, or undefined when it can. Its help is asked, not
+ * its version, so the check holds whichever release first carries the flag.
+ */
+async function lacksDisplayNames(exec: Exec, found: string): Promise<string | undefined> {
+  const help = await exec('kmctl', ['create', '--help']);
+  if (help.code === 0 && help.stdout.includes(DISPLAY_NAME_FLAG)) return undefined;
+  return `Creating a crew needs a kmctl whose create command takes ${DISPLAY_NAME_FLAG}, which stores the name people read; found kmctl ${found}. Install a current release from ${KMCTL_RELEASES}`;
 }
 
 /** Runs kmctl create; returns the new chart's folder and kmctl's warnings. */

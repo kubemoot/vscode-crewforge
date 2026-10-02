@@ -153,7 +153,7 @@ describe('FitnessActivity', () => {
 });
 
 describe('renderFitnessPage', () => {
-  const view = (over: Partial<FitnessView> = {}): FitnessView => ({ crew: 'demo', namespace: 'ns', runs: [], iterations: [], controls: { suspend: true, cancel: true }, ...over });
+  const view = (over: Partial<FitnessView> = {}): FitnessView => ({ crew: 'demo', title: 'demo', namespace: 'ns', runs: [], iterations: [], controls: { suspend: true, cancel: true }, ...over });
 
   it('lists runs and shows the selected suite with its progress, controls, scenarios, and judge', () => {
     const running = suite({ iterationsTotal: 4, iterationsCompleted: 1, startedAt: '2026-09-30T10:00:00Z' });
