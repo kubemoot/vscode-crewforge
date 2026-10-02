@@ -2,7 +2,9 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { FitnessCommands, scriptFitness, singleScenario } from '../src/fitness/commands';
+import { FitnessCommands } from '../src/fitness/commands';
+import { FitnessBatches } from '../src/fitness/batch';
+import { SourceFitness } from '../src/fitness/sourceFitness';
 import { registerScenarioCommands, scenarioOf, entryOf } from '../src/fitness/scenarioCommands';
 import { adlScript, deletePlan, withRenamedName, folderLayout, newScenario, proseScript, scenarioFolder, ScenarioFiles, suiteFile, withoutScript, withRenamedScript } from '../src/fitness/scenarios';
 import type { KubeClient } from '../src/k8s/request';
@@ -226,36 +228,34 @@ describe('Run Scenario', () => {
       listScripts,
     });
 
-  it('cuts a suite down to one script, keeps a CrewFitness as it is, and wraps a script file; all marked single', () => {
-    const owner = parseManifests(fs.readFileSync(path.join(SCAFFOLD, 'fitness', 'fitness.yaml'), 'utf8'))[0];
-    const one = singleScenario(owner, { kind: 'suite-script', name: 'coordinator-deployment', file: '/f' }) as Manifest & { spec: { iterations: number; scripts: { testRef: string }[] } };
-    expect(one.metadata.name).toBe('test-starter-coordinator-deployment');
-    expect(one.metadata.annotations).toEqual({ 'crewforge.kubemoot.ai/single-scenario': 'true' });
-    expect([one.spec.iterations, one.spec.scripts.map((s) => s.testRef)]).toEqual([1, ['coordinator-deployment']]);
-    expect(singleScenario(owner, { kind: 'suite-script', name: 'missing', file: '/f' })).toBeUndefined();
-    const fitness: Manifest = { apiVersion: 'kubemoot.ai/v1alpha1', kind: 'CrewFitness', metadata: { name: 'f' }, spec: {} };
-    expect(singleScenario(fitness, { kind: 'fitness', name: 'f', file: '/f' })?.metadata.annotations).toEqual({ 'crewforge.kubemoot.ai/single-scenario': 'true' });
-    expect(scriptFitness('test', 'weather', 'ASSERT(x)')).toMatchObject({ kind: 'CrewFitness', metadata: { name: 'test-weather' }, spec: { crewRef: 'test', testRef: 'weather', testContent: 'ASSERT(x)' } });
-  });
-
-  it('starts one scenario against the deployment Redeploy goes to, and refuses while a run of the crew is going', async () => {
+  it('runs one scenario of a source, from a suite or a script file, as a one-script suite marked single, against its deployment, and refuses while a run of the crew is going', async () => {
     const root = copyScaffold();
     fs.writeFileSync(path.join(root, 'fitness', 'weather.adl'), 'ASSERT(x)');
     const cluster = new FakeCluster();
     const connection = () => ({ source: '/k', context: 'lab', client: cluster as unknown as KubeClient });
-    const commands = new FitnessCommands(service(), () => undefined, connection);
-    const node: DeploymentNode = { kind: 'deployment', entry: entryAt(root), deployment: { namespace: 'crew-test', crew: { name: 'test', namespace: 'crew-test', ready: true, phase: 'Ready' }, channel: 'helm', linked: true } };
-    const name = await commands.runScenario(node, { kind: 'suite-script', name: 'pods-in-namespace', owner: 'test-starter', file: path.join(root, 'fitness', 'fitness.yaml') }, readText);
-    expect(name).toBe('test-starter-pods-in-namespace');
-    const posted = cluster.calls.filter((c) => c.method === 'POST').map((c) => c.body as Manifest);
-    expect(posted[0].metadata.name).toMatch(/^test-starter-pods-in-namespace-\d{8}-\d{6}$/);
-    expect(await commands.runScenario(node, { kind: 'script-file', name: 'weather', file: path.join(root, 'fitness', 'weather.adl') }, readText)).toBeUndefined();
+    const sources = service();
+    const commands = new FitnessCommands(sources, () => undefined, connection);
+    const opened: string[] = [];
+    const batches = new FitnessBatches({ runDefinition: (d, def) => commands.runDefinition(d, def), openDashboard: (_d, run) => void opened.push(run) });
+    const entry = entryAt(root);
+    const deployment: DeploymentNode = { kind: 'deployment', entry, deployment: { namespace: 'crew-test', crew: { name: 'test', namespace: 'crew-test', ready: true, phase: 'Ready' }, channel: 'helm', linked: true } };
+    const source = new SourceFitness({ batches, scenarioScripts: (e, ns) => sources.scenarioScripts(e, ns), redeployTarget: async () => deployment });
+    const row = (scenario: ScenarioRef): SourceNode => ({ kind: 'declared', entry, item: { label: scenario.name, tooltip: '', icon: 'beaker', line: 0, scenario } });
+    await source.runOne(row({ kind: 'suite-script', name: 'pods-in-namespace', owner: 'test-starter', file: path.join(root, 'fitness', 'fitness.yaml') }));
+    const posted = cluster.calls.filter((c) => c.method === 'POST').map((c) => c.body as Manifest & { spec: { iterations: number; scripts: { testRef: string }[] } });
+    expect(posted[0].metadata.name).toMatch(/^test-pods-in-namespace-\d{8}-\d{6}$/);
+    expect(posted[0].metadata.annotations).toEqual({ 'crewforge.kubemoot.ai/single-scenario': 'true' });
+    expect([posted[0].kind, posted[0].spec.iterations, posted[0].spec.scripts.map((x) => x.testRef)]).toEqual(['CrewFitnessSuite', 1, ['pods-in-namespace']]);
+    expect(opened).toEqual([posted[0].metadata.name]);
+    await source.runOne(row({ kind: 'script-file', name: 'weather', file: path.join(root, 'fitness', 'weather.adl') }));
     expect(recorded.info.at(-1)).toMatch(/^A fitness run of test is in progress/);
     cluster.objects.at(-1)!.status = { phase: 'Completed' };
-    expect(await commands.runScenario(node, { kind: 'script-file', name: 'weather', file: path.join(root, 'fitness', 'weather.adl') }, readText)).toBe('test-weather');
-    cluster.objects.at(-1)!.status = { phase: 'Completed' };
-    expect(await commands.runScenario(node, { kind: 'suite-script', name: 'gone', owner: 'nobody', file: '/x' }, readText)).toBeUndefined();
+    await source.runOne(row({ kind: 'script-file', name: 'weather', file: path.join(root, 'fitness', 'weather.adl') }));
+    expect(opened.at(-1)).toMatch(/^test-weather-/);
+    await source.runOne(row({ kind: 'suite-script', name: 'gone', owner: 'nobody', file: '/x' }));
     expect(recorded.errors.at(-1)).toBe('CrewForge: test no longer defines the scenario gone.');
+    await source.runOne({ kind: 'message', text: 'x' });
+    await source.runOne(undefined);
   });
 
   it('lists loose scripts in the source\'s fitness folders as scenarios', async () => {
@@ -293,11 +293,10 @@ describe('the scenario commands', () => {
 
   it('adds, renames, deletes, and runs from the Fitness nodes, reloading after a file change', async () => {
     const files = { add: vi.fn(async () => '/w/fitness/b.adl' as string | undefined), rename: vi.fn(async () => undefined), delete: vi.fn(async () => undefined) };
-    const fitness = { runScenario: vi.fn(async () => 'run') };
+    const runScenario = vi.fn(async () => undefined);
     const deployment: DeploymentNode = { kind: 'deployment', entry, deployment: { namespace: 'n', crew: { name: 'test', namespace: 'n', ready: true, phase: 'Ready' }, channel: 'helm', linked: true } };
-    const redeployTarget = vi.fn(async (): Promise<DeploymentNode | undefined> => deployment);
     const reload = vi.fn(async () => []);
-    registerScenarioCommands({ files: files as never, fitness, redeployTarget, readText: async () => '', reload, guard: async (a) => a() });
+    registerScenarioCommands({ files: files as never, runScenario, reload, guard: async (a) => a() });
     const run = (id: string, node?: SourceNode) => recorded.commands.get(id)!(node) as Promise<void>;
     await run('crewforge.addScenario', { kind: 'fitness', entry, deployment: deployment.deployment });
     files.add.mockResolvedValueOnce(undefined);
@@ -308,10 +307,6 @@ describe('the scenario commands', () => {
     await run('crewforge.deleteScenario', { kind: 'message', text: 'x' });
     expect(reload).toHaveBeenCalledTimes(3);
     await run('crewforge.runScenario', declared);
-    expect(fitness.runScenario).toHaveBeenCalledWith(deployment, scenario, expect.any(Function));
-    redeployTarget.mockResolvedValueOnce(undefined);
-    await run('crewforge.runScenario', declared);
-    await run('crewforge.runScenario', { kind: 'message', text: 'x' });
-    expect(fitness.runScenario).toHaveBeenCalledTimes(1);
+    expect(runScenario).toHaveBeenCalledWith(declared);
   });
 });

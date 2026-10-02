@@ -67,7 +67,7 @@ describe('an unreachable cluster, everywhere', () => {
     const v = { name: 'demo', context: 'lab', agents: [], agentsFrom: 'none', models: [], conversations: { total: 0, turns: 0, errors: [] }, deploymentError: refused.message } as unknown as CrewVitals;
     expect(crewButtons(v).at(-1)?.action).toBe('selectContext');
     expect(crewButtons({ ...v, deploymentError: undefined }).map((b) => b.action)).not.toContain('selectContext');
-    const fitness = { crew: 'demo', namespace: 'ns', runs: [], iterations: [], controls: { suspend: false, cancel: false } };
+    const fitness = { crew: 'demo', title: 'demo', namespace: 'ns', runs: [], iterations: [], controls: { suspend: false, cancel: false } };
     expect(renderFitnessPage({ ...fitness, error: refused.message })).toContain('data-action="selectContext"');
     expect(renderFitnessPage(fitness)).not.toContain('selectContext');
   });

@@ -82,6 +82,24 @@ function marks(c: CrewObject): Pick<CrewSummary, 'labels' | 'annotations' | 'cre
   return { labels: c.metadata?.labels, annotations: c.metadata?.annotations, created: c.metadata?.creationTimestamp, description: c.spec?.description || undefined };
 }
 
+/** The Crews that could be read, and each namespace that could not be, with why. */
+export interface CrewListing {
+  crews: CrewSummary[];
+  failed: { namespace: string; error: unknown }[];
+}
+
+/**
+ * Lists Crews like listCrews, but a namespace that cannot be read is reported beside the
+ * Crews of the others. When none can be read, that first failure is thrown.
+ */
+export async function listCrewsEach(client: KubeTransport, namespaces: string[]): Promise<CrewListing> {
+  if (namespaces.length === 0) return { crews: await listCrews(client, namespaces), failed: [] };
+  const results = await Promise.allSettled(namespaces.map(async (ns) => parseCrewList(await client.request('GET', namespacedCrewsPath(ns)))));
+  const failed = results.flatMap((r, i) => (r.status === 'rejected' ? [{ namespace: namespaces[i], error: r.reason as unknown }] : []));
+  if (failed.length === namespaces.length) throw failed[0].error;
+  return { crews: results.flatMap((r) => (r.status === 'fulfilled' ? r.value : [])), failed };
+}
+
 /**
  * Lists Crews. With a namespace filter it asks each namespace, which works for accounts
  * that may read only their own namespaces; without one it lists across the cluster.

@@ -1,5 +1,6 @@
 import { connectionLines, type ConnectionInfo } from '../connectionInfo';
 import { CREW_LABEL, toAgent } from '../crew/details';
+import { titleOf } from '../crew/displayName';
 import type { CrewSummary } from '../k8s/crews';
 import type { KubeTransport } from '../k8s/request';
 import { listKind, type KubemootKind } from '../source/live';
@@ -74,8 +75,10 @@ function rowCells(r: OverviewRow): string[] {
   const { crew } = r;
   const agents = r.agentsTotal === undefined ? '' : `${r.agentsReady ?? 0}/${r.agentsTotal}`;
   const id = `${crew.namespace}/${crew.name}`;
+  const title = titleOf(crew);
+  const technical = title === crew.name ? '' : ` <span class="muted">${escape(crew.name)}</span>`;
   return [
-    `<button type="button" class="link" data-action="open" data-arg="${escape(id)}" title="Open this crew's dashboard">${escape(crew.name)}</button>`,
+    `<button type="button" class="link" data-action="open" data-arg="${escape(id)}" title="Open the dashboard of ${escape(crew.name)}">${escape(title)}</button>${technical}`,
     escape(crew.namespace),
     badge(crew.phase, readyTone(crew.ready)),
     escape(agents),

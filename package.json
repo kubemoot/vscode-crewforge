@@ -66,6 +66,18 @@
         "icon": "$(refresh)"
       },
       {
+        "command": "crewforge.groupByNamespace",
+        "title": "Group by Namespace",
+        "category": "CrewForge",
+        "icon": "$(list-tree)"
+      },
+      {
+        "command": "crewforge.listFlat",
+        "title": "Show as a Flat List",
+        "category": "CrewForge",
+        "icon": "$(list-flat)"
+      },
+      {
         "command": "crewforge.askCrew",
         "title": "Ask",
         "category": "CrewForge",
@@ -357,6 +369,53 @@
         "title": "View in CrewForge",
         "category": "CrewForge",
         "icon": "$(eye)"
+      },
+      {
+        "command": "crewforge.runDeployedFitness",
+        "title": "Run All Deployed Scenarios (one iteration)",
+        "category": "CrewForge",
+        "icon": "$(run-all)"
+      },
+      {
+        "command": "crewforge.runDeployedScenario",
+        "title": "Run This Scenario Only (one iteration)",
+        "category": "CrewForge",
+        "icon": "$(play)"
+      },
+      {
+        "command": "crewforge.showDeployedScenario",
+        "title": "Show Scenario Script",
+        "category": "CrewForge"
+      },
+      {
+        "command": "crewforge.pauseRun",
+        "title": "Pause Fitness Run",
+        "category": "CrewForge",
+        "icon": "$(debug-pause)"
+      },
+      {
+        "command": "crewforge.resumeRun",
+        "title": "Resume Fitness Run",
+        "category": "CrewForge",
+        "icon": "$(debug-continue)"
+      },
+      {
+        "command": "crewforge.stopRun",
+        "title": "Stop Fitness Run",
+        "category": "CrewForge",
+        "icon": "$(debug-stop)"
+      },
+      {
+        "command": "crewforge.runScenarioBatch",
+        "title": "Run Scenarios... (pick a batch)",
+        "category": "CrewForge",
+        "icon": "$(checklist)"
+      },
+      {
+        "command": "crewforge.runSelectedScenarios",
+        "title": "Run Selected Scenarios as One Batch",
+        "category": "CrewForge",
+        "icon": "$(run-all)"
       }
     ],
     "menus": {
@@ -365,6 +424,16 @@
           "command": "crewforge.refreshCrews",
           "when": "view == crewforge.crews",
           "group": "navigation@1"
+        },
+        {
+          "command": "crewforge.groupByNamespace",
+          "when": "view == crewforge.crews && !crewforge.groupByNamespace",
+          "group": "navigation@4"
+        },
+        {
+          "command": "crewforge.listFlat",
+          "when": "view == crewforge.crews && crewforge.groupByNamespace",
+          "group": "navigation@4"
         },
         {
           "command": "crewforge.continueConversation",
@@ -720,6 +789,66 @@
           "command": "crewforge.showToolDetails",
           "when": "view == crewforge.crews && viewItem == tool",
           "group": "inline"
+        },
+        {
+          "command": "crewforge.runDeployedFitness",
+          "when": "view == crewforge.crews && viewItem == crewSection-fitness",
+          "group": "inline"
+        },
+        {
+          "command": "crewforge.runDeployedFitness",
+          "when": "view == crewforge.crews && viewItem == crewSection-fitness",
+          "group": "fitness@1"
+        },
+        {
+          "command": "crewforge.runDeployedScenario",
+          "when": "view == crewforge.crews && viewItem == liveScenario",
+          "group": "inline"
+        },
+        {
+          "command": "crewforge.runDeployedScenario",
+          "when": "view == crewforge.crews && viewItem == liveScenario",
+          "group": "fitness@1"
+        },
+        {
+          "command": "crewforge.showDeployedScenario",
+          "when": "view == crewforge.crews && viewItem == liveScenario",
+          "group": "fitness@2"
+        },
+        {
+          "command": "crewforge.pauseRun",
+          "when": "view == crewforge.crews && viewItem =~ /-run.*-pause/",
+          "group": "inline"
+        },
+        {
+          "command": "crewforge.resumeRun",
+          "when": "view == crewforge.crews && viewItem =~ /-run.*-resume/",
+          "group": "inline"
+        },
+        {
+          "command": "crewforge.stopRun",
+          "when": "view == crewforge.crews && viewItem =~ /-run.*-stop/",
+          "group": "inline"
+        },
+        {
+          "command": "crewforge.runScenarioBatch",
+          "when": "view == crewforge.crews && viewItem == crewSection-fitness",
+          "group": "fitness@2"
+        },
+        {
+          "command": "crewforge.runScenarioBatch",
+          "when": "view == crewforge.sources && viewItem =~ /^(fitness|declSection-fitness)/",
+          "group": "fitness@2"
+        },
+        {
+          "command": "crewforge.runSelectedScenarios",
+          "when": "view == crewforge.crews && viewItem == liveScenario && listMultiSelection",
+          "group": "fitness@0"
+        },
+        {
+          "command": "crewforge.runSelectedScenarios",
+          "when": "view == crewforge.sources && viewItem == declared-scenario && listMultiSelection",
+          "group": "fitness@0"
         }
       ],
       "editor/context": [
@@ -868,6 +997,46 @@
         },
         {
           "command": "crewforge.showToolDetails",
+          "when": "false"
+        },
+        {
+          "command": "crewforge.runDeployedFitness",
+          "when": "false"
+        },
+        {
+          "command": "crewforge.runDeployedScenario",
+          "when": "false"
+        },
+        {
+          "command": "crewforge.showDeployedScenario",
+          "when": "false"
+        },
+        {
+          "command": "crewforge.pauseRun",
+          "when": "false"
+        },
+        {
+          "command": "crewforge.resumeRun",
+          "when": "false"
+        },
+        {
+          "command": "crewforge.stopRun",
+          "when": "false"
+        },
+        {
+          "command": "crewforge.groupByNamespace",
+          "when": "!crewforge.groupByNamespace"
+        },
+        {
+          "command": "crewforge.listFlat",
+          "when": "crewforge.groupByNamespace"
+        },
+        {
+          "command": "crewforge.runScenarioBatch",
+          "when": "false"
+        },
+        {
+          "command": "crewforge.runSelectedScenarios",
           "when": "false"
         }
       ],

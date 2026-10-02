@@ -4,7 +4,7 @@ import { sharedLine } from '../crew/groups';
 import { factsOf } from '../crew/kindFacts';
 import { strings } from '../crew/values';
 import { relatedOf, type Obj as RelatedObj, type Related } from '../crew/related';
-import { isFitness } from '../fitness/fitness';
+import { fitnessScenarioName, isFitness, suiteScriptRefs } from '../fitness/fitness';
 import { scenarioLine, type Located } from './locate';
 import { scriptForm, scriptName } from './scripts';
 import { crewOf, isKubemoot, type Manifest } from './manifests';
@@ -173,10 +173,9 @@ async function scenariosOf(fitness: Located[], readText: (file: string) => Promi
 
 async function scenariosIn(l: Located, readText: (file: string) => Promise<string>): Promise<DeclaredItem[]> {
   const m = l.manifest as Obj;
-  const scripts = Array.isArray(m.spec?.scripts) ? (m.spec.scripts as { testRef?: unknown }[]) : [];
-  const refs = scripts.map((s) => s?.testRef).filter((r): r is string => typeof r === 'string');
+  const refs = suiteScriptRefs(m);
   if (m.kind !== 'CrewFitnessSuite' || refs.length === 0) {
-    const scenario: ScenarioRef | undefined = l.file ? { kind: 'fitness', name: text(m.spec?.testRef) ?? m.metadata.name, owner: m.metadata.name, file: l.file } : undefined;
+    const scenario: ScenarioRef | undefined = l.file ? { kind: 'fitness', name: fitnessScenarioName(m), owner: m.metadata.name, file: l.file } : undefined;
     return [{ label: m.metadata.name, description: m.kind, tooltip: `${m.kind} ${m.metadata.name}`, icon: 'beaker', file: l.file, line: l.line, scenario }];
   }
   const body = l.file ? await readText(l.file).catch(() => '') : '';

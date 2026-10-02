@@ -27,7 +27,9 @@ function copyScaffold(): string {
 
 function objectsIn(root: string): Manifest[] {
   const files = ['agents', 'crew', 'models', 'promptmodules', 'tools'].map((n) => path.join(root, 'templates', `${n}.yaml`));
-  return [...files, path.join(root, 'fitness', 'fitness.yaml')].flatMap((f) => parseManifests(fs.readFileSync(f, 'utf8')));
+  // A Helm control line ({{- if }}, {{- end }}) is not YAML; the objects read the same without them.
+  const withoutHelm = (text: string) => text.replaceAll(/^\{\{-.*\}\}\n/gm, '');
+  return [...files, path.join(root, 'fitness', 'fitness.yaml')].flatMap((f) => parseManifests(withoutHelm(fs.readFileSync(f, 'utf8'))));
 }
 
 describe('renameCrewText', () => {
@@ -134,7 +136,7 @@ describe('renameCrewFiles', () => {
     fs.mkdirSync(path.join(root, 'node_modules'));
     fs.writeFileSync(path.join(root, 'node_modules', 'x.yaml'), 'name: test\n');
     const changed = await renameCrewFiles(root, 'test', 'lab');
-    expect(changed.map((f) => path.relative(root, f)).sort()).toEqual(['Chart.yaml', 'fitness/fitness.yaml', 'templates/agents.yaml', 'templates/crew.yaml', 'templates/models.yaml', 'templates/promptmodules.yaml', 'templates/rbac.yaml', 'templates/tools.yaml']);
+    expect(changed.map((f) => path.relative(root, f)).sort()).toEqual(['Chart.yaml', 'fitness/fitness.yaml', 'templates/agents.yaml', 'templates/crew.yaml', 'templates/fitness-scenarios.yaml', 'templates/models.yaml', 'templates/promptmodules.yaml', 'templates/rbac.yaml', 'templates/tools.yaml']);
     const objects = objectsIn(root);
     expect(crewOf(objects)?.metadata.name).toBe('lab');
     const agents = objects.filter((o) => o.kind === 'Agent');
@@ -177,7 +179,7 @@ describe('renameCrewFiles', () => {
     const changed: string[] = [];
     await expect(renameCrewFiles(root, 'test', 'lab', [path.join(work, 'missing')], changed)).rejects.toThrow();
     fs.chmodSync(locked, 0o644);
-    expect(changed.map((f) => path.relative(root, f))).toEqual(['Chart.yaml', 'fitness/fitness.yaml', 'templates/agents.yaml', 'templates/crew.yaml', 'templates/models.yaml']);
+    expect(changed.map((f) => path.relative(root, f))).toEqual(['Chart.yaml', 'fitness/fitness.yaml', 'templates/agents.yaml', 'templates/crew.yaml', 'templates/fitness-scenarios.yaml', 'templates/models.yaml']);
   });
 });
 
@@ -200,7 +202,9 @@ function actionsWith(deployments: (entry: SourceEntry) => DeploymentNode[]) {
     reload: vi.fn(async () => []),
   };
   const deploy = { removeDeployment: vi.fn(async (node?: SourceNode) => void removed.push(node?.kind === 'deployment' ? node.deployment.namespace : 'none')) };
-  return { actions: new SourceActions({ sources, deploy }), removed, sources };
+  const annotated: string[] = [];
+  const annotateCrew = vi.fn(async (namespace: string, crew: string, annotations: Record<string, string>) => void annotated.push(`${namespace}/${crew} ${JSON.stringify(annotations)}`));
+  return { actions: new SourceActions({ sources, deploy, annotateCrew }), removed, sources, annotated };
 }
 
 describe('SourceActions.undeploy', () => {
@@ -339,17 +343,23 @@ describe('SourceActions.deleteSource', () => {
   });
 });
 
+/** Picks Change the Kubernetes Name in the rename picker, then renames. */
+function renameKubernetesName(actions: SourceActions, entry: SourceEntry): Promise<void> {
+  recorded.quickPicks.push((items: { change: string }[]) => items.find((i) => i.change === 'technical'));
+  return actions.rename({ kind: 'source', entry });
+}
+
 describe('SourceActions.rename', () => {
   it('renames the crew and its folder, reloads, and says to redeploy', async () => {
     const root = copyScaffold();
     const { actions, sources } = actionsWith(() => []);
     recorded.inputs.push('lab');
-    await actions.rename({ kind: 'source', entry: entryAt(root) });
+    await renameKubernetesName(actions, entryAt(root));
     const moved = path.join(work, 'lab');
     expect(fs.existsSync(moved)).toBe(true);
     expect(crewOf(objectsIn(moved))?.metadata.name).toBe('lab');
     expect(sources.reload).toHaveBeenCalledTimes(1);
-    expect(recorded.info).toEqual([`Renamed crew test to lab in 8 files and its folder to ${moved}. Redeploy to deploy it as lab.`]);
+    expect(recorded.info).toEqual([`Renamed crew test to lab in 9 files and its folder to ${moved}. Redeploy to deploy it as lab.`]);
   });
 
   it('keeps the folder when its name is not the crew name or the new name is taken', async () => {
@@ -357,9 +367,9 @@ describe('SourceActions.rename', () => {
     fs.mkdirSync(path.join(work, 'lab'));
     const { actions } = actionsWith(() => []);
     recorded.inputs.push(' lab ');
-    await actions.rename({ kind: 'source', entry: entryAt(root) });
+    await renameKubernetesName(actions, entryAt(root));
     expect(fs.existsSync(root)).toBe(true);
-    expect(recorded.info[0]).toBe('Renamed crew test to lab in 8 files. Redeploy to deploy it as lab.');
+    expect(recorded.info[0]).toBe('Renamed crew test to lab in 9 files. Redeploy to deploy it as lab.');
   });
 
   it('renames a bundle and the fitness folder beside it', async () => {
@@ -370,14 +380,14 @@ describe('SourceActions.rename', () => {
     fs.writeFileSync(path.join(work, 'demo', 'fitness', 'suite.yaml'), 'spec:\n  crewRef: test\n');
     const { actions } = actionsWith(() => []);
     recorded.inputs.push('lab');
-    await actions.rename({ kind: 'source', entry: entryAt(bundle, 'bundle') });
+    await renameKubernetesName(actions, entryAt(bundle, 'bundle'));
     expect(fs.readFileSync(path.join(work, 'demo', 'fitness', 'suite.yaml'), 'utf8')).toBe('spec:\n  crewRef: lab\n');
     expect(recorded.info[0]).toBe('Renamed crew test to lab in 2 files. Redeploy to deploy it as lab.');
     const lonely = path.join(work, 'solo');
     fs.mkdirSync(lonely);
     fs.writeFileSync(path.join(lonely, 'crew.yaml'), 'name: test\n');
     recorded.inputs.push('lab');
-    await actions.rename({ kind: 'source', entry: entryAt(lonely, 'bundle') });
+    await renameKubernetesName(actions, entryAt(lonely, 'bundle'));
     expect(recorded.info[1]).toBe('Renamed crew test to lab in 1 file. Redeploy to deploy it as lab.');
   });
 
@@ -385,21 +395,21 @@ describe('SourceActions.rename', () => {
     const root = copyScaffold();
     const { actions } = actionsWith(() => []);
     recorded.textDocuments = [{ uri: { fsPath: path.join(root, 'templates', 'crew.yaml') } as never, getText: () => '', isDirty: true }];
-    await actions.rename({ kind: 'source', entry: entryAt(root) });
+    await renameKubernetesName(actions, entryAt(root));
     expect(recorded.errors[0]).toMatch(/^CrewForge: save or close .*crew\.yaml before renaming the crew/);
     fs.mkdirSync(path.join(work, 'fitness'));
     recorded.textDocuments = [
       { uri: { fsPath: path.join(root, 'node_modules', 'x.yaml') } as never, getText: () => '', isDirty: true },
       { uri: { fsPath: path.join(work, 'fitness', 'suite.yaml') } as never, getText: () => '', isDirty: true },
     ];
-    await actions.rename({ kind: 'source', entry: entryAt(root) });
+    await renameKubernetesName(actions, entryAt(root));
     expect(recorded.errors[1]).toMatch(/^CrewForge: save or close .*fitness\/suite\.yaml before renaming/);
     recorded.textDocuments = [{ uri: { fsPath: path.join(root, 'node_modules', 'x.yaml') } as never, getText: () => '', isDirty: true }];
     recorded.workspaceFolders = [{ name: 'test', uri: { fsPath: root } as never }];
     recorded.inputs.push('lab');
-    await actions.rename({ kind: 'source', entry: entryAt(root) });
+    await renameKubernetesName(actions, entryAt(root));
     expect(fs.existsSync(root)).toBe(true);
-    expect(recorded.info[0]).toBe('Renamed crew test to lab in 8 files. Redeploy to deploy it as lab.');
+    expect(recorded.info[0]).toBe('Renamed crew test to lab in 9 files. Redeploy to deploy it as lab.');
   });
 
   it('says what it renamed when the folder cannot move, and reloads anyway', async () => {
@@ -407,8 +417,8 @@ describe('SourceActions.rename', () => {
     const { actions, sources } = actionsWith(() => []);
     recorded.applyEditResult = false;
     recorded.inputs.push('lab');
-    await actions.rename({ kind: 'source', entry: entryAt(root) });
-    expect(recorded.errors[0]).toBe(`CrewForge: renaming test stopped after changing 8 files: could not move ${root} to ${path.join(work, 'lab')}. git checkout restores them.`);
+    await renameKubernetesName(actions, entryAt(root));
+    expect(recorded.errors[0]).toBe(`CrewForge: renaming test stopped after changing 9 files: could not move ${root} to ${path.join(work, 'lab')}. git checkout restores them.`);
     expect(sources.reload).toHaveBeenCalledTimes(1);
   });
 
@@ -417,9 +427,9 @@ describe('SourceActions.rename', () => {
     const { actions } = actionsWith(() => []);
     for (const answer of ['test', 'Not Valid', undefined]) {
       recorded.inputs.push(answer);
-      await actions.rename({ kind: 'source', entry: entryAt(root) });
+      await renameKubernetesName(actions, entryAt(root));
     }
-    await actions.rename({ kind: 'source', entry: { ...entryAt(root), crewName: undefined } });
+    await actions.rename({ kind: 'source', entry: { ...entryAt(root), crewName: undefined } }); // no crew: no picker
     await actions.rename({ kind: 'message', text: 'x' });
     expect(recorded.info).toEqual(['test declares no Crew to rename.', 'There is no crew source in this workspace to rename.']);
     expect(crewOf(objectsIn(root))?.metadata.name).toBe('test');
@@ -429,19 +439,119 @@ describe('SourceActions.rename', () => {
     const root = copyScaffold();
     const { actions, removed } = actionsWith((e) => (removed.length ? [] : [deploymentAt(e, 'crew-test')]));
     recorded.inputs.push('lab');
-    await actions.rename({ kind: 'source', entry: entryAt(root) });
+    await renameKubernetesName(actions, entryAt(root));
     expect(recorded.warnings).toEqual(['test is deployed in crew-test. Undeploy it before renaming?']);
     expect(fs.existsSync(root)).toBe(true);
     recorded.inputs.push('lab');
     recorded.warningAnswers.push('Undeploy, Then Rename');
-    await actions.rename({ kind: 'source', entry: entryAt(root) });
+    await renameKubernetesName(actions, entryAt(root));
     expect(removed).toEqual(['crew-test']);
     expect(fs.existsSync(path.join(work, 'lab'))).toBe(true);
     const other = copyScaffold();
     recorded.inputs.push('ops');
     recorded.warningAnswers.push('Rename Only');
-    await actions.rename({ kind: 'source', entry: entryAt(other) });
+    await renameKubernetesName(actions, entryAt(other));
     expect(removed).toEqual(['crew-test']);
     expect(fs.existsSync(path.join(work, 'ops'))).toBe(true);
+  });
+});
+
+/** A copy of the scaffold as a loaded source: its Crew rendered from templates/crew.yaml, with a display name when given. */
+function renderedEntry(root: string, displayName?: string): SourceEntry {
+  const crewFile = path.join(root, 'templates', 'crew.yaml');
+  const manifest = crewOf(parseManifests(fs.readFileSync(crewFile, 'utf8')))!;
+  return { ...entryAt(root), displayName, rendered: [{ manifest, file: crewFile }] };
+}
+
+/** Picks Change the Display Name in the rename picker, then renames. */
+function renameDisplayName(actions: SourceActions, entry: SourceEntry): Promise<void> {
+  recorded.quickPicks.push((items: { change: string }[]) => items.find((i) => i.change === 'display'));
+  return actions.rename({ kind: 'source', entry });
+}
+
+describe('SourceActions.rename, the display name', () => {
+  it('offers the display name first, and the Kubernetes name as the heavier choice', async () => {
+    const { actions } = actionsWith(() => []);
+    let offered: { label: string; description?: string; detail?: string }[] = [];
+    recorded.quickPicks.push((items: typeof offered) => ((offered = items), undefined));
+    await actions.rename({ kind: 'source', entry: renderedEntry(copyScaffold(), 'Test Crew') });
+    expect(offered.map((i) => i.label)).toEqual(['Change the Display Name', 'Change the Kubernetes Name...']);
+    expect(offered[0].description).toBe('what people read; no redeploy');
+    expect(offered[0].detail).toContain('Now "Test Crew"');
+    expect(offered[1].detail).toContain('Now test.');
+    expect(recorded.inputOffers).toEqual([]);
+  });
+
+  it('writes the annotation into the Crew and Chart.yaml, sets it on deployed copies, and names where Flux takes it from git', async () => {
+    const root = copyScaffold();
+    const flux = (e: SourceEntry) => ({ ...deploymentAt(e, 'team-b'), deployment: { ...deploymentAt(e, 'team-b').deployment, channel: 'flux' as const } });
+    const { actions, sources, annotated } = actionsWith((e) => [deploymentAt(e, 'crew-test'), flux(e)]);
+    recorded.inputs.push('  Homelab Health Guide ');
+    await renameDisplayName(actions, renderedEntry(root));
+    expect(recorded.inputOffers).toEqual(['test']);
+    const crew = crewOf(parseManifests(fs.readFileSync(path.join(root, 'templates', 'crew.yaml'), 'utf8')))!;
+    expect(crew.metadata.annotations).toEqual({ 'kubemoot.ai/manage-namespace': 'true', 'kubemoot.ai/display-name': 'Homelab Health Guide' });
+    expect(fs.readFileSync(path.join(root, 'Chart.yaml'), 'utf8')).toContain('  kubemoot.ai/display-name: "Homelab Health Guide"\n');
+    expect(annotated).toEqual(['crew-test/test {"kubemoot.ai/display-name":"Homelab Health Guide"}']);
+    expect(recorded.info).toEqual([
+      'Changed the display name of test to "Homelab Health Guide" in crew.yaml and Chart.yaml. The deployed crew in crew-test shows it now, without a redeploy. Flux deploys team-b from git: commit and push the change.',
+    ]);
+    expect(sources.reload).toHaveBeenCalledTimes(1);
+    expect(crewOf(objectsIn(root))?.metadata.name).toBe('test');
+  });
+
+  it('writes a bundle Crew only, and refuses the same, an empty, or a two-line name', async () => {
+    const bundle = path.join(work, 'b');
+    fs.mkdirSync(bundle);
+    const file = path.join(bundle, 'crew.yaml');
+    fs.writeFileSync(file, 'apiVersion: kubemoot.ai/v1alpha1\nkind: Crew\nmetadata:\n  name: test\n');
+    const entry: SourceEntry = { ...entryAt(bundle, 'bundle'), rendered: [{ manifest: crewOf(parseManifests(fs.readFileSync(file, 'utf8')))!, file }] };
+    const { actions, annotated } = actionsWith(() => []);
+    for (const answer of ['test', ' ', 'two\nlines', undefined]) {
+      recorded.inputs.push(answer);
+      await renameDisplayName(actions, entry);
+    }
+    expect(recorded.info).toEqual([]);
+    recorded.inputs.push('Bundle {{ Crew }}');
+    await renameDisplayName(actions, entry);
+    expect(fs.readFileSync(file, 'utf8')).toBe('apiVersion: kubemoot.ai/v1alpha1\nkind: Crew\nmetadata:\n  name: test\n  annotations:\n    kubemoot.ai/display-name: "Bundle {{ Crew }}"\n');
+    expect(recorded.info).toEqual(['Changed the display name of test to "Bundle {{ Crew }}" in crew.yaml.']);
+    expect(annotated).toEqual([]);
+  });
+
+  it('says when it cannot tell the Crew file, refuses an unsaved one, and says what failed', async () => {
+    const root = copyScaffold();
+    const { actions, sources } = actionsWith(() => []);
+    await renameDisplayName(actions, entryAt(root));
+    expect(recorded.errors[0]).toBe('CrewForge cannot tell which file holds the Crew test; add the annotation kubemoot.ai/display-name to it by hand.');
+    recorded.textDocuments = [{ uri: { fsPath: path.join(root, 'Chart.yaml') } as never, getText: () => '', isDirty: true }];
+    await renameDisplayName(actions, renderedEntry(root));
+    expect(recorded.errors[1]).toMatch(/^CrewForge: save or close .*Chart\.yaml before changing the display name/);
+    recorded.textDocuments = [];
+    fs.writeFileSync(path.join(root, 'Chart.yaml'), 'name: test\nannotations: {a: b}\n');
+    recorded.inputs.push('Test Crew');
+    await renameDisplayName(actions, renderedEntry(root));
+    expect(recorded.errors[2]).toBe(
+      'CrewForge: changing the display name of test failed: Chart.yaml holds its annotations in a form CrewForge leaves to you; add kubemoot.ai/display-name to them by hand',
+    );
+    expect(sources.reload).toHaveBeenCalledTimes(1);
+  });
+
+  it('lets a display name that was the old Kubernetes name follow a Kubernetes rename', async () => {
+    const root = copyScaffold();
+    const { actions } = actionsWith(() => []);
+    recorded.inputs.push('lab');
+    await renameKubernetesName(actions, renderedEntry(root, 'test'));
+    const moved = path.join(work, 'lab');
+    const crew = crewOf(objectsIn(moved))!;
+    expect(crew.metadata.name).toBe('lab');
+    expect(crew.metadata.annotations?.['kubemoot.ai/display-name']).toBe('lab');
+    expect(recorded.info[0]).toBe(`Renamed crew test to lab in 9 files and its folder to ${moved}. Redeploy to deploy it as lab.`);
+    const kept = copyScaffold();
+    const keptCrew = path.join(kept, 'templates', 'crew.yaml');
+    fs.writeFileSync(keptCrew, fs.readFileSync(keptCrew, 'utf8').replace('display-name: "test"', 'display-name: "Test Crew"'));
+    recorded.inputs.push('ops');
+    await renameKubernetesName(actions, renderedEntry(kept, 'Test Crew'));
+    expect(crewOf(objectsIn(path.join(work, 'ops')))?.metadata.annotations?.['kubemoot.ai/display-name']).toBe('Test Crew');
   });
 });

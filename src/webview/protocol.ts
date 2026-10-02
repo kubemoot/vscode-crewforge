@@ -6,6 +6,8 @@ import type { ConversationMeta } from '../store/conversation';
 export type StateMessage = {
   type: 'state';
   view: SessionView;
+  /** The name people read for the crew: its display name, else its technical name, which the conversation keeps. */
+  crewTitle: string;
   history: ConversationMeta[];
   /** One line about the crew for the empty state, e.g. "2 agents, coordinator x". */
   about: string;

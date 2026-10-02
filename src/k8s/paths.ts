@@ -23,6 +23,11 @@ export function nameProblem(kind: string, value: string): string | undefined {
 /** Every Crew the credentials can list, across namespaces. */
 export const CREWS_PATH = '/apis/kubemoot.ai/v1alpha1/crews';
 
+/** One Crew. */
+export function crewPath(namespace: string, crew: string): string {
+  return `${namespacedCrewsPath(namespace)}/${encodeURIComponent(crew)}`;
+}
+
 /** Crews in one namespace. */
 export function namespacedCrewsPath(namespace: string): string {
   return `/apis/kubemoot.ai/v1alpha1/namespaces/${checkName('namespace', namespace)}/crews`;

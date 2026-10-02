@@ -6,6 +6,9 @@ import { factsOf } from '../crew/kindFacts';
 import type { Related } from '../crew/related';
 import { parameters, toolOrigin, type ToolCatalog } from '../crew/toolCatalog';
 import type { CrewSummary } from '../k8s/crews';
+import type { DeployedScenario } from '../fitness/deployed';
+import { runControls } from '../fitness/controls';
+import { toRun, type FitnessRun } from '../fitness/fitness';
 import { provenanceFacts, provenanceOf, type ProvenanceFact } from '../source/provenance';
 
 /** A live object whose YAML can be opened: a Kubemoot object, or the Flux object that applies a crew. An empty namespace is a cluster-scoped object. */
@@ -30,6 +33,10 @@ export interface MemberView {
   tool?: { info: ToolInfo; catalog?: ToolCatalog };
   /** Set when the object is not the crew's own. */
   shared?: boolean;
+  /** Set on a deployed fitness scenario; it can be run. */
+  scenario?: DeployedScenario;
+  /** Set on a fitness run; it can be paused, resumed, or stopped while it runs. */
+  run?: FitnessRun;
 }
 
 export type DetailNode =
@@ -51,7 +58,7 @@ const MEMBERS: Record<Section, (crew: CrewSummary, d: CrewDetails, catalog?: Too
   tools: (_crew, d, catalog) => d.tools.map((t) => toolView(t, catalog)),
   policies: (_crew, d) => d.related.policies.map(relatedView),
   notifications: (_crew, d) => d.related.notifications.map(relatedView),
-  fitness: (_crew, d) => d.related.fitness.map(relatedView),
+  fitness: (_crew, d) => [...(d.scenarios ?? []).map(scenarioView), ...d.related.fitness.map(fitnessRunView)],
   deployment: (crew, d) => [...provenanceFacts(provenanceOf(crew)).map((f) => factView(crew, f)), ...d.related.operator.map(relatedView)],
 };
 
@@ -63,6 +70,7 @@ function sectionSummary(section: Section, d: CrewDetails): string | undefined {
   if (section === 'deployment') return undefined;
   if (section === 'agents') return `${d.agents.filter((a) => a.ready).length} of ${d.agents.length} ready`;
   if (section === 'prompts') return `${d.promptModules.length}, ${d.promptModules.filter((m) => m.form === 'ADL').length} ADL`;
+  if (section === 'fitness') return fitnessSummary(d);
   return String(COUNTS[section](d));
 }
 
@@ -78,9 +86,43 @@ export function sectionItem(node: Extract<DetailNode, { kind: 'section' }>): vsc
   return item;
 }
 
-/** The context value of a leaf: a live object, a shared one, or a tool; none for a fact without an object. */
+/** The Fitness group's line: its scenarios and runs, and whether the open source changed them since the deploy. */
+function fitnessSummary(d: CrewDetails): string {
+  const scenarios = d.scenarios?.length ?? 0;
+  const parts = [scenarios === 1 ? '1 scenario' : `${scenarios} scenarios`, d.related.fitness.length === 1 ? '1 run' : `${d.related.fitness.length} runs`];
+  if (d.scenariosChanged) parts.push('changed since deploy');
+  return parts.join(' · ');
+}
+
+/** A deployed fitness scenario, which runs as deployed. */
+export function scenarioView(s: DeployedScenario): MemberView {
+  return {
+    label: s.name,
+    description: 'scenario',
+    tooltip: lines(`Fitness scenario ${s.name}`, `Deployed in ConfigMap ${s.from}.`, 'Runs from here use this deployed script, not the workspace source.'),
+    icon: 'beaker',
+    scenario: s,
+  };
+}
+
+/** A fitness suite or run, which can be paused, resumed, or stopped while it runs. */
+export function fitnessRunView(r: Related): MemberView {
+  const view = relatedView(r);
+  const kind = r.kind === 'CrewFitnessSuite' ? 'CrewFitnessSuite' : 'CrewFitness';
+  return r.object ? { ...view, run: toRun(kind, r.object) } : view;
+}
+
+/** The suffix of a run's context value: the controls that apply to it now. */
+function runContext(run: FitnessRun): string {
+  const can = runControls(run, { suspend: true, cancel: true });
+  return `-run${can.pause ? '-pause' : ''}${can.resume ? '-resume' : ''}${can.stop ? '-stop' : ''}`;
+}
+
+/** The context value of a leaf: a live object, a shared one, a fitness run, a scenario, or a tool; none for a fact without an object. */
 function memberContext(view: MemberView): string | undefined {
   if (view.tool) return 'tool';
+  if (view.scenario) return 'liveScenario';
+  if (view.run) return `liveObject${runContext(view.run)}`;
   if (!view.ref) return undefined;
   return view.shared ? 'liveObject-shared' : 'liveObject';
 }
@@ -93,6 +135,7 @@ export function memberItem(node: Extract<DetailNode, { kind: 'member' }>): vscod
   item.iconPath = new vscode.ThemeIcon(view.icon, view.color ? new vscode.ThemeColor(view.color) : undefined);
   item.contextValue = memberContext(view);
   if (view.tool) item.command = { command: 'crewforge.showToolDetails', title: 'Show Tool Details', arguments: [node] };
+  else if (view.scenario) item.command = { command: 'crewforge.showDeployedScenario', title: 'Show Scenario', arguments: [node] };
   else if (view.ref) item.command = { command: 'crewforge.showLiveYaml', title: 'Show YAML', arguments: [node] };
   return item;
 }

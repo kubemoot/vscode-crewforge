@@ -5,13 +5,14 @@ import { dashboardUrl, streamTimeoutMs, type Connection } from '../connection';
 import { unreachable, type CrewAvailability } from '../discussion/availability';
 import { DEFAULT_TIMING } from '../discussion/client';
 import { ChatSession, type SessionView } from '../discussion/session';
+import { titleOf } from '../crew/displayName';
 import type { CrewSummary } from '../k8s/crews';
 import { newConversation, questionFor, type Conversation, type ConversationMeta } from '../store/conversation';
 import type { ConversationStore } from '../store/conversations';
 import { exportAsMarkdown, exportFileName } from '../store/export';
 import { crewAbout } from '../views/treeModel';
 import type { HostMessage, WebviewMessage } from '../webview/protocol';
-import { icons } from '../webview/render';
+import { escapeHtml, icons } from '../webview/render';
 import { messageText, type PanelState } from './panelState';
 import { tabIcon } from './tabIcon';
 import type { Located } from '../source/locate';
@@ -87,7 +88,7 @@ export class ChatPanel {
     conversation: Conversation | undefined,
     private readonly key: string,
   ) {
-    this.panel = vscode.window.createWebviewPanel('crewforge.chat', `Ask ${crew.name}`, vscode.ViewColumn.Active, {
+    this.panel = vscode.window.createWebviewPanel('crewforge.chat', `Ask ${titleOf(crew)}`, vscode.ViewColumn.Active, {
       enableScripts: true,
       retainContextWhenHidden: true,
       localResourceRoots: [vscode.Uri.joinPath(extensionUri, 'dist'), vscode.Uri.joinPath(extensionUri, 'media')],
@@ -318,7 +319,7 @@ export class ChatPanel {
     if (!view.busy) this.history = await this.store.list(this.connection.context, this.crew.namespace, this.crew.name);
     if (this.disposed) return;
     const links = { agents: [...this.agentSources.keys()], dashboard: dashboardUrl() !== '' };
-    const message: HostMessage = { type: 'state', view: this.session.view, history: this.history, about: crewAbout(this.crew), links, availability: this.availability };
+    const message: HostMessage = { type: 'state', view: this.session.view, crewTitle: titleOf(this.crew), history: this.history, about: crewAbout(this.crew), links, availability: this.availability };
     await this.panel.webview.postMessage(message);
   }
 
@@ -343,7 +344,7 @@ export class ChatPanel {
 <meta http-equiv="Content-Security-Policy" content="${csp}">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="stylesheet" href="${style}">
-<title>Ask ${this.crew.name}</title>
+<title>Ask ${escapeHtml(titleOf(this.crew))}</title>
 </head>
 <body>
 <div class="chat-layout">

@@ -2,6 +2,7 @@ import * as assert from 'node:assert/strict';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import type { CrewForgeApi } from '../../../src/extension';
+import type { CrewNode } from '../../../src/views/crewTree';
 import type { SourceNode } from '../../../src/views/sourceTree';
 import { closeAll, crewforge, liveCrew, pageShows, sourceNode, until } from './helpers';
 
@@ -19,6 +20,31 @@ async function editorShowing(scheme: string, words: string[]): Promise<string> {
   );
 }
 
+const API = process.env.CREWFORGE_IT_API ?? '';
+
+type Suite = { metadata: { name: string }; spec: { iterations?: number; scripts: { testRef: string }[] } };
+
+/** The CrewFitnessSuites in a namespace of the fake cluster. */
+async function suites(namespace: string): Promise<Suite[]> {
+  return ((await (await fetch(`${API}/apis/kubemoot.ai/v1alpha1/namespaces/${namespace}/crewfitnesssuites`)).json()) as { items: Suite[] }).items;
+}
+
+/** Accepts each quick pick VS Code shows, as Enter would, until `done` finds what it waits for. */
+async function acceptPicksUntil<T>(what: string, done: () => Promise<T | undefined>): Promise<T> {
+  return until(what, async () => {
+    await vscode.commands.executeCommand('workbench.action.acceptSelectedQuickOpenItem');
+    return done();
+  });
+}
+
+/** The Fitness group of a live crew in Deployed Crews. */
+async function fitnessGroup(api: CrewForgeApi, namespace: string, name: string): Promise<CrewNode> {
+  const crew = await liveCrew(api, namespace, name);
+  const group = (await api.crews.getChildren(crew)).find((n) => n.kind === 'section' && n.section === 'fitness');
+  assert.ok(group, `${name} has a Fitness group`);
+  return group;
+}
+
 describe('CrewForge views and commands in a real VS Code', () => {
   let api: CrewForgeApi;
 
@@ -28,7 +54,72 @@ describe('CrewForge views and commands in a real VS Code', () => {
   });
   afterEach(closeAll);
 
-  it('Deployed Crews lists the namespaces and crews, and a crew expands to what it is made of', async () => {
+  it('Deployed Crews lists crews flat by the name people read, and Group by Namespace nests them', async () => {
+    const rows = await until('the flat list of crews', async () => {
+      const items = (await api.crews.getChildren()).filter((n) => n.kind === 'crew').map((n) => api.crews.getTreeItem(n));
+      return items.length === 2 ? items : undefined;
+    }, () => api.crews.known);
+    assert.deepEqual(rows.map((i) => i.label), ['Demo Crew', 'lab-ops']);
+    assert.match(String(rows[0].description), /^somewhere\/demo · Ready, 0 agents/);
+    assert.match(String(rows[1].description), /^team-a · Ready, 2 agents/);
+    await vscode.commands.executeCommand('crewforge.groupByNamespace');
+    try {
+      const namespaces = await until('the crews grouped under namespaces', async () => {
+        const roots = await api.crews.getChildren();
+        return roots.every((n) => n.kind !== 'crew') && roots.some((n) => n.kind === 'namespace') ? roots : undefined;
+      });
+      assert.deepEqual(namespaces.filter((n) => n.kind === 'namespace').map((n) => api.crews.getTreeItem(n).label), ['somewhere', 'team-a']);
+      const demo = await liveCrew(api, 'somewhere', 'demo');
+      assert.equal(api.crews.getParent(demo)?.kind, 'namespace');
+    } finally {
+      await vscode.commands.executeCommand('crewforge.listFlat');
+    }
+    assert.equal(api.crews.grouped, false);
+  });
+
+  it('a live crew lists the fitness scenarios it carries, and runs one from them', async () => {
+    const crew = await liveCrew(api, 'somewhere', 'demo');
+    const fitness = (await api.crews.getChildren(crew)).find((n) => n.kind === 'section' && n.section === 'fitness');
+    assert.ok(fitness, 'the crew has a Fitness group');
+    assert.match(String(api.crews.getTreeItem(fitness).description), /^1 scenario · 1 run/);
+    const members = await api.crews.getChildren(fitness);
+    const greeting = members.find((n) => api.crews.getTreeItem(n).label === 'greeting');
+    assert.ok(greeting, members.map((n) => api.crews.getTreeItem(n).label).join(', '));
+    assert.equal(api.crews.getTreeItem(greeting).contextValue, 'liveScenario');
+    await vscode.commands.executeCommand('crewforge.runDeployedScenario', greeting);
+    const started = await until('the suite of the one scenario in the cluster', async () => (await suites('somewhere')).find((s) => s.metadata.name.startsWith('demo-greeting-')));
+    assert.deepEqual(started.spec.scripts.map((s) => s.testRef), ['greeting']);
+  });
+
+  it('Run Scenarios... runs the picked scenarios, all checked at first, for the iterations picked, as one suite', async () => {
+    const fitness = await fitnessGroup(api, 'team-a', 'lab-ops');
+    const asked = vscode.commands.executeCommand('crewforge.runScenarioBatch', fitness);
+    const suite = await acceptPicksUntil('the batch of every lab-ops scenario in the cluster', async () => (await suites('team-a')).find((s) => s.metadata.name.startsWith('lab-ops-all-')));
+    await asked;
+    assert.deepEqual(suite.spec.scripts.map((s) => s.testRef), ['events', 'gpus', 'pods']);
+    assert.equal(suite.spec.iterations, 1);
+  });
+
+  it('Run Selected runs the selected scenario rows as one batch, and refuses while a run of the crew is in progress', async () => {
+    const fitness = await fitnessGroup(api, 'team-a', 'lab-ops');
+    const rows = (await api.crews.getChildren(fitness)).filter((n) => api.crews.getTreeItem(n).contextValue === 'liveScenario');
+    assert.deepEqual(rows.map((n) => api.crews.getTreeItem(n).label), ['events', 'gpus', 'pods']);
+    const asked = vscode.commands.executeCommand('crewforge.runSelectedScenarios', rows[0], [rows[0], rows[2]]);
+    const batch = await acceptPicksUntil('the batch of two lab-ops scenarios in the cluster', async () => (await suites('team-a')).find((s) => s.metadata.name.startsWith('lab-ops-batch-2-')));
+    await asked;
+    assert.deepEqual(batch.spec.scripts.map((s) => s.testRef), ['events', 'pods']);
+    const busy = { apiVersion: 'kubemoot.ai/v1alpha1', kind: 'CrewFitnessSuite', metadata: { name: 'lab-ops-busy', namespace: 'team-a' }, spec: { crewRef: 'lab-ops' }, status: { phase: 'Running' } };
+    await fetch(`${API}/apis/kubemoot.ai/v1alpha1/namespaces/team-a/crewfitnesssuites`, { method: 'POST', body: JSON.stringify(busy) });
+    try {
+      const before = (await suites('team-a')).length;
+      await vscode.commands.executeCommand('crewforge.runDeployedFitness', fitness);
+      assert.equal((await suites('team-a')).length, before);
+    } finally {
+      await fetch(`${API}/apis/kubemoot.ai/v1alpha1/namespaces/team-a/crewfitnesssuites/lab-ops-busy`, { method: 'DELETE' });
+    }
+  });
+
+  it('Deployed Crews lists the crews, and a crew expands to what it is made of', async () => {
     const crew = await liveCrew(api, 'team-a', 'lab-ops');
     assert.equal(api.crews.getTreeItem(crew).label, 'lab-ops');
     await until('lab-ops to say it has no local source', () => /no local source$/.test(String(api.crews.getTreeItem(crew).description)) || undefined, () => api.crews.getTreeItem(crew).description);

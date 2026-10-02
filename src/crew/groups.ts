@@ -30,7 +30,11 @@ export const GROUPS: Record<Group, GroupInfo> = {
   tools: { label: 'Tools', icon: 'tools', rule: 'The MCP tools the agents enable in spec.enabledTools, with the MCP server that offers each.' },
   policies: { label: 'Policies', icon: 'law', rule: 'The CrewSchedulingPolicy whose crewRef names the crew, and the MootArchetype it runs.' },
   notifications: { label: 'Notifications', icon: 'bell', rule: "NotificationSinks in the crew's namespace that fire for its agents." },
-  fitness: { label: 'Fitness', icon: 'beaker', rule: 'CrewFitnessSuites and CrewFitness runs whose crewRef names the crew.' },
+  fitness: {
+    label: 'Fitness',
+    icon: 'beaker',
+    rule: 'The fitness scenarios deployed with the crew (its ConfigMaps labeled kubemoot.ai/fitness-kind=scenarios), which runs from here always use, then the CrewFitnessSuites and CrewFitness runs whose crewRef names the crew.',
+  },
   deployment: { label: 'Deployment', icon: 'package', rule: "How the crew was deployed, and the operator's defaults it runs with." },
 };
 
@@ -53,7 +57,7 @@ export const COUNTS: Record<Group, (d: CrewDetails) => number> = {
   tools: (d) => d.tools.length,
   policies: (d) => d.related.policies.length,
   notifications: (d) => d.related.notifications.length,
-  fitness: (d) => d.related.fitness.length,
+  fitness: (d) => (d.scenarios?.length ?? 0) + d.related.fitness.length,
   deployment: () => 1,
 };
 

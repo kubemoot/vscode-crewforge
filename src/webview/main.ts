@@ -170,8 +170,10 @@ function autoGrow(): void {
 function render(): void {
   if (!state) return;
   const { conversation, busy } = state.view;
-  els.title.textContent = conversation.crewName;
-  els.where.textContent = `${conversation.namespace} · ${conversation.context}`;
+  els.title.textContent = state.crewTitle;
+  els.title.title = conversation.crewName;
+  const technical = state.crewTitle === conversation.crewName ? '' : `${conversation.crewName} · `;
+  els.where.textContent = `${technical}${conversation.namespace} · ${conversation.context}`;
   const hasMessages = conversation.messages.length > 0;
   // A conversation is saved once it has a message; before that there is nothing to act on.
   for (const button of [els.copy, els.exportBtn, els.rename, els.deleteBtn]) button.hidden = !hasMessages;
@@ -202,7 +204,7 @@ function renderMessages(): void {
   const { conversation, turn, busy } = state.view;
   const atBottom = els.messages.scrollHeight - els.messages.scrollTop - els.messages.clientHeight < 40;
   if (conversation.messages.length === 0 && !turn) {
-    els.messages.innerHTML = emptyState(conversation.crewName, state.about);
+    els.messages.innerHTML = emptyState(state.crewTitle === conversation.crewName ? `the ${conversation.crewName} crew` : state.crewTitle, state.about);
     return;
   }
   const parts = conversation.messages.map((m, index) => renderMessage(m, index, busy));
@@ -225,10 +227,11 @@ function refocus(focused: { action?: string; index?: string }): void {
   [...buttons].find((b) => b.dataset.action === focused.action && b.dataset.index === focused.index)?.focus();
 }
 
+/** The empty state; `crew` reads after "Discuss with": a display name, or "the <name> crew". */
 function emptyState(crew: string, about: string): string {
   const list = about ? `<p class="agent-list">${escapeHtml(about)}</p>` : '';
   return `<div class="empty-state"><div class="empty-icon">${icons.crewLarge}</div>
-    <h2>Discuss with the ${escapeHtml(crew)} crew</h2>
+    <h2>Discuss with ${escapeHtml(crew)}</h2>
     <p>Ask a question and its agents will discuss it.</p>${list}</div>`;
 }
 

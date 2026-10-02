@@ -12,6 +12,8 @@ export interface LiveCrewDeps {
   sources: () => Promise<SourceEntry[]>;
   deploy: Pick<DeployCommands, 'updateDeployment' | 'deployRevision' | 'removeDeployment' | 'removeUnsourced'>;
   fitness: Pick<FitnessCommands, 'runFitness'>;
+  /** Runs the fitness scenarios a live crew carries; false when it carries none. */
+  deployedFitness?: (crew: CrewSummary) => Promise<boolean>;
   details: (crew: CrewSummary) => Promise<CrewDetails>;
   follow: (deployment: Deployment) => Promise<void>;
 }
@@ -44,7 +46,9 @@ export class LiveCrewActions {
     if (node) await this.deps.deploy.deployRevision(node);
   }
 
+  /** Runs the scenarios the crew carries; a crew without deployed scenarios runs the fitness its source defines. */
   async runFitness(crew: CrewSummary): Promise<void> {
+    if (await this.deps.deployedFitness?.(crew)) return;
     const node = await this.withSource(crew, 'run the fitness its source defines');
     if (node) await this.deps.fitness.runFitness(node);
   }

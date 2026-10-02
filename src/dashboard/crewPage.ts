@@ -12,10 +12,11 @@ export function renderCrewPage(v: CrewVitals, tab: CrewTab = 'overview', body?: 
 
 function header(v: CrewVitals): string {
   const state = v.deployment ? badge(v.deployment.crew.phase, readyTone(v.deployment.crew.ready)) : badge('not deployed');
-  const where = v.deployment ? `${v.deployment.namespace} in ${v.context}` : `not deployed in ${v.context}`;
+  const place = v.deployment ? `${v.deployment.namespace} in ${v.context}` : `not deployed in ${v.context}`;
+  const where = v.title === v.name ? place : `${v.name} · ${place}`;
   const description = v.description ? `<p>${escape(v.description)}</p>` : '';
   const version = chartVersionBanner(v.source?.chart?.version, v.provenance?.chartVersion);
-  return `<h1>${escape(v.name)} ${state}</h1><p class="muted">${escape(where)}</p>${description}${version ? banner(version) : ''}`;
+  return `<h1>${escape(v.title)} ${state}</h1><p class="muted">${escape(where)}</p>${description}${version ? banner(version) : ''}`;
 }
 
 /** The first reason that blocks a button, if any. */
@@ -25,7 +26,7 @@ const blocked = (...reasons: (string | undefined)[]) => reasons.find((r) => r !=
 function reasons(v: CrewVitals): { noSource?: string; notDeployed?: string; flux?: string; running?: string; nothingToShow?: string } {
   return {
     noSource: v.source?.crewName ? undefined : 'No workspace source renders this crew; open its folder to deploy or lint it.',
-    notDeployed: v.deployment ? undefined : `${v.name} is not deployed in ${v.context}.`,
+    notDeployed: v.deployment ? undefined : `${v.title} is not deployed in ${v.context}.`,
     flux: v.deployment?.channel === 'flux' ? 'Flux manages this crew; change it through git.' : undefined,
     running: v.fitnessRunning ? 'A fitness run for this crew is in progress.' : undefined,
     nothingToShow: v.sourceAt || v.deployment ? undefined : 'Nothing to show yet.',

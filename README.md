@@ -7,7 +7,7 @@ and run its fitness scenarios, all from the editor.
 It works through your kubeconfig, the same way `kmctl` does: any cluster your `kubectl` can
 reach works, no crew needs a public address, and no extra credential is involved.
 
-![The Kubemoot view in VS Code: Deployed Crews lists the helpdesk crew's groups with its Models open, including the shared ollama ModelProvider, and Crew Sources lists the helpdesk chart in the workspace, deployed and in sync, with the same groups.](docs/screenshots/views.png)
+![The Kubemoot view in VS Code: Deployed Crews lists the Help Desk crew (helpdesk in crew-helpdesk) with its Models open, including the shared ollama ModelProvider, and Crew Sources lists its chart in the workspace, deployed and in sync, with the same groups.](docs/screenshots/views.png)
 
 ## Install
 
@@ -22,14 +22,16 @@ Listings in the Visual Studio Marketplace and Open VSX are coming.
 You need VS Code 1.95 or later and a kubeconfig with access to a cluster that runs the
 Kubemoot operator. Developing a crew also needs `helm` (deploy and lint), `kubectl`
 (bundles of plain manifests), and [`kmctl`](https://github.com/kubemoot/kmctl/releases)
-0.14.0 or later (create). CrewForge reads the kubeconfig from the `crewforge.kubeconfig`
+0.14.0 or later with `kmctl create --display-name` (create). CrewForge reads the kubeconfig from the `crewforge.kubeconfig`
 setting, else `KUBECONFIG`, else `~/.kube/config`.
 
 ## A 60-second tour
 
 1. Click the Kubemoot mark (the round table) in the activity bar. **Deployed Crews** lists
-   the crews your kubeconfig can read, grouped by namespace. **Crew Sources** lists the
-   crew charts and bundles in your workspace.
+   the crews your kubeconfig can read, one row each with its namespace; **Group by
+   Namespace** in its title bar nests them instead. **Crew Sources** lists the crew charts
+   and bundles in your workspace. Each crew shows by its display name, such as "Help
+   Desk", with its Kubernetes name beside it.
 2. Choose **Ask** on a deployed crew. A chat opens; type a question and press Enter. Each
    agent reports as it works, then the crew's answer follows, with how long it took.
 3. Expand a crew to see every part of it: Agents, Prompts, Skills, Models, RAG Sources,
@@ -39,13 +41,15 @@ setting, else `KUBECONFIG`, else `~/.kube/config`.
    **Live**, and **Diff** tabs.
 4. Right-click a folder in the Explorer and choose **New Kubemoot Crew Here** to scaffold
    kmctl's starter crew with `kmctl create --chart`: a small, working crew that reads its
-   own namespace, with 1 to 5 specialists.
+   own namespace, with 1 to 5 specialists. Name it in plain words; CrewForge suggests the
+   Kubernetes name from it, and **Rename...** later changes either.
 5. Edit it, or use **Add <Kind>...** on a group in Crew Sources to add an Agent, a
    PromptModule, a Model, a RAG source, an MCP server, and more. The status bar says where
    it stands against its deployment: not deployed, in sync, or changed. **Lint** checks
    the chart against your cluster's schemas.
 6. Choose **Deploy to Namespace...** to run it with Helm, then **Ask**, **Run Fitness**,
-   and **Redeploy** after each edit.
+   and **Redeploy** after each edit. A deployed crew carries its fitness scenarios: its
+   Fitness group runs all of them, a batch you pick, or one.
 
 The status bar always shows the context CrewForge is connected to. If the cluster cannot
 be reached, CrewForge says so in plain words and offers **Select Kubernetes Context**.

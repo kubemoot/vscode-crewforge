@@ -5,6 +5,38 @@ generated from the conventional commits since the previous release.
 
 ## Unreleased
 
+### Display names
+
+- A crew has a display name, the name people read ("Homelab Health Guide"), kept in the
+  Crew's `kubemoot.ai/display-name` annotation, beside its Kubernetes name
+  (`homelab-health-guide`). Create Crew asks for the display name first, then suggests
+  the Kubernetes name from it, editable and checked in plain words. Creating a crew needs
+  a kmctl whose `create` takes `--display-name`.
+- Deployed Crews, Crew Sources, the crew and fitness dashboards, chat tabs, and the Crews
+  Overview show the display name; the Kubernetes name is in the description and tooltip.
+- **Rename...** on a crew source changes the display name by default: an annotation edit
+  in the source and on each deployed copy, with no redeploy. Changing the Kubernetes name
+  stays the heavier path that renames every object built on it.
+
+### Deployed Crews as a flat list
+
+- Deployed Crews lists one row per crew, with its namespace in the description.
+  **Group by Namespace** in the title bar nests the crews under their namespaces, and
+  CrewForge remembers the choice per workspace. A namespace it cannot read shows as an
+  error row naming it.
+
+### Deployed fitness scenarios and batches
+
+- A crew's Fitness group in Deployed Crews lists the scenarios deployed with it (its
+  ConfigMaps labeled `kubemoot.ai/fitness-kind=scenarios`), then its runs. **Run All**
+  runs every scenario once, **Run Scenarios...** runs a batch you pick with the
+  iterations you choose, and **Run** runs one; no workspace source is needed. Several
+  scenario rows selected together run as one batch with **Run Selected Scenarios as One
+  Batch**, in Deployed Crews and Crew Sources. Each batch is one CrewFitnessSuite, judged
+  together with one XLSX, and its Fitness dashboard opens on it. A run in progress shows
+  Pause, Resume, and Stop. The group says "changed since deploy" when the open source's
+  scenarios differ.
+
 ### Develop a crew from the editor
 
 - The whole inner loop runs in VS Code, without GitOps: create, understand, edit, lint,

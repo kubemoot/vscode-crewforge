@@ -1,4 +1,5 @@
 import type { CrewCondition, CrewSummary } from '../k8s/crews';
+import { titleOf } from '../crew/displayName';
 import { provenanceOf } from '../source/provenance';
 
 export interface NamespaceGroup {
@@ -6,7 +7,14 @@ export interface NamespaceGroup {
   crews: CrewSummary[];
 }
 
-/** Groups crews by namespace, namespaces and crews in name order. */
+/** Crews in namespace order, then by the name people read, then by technical name: the flat list's order. */
+export function sortCrews(crews: CrewSummary[]): CrewSummary[] {
+  return [...crews].sort((a, b) => a.namespace.localeCompare(b.namespace) || byTitle(a, b));
+}
+
+const byTitle = (a: CrewSummary, b: CrewSummary) => titleOf(a).localeCompare(titleOf(b)) || a.name.localeCompare(b.name);
+
+/** Groups crews by namespace, namespaces in name order, crews by the name people read, then by technical name. */
 export function groupByNamespace(crews: CrewSummary[]): NamespaceGroup[] {
   const groups = new Map<string, CrewSummary[]>();
   for (const crew of crews) {
@@ -16,11 +24,22 @@ export function groupByNamespace(crews: CrewSummary[]): NamespaceGroup[] {
   }
   return [...groups.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
-    .map(([namespace, list]) => ({ namespace, crews: [...list].sort((a, b) => a.name.localeCompare(b.name)) }));
+    .map(([namespace, list]) => ({ namespace, crews: [...list].sort(byTitle) }));
 }
 
-/** The one line under a crew's name in the tree: phase, agents, and chart version. */
-export function crewDescription(crew: CrewSummary): string {
+/**
+ * The line beside a crew's name in the tree: where it is, then its phase, agents, and chart
+ * version. Grouped under its namespace, where is its technical name when people read
+ * another; in the flat list it is the namespace, with the technical name after a slash.
+ */
+export function crewDescription(crew: CrewSummary, flat = false): string {
+  const technical = titleOf(crew) === crew.name ? '' : crew.name;
+  const where = flat ? [crew.namespace, technical].filter(Boolean).join('/') : technical;
+  return [where, crewState(crew)].filter(Boolean).join(' · ');
+}
+
+/** A crew's phase, agents, and chart version: "Ready, 2 agents, v0.1.0". */
+export function crewState(crew: CrewSummary): string {
   const version = provenanceOf(crew).chartVersion;
   const parts = [crew.phase];
   if (crew.agents !== undefined) parts.push(agentCount(crew.agents));
@@ -35,14 +54,15 @@ export function agentCount(n: number): string {
 
 /** The hover text of a crew: its state, then its metadata; the archetype comes from its CrewSchedulingPolicy once known. */
 export function crewTooltip(crew: CrewSummary, archetype?: string): string {
-  const lines = [`${crew.namespace}/${crew.name}`, `Phase: ${crew.phase}${crew.ready ? ' (ready)' : ''}`];
+  const display = titleOf(crew);
+  const lines = [display === crew.name ? '' : display, `${crew.namespace}/${crew.name}`, `Phase: ${crew.phase}${crew.ready ? ' (ready)' : ''}`];
   if (crew.coordinator) lines.push(`Coordinator: ${crew.coordinator}`);
   if (crew.message) lines.push(crew.message);
   if (crew.description) lines.push(`Description: ${crew.description}`);
   lines.push(`Namespace: ${crew.namespace}`);
   if (crew.created) lines.push(`Created: ${crew.created}`);
   if (archetype) lines.push(`Archetype: ${archetype}`);
-  return [...lines, ...mapLines('Labels', crew.labels), ...conditionLines(crew.conditions)].join('\n');
+  return [...lines.filter(Boolean), ...mapLines('Labels', crew.labels), ...conditionLines(crew.conditions)].join('\n');
 }
 
 function mapLines(title: string, map: Record<string, string> = {}): string[] {

@@ -65,6 +65,18 @@ export const SUITE_LABEL = 'kubemoot.ai/fitness-suite';
 /** Phases of a run still going: waiting, running, or paused between iterations. */
 const RUNNING = new Set(['', 'Pending', 'Running', 'Paused']);
 
+/** The scenario a CrewFitness runs, by name: its testRef, else its own name. */
+export function fitnessScenarioName(m: Manifest): string {
+  const ref = (m.spec as { testRef?: unknown } | undefined)?.testRef;
+  return typeof ref === 'string' && ref !== '' ? ref : m.metadata.name;
+}
+
+/** The scenario names of a CrewFitnessSuite: the testRef of each of its scripts. */
+export function suiteScriptRefs(m: Manifest): string[] {
+  const scripts = (m.spec as { scripts?: unknown } | undefined)?.scripts;
+  return Array.isArray(scripts) ? scripts.map((s: { testRef?: unknown } | null) => s?.testRef).filter((r): r is string => typeof r === 'string') : [];
+}
+
 export function isFitness(m: Manifest): boolean {
   return (FITNESS_KINDS as readonly string[]).includes(m.kind);
 }

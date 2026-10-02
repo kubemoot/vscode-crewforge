@@ -19,7 +19,7 @@ describe('Deployed Crews', () => {
     const c = obj('Crew', 'demo', 'ns');
     c.status = { ready: true, phase: 'Ready' };
     const cluster = new FakeCluster().add(c);
-    const tree = new CrewTreeProvider(() => ({ source: '/k', context: 'lab', client: cluster as unknown as KubeClient }));
+    const tree = Object.assign(new CrewTreeProvider(() => ({ source: '/k', context: 'lab', client: cluster as unknown as KubeClient })), { grouped: true });
     const [plain] = await tree.getChildren();
     expect(plain.kind).toBe('namespace');
     tree.connectionItem = () => ({ label: 'lab', tooltip: 'CrewForge dev\nContext: lab' });

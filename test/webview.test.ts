@@ -39,7 +39,7 @@ async function loadPage(): Promise<void> {
 let availability: StateMessage['availability'];
 
 function stateMessage(conversation: Conversation, extra: Partial<StateMessage['view']> = {}, history: StateMessage['history'] = []): StateMessage {
-  return { type: 'state', view: { conversation, busy: false, ...extra }, history, about: '2 agents', links, availability };
+  return { type: 'state', view: { conversation, busy: false, ...extra }, crewTitle: conversation.crewName, history, about: '2 agents', links, availability };
 }
 
 /** Delivers a message as VS Code's host frame does: with the page's own origin. */
@@ -64,6 +64,15 @@ describe('the chat page', () => {
     expect($('messages').textContent).toContain('Discuss with the lab-ops crew');
     expect(($('copy') as HTMLButtonElement).hidden).toBe(true);
     expect(shown.at(-1)).toContain('Discuss with the lab-ops crew');
+  });
+
+  it("titles the page with the crew's display name, its technical name beside it and on hover", () => {
+    const message = { ...stateMessage(newConversation('ctx', 'team-a', 'lab-ops')), crewTitle: 'Lab-Ops Crew' };
+    window.dispatchEvent(new MessageEvent('message', { data: message, origin: window.origin }));
+    expect($('title').textContent).toBe('Lab-Ops Crew');
+    expect($('title').title).toBe('lab-ops');
+    expect($('where').textContent).toBe('lab-ops · team-a · ctx');
+    expect($('messages').textContent).toContain('Discuss with Lab-Ops Crew');
   });
 
   it('renders the answer as Markdown, shows raw HTML as text, and links only web URLs', () => {
