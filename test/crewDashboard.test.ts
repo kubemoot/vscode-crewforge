@@ -52,14 +52,13 @@ function deps(over: Partial<VitalsDeps> = {}): VitalsDeps {
     liveDetails: async () => ({ crew: obj('Crew', 'demo', 'crew-demo'), agents: [toAgent(agentObj('demo-coordinator', 'coordinator', true)), toAgent(agentObj('demo-tooler', 'tooler', false))], skills: [], promptModules: [], mcpServers: [], tools: [], related: noRelated(), problems: [] }),
     helm: async () => ({ firstDeployed: '2026-09-29T10:00:00Z', lastDeployed: '2026-09-30T10:00:00Z', revision: 3, status: 'deployed' }),
     conversations: async () => ({ total: 2, turns: 5, active: 'Which nodes?', errors: [{ at: '2026-09-30T10:05:00Z', text: 'Agent k8s failed' }] }),
-    kubemoot: async () => ({ threads: 7, failures: 1, recentFailures: ['k8s: tool timed out'], messages: 120 }),
     fitnessRunning: () => false,
     ...over,
   };
 }
 
 describe('gatherVitals', () => {
-  it('joins the source, the deployment Redeploy goes to, the live agents, Helm, conversations, and discussions', async () => {
+  it('joins the source, the deployment Redeploy goes to, the live agents, Helm, and conversations', async () => {
     const v = await gatherVitals({ entry }, deps());
     expect(v).toMatchObject({ name: 'demo', description: 'source text', context: 'lab', agentsFrom: 'live', fitnessRunning: false, sourceAt: { file: '/w/demo/templates/crew.yaml', line: 0 } });
     expect(v.deployment?.namespace).toBe('crew-demo');
@@ -68,7 +67,7 @@ describe('gatherVitals', () => {
     expect(v.models).toEqual([{ name: 'qwen-8b', model: 'qwen3:8b' }, { name: 'bare', model: undefined }]);
     expect(agentsByRole(v.agents)).toEqual([['coordinator', 1], ['tooler', 1]]);
     expect(v.conversations.turns).toBe(5);
-    expect(v.kubemoot).toMatchObject({ threads: 7 });
+    expect(v).not.toHaveProperty('kubemoot');
   });
 
   it('shows what an undeployed source declares', async () => {
@@ -107,12 +106,9 @@ describe('gatherVitals', () => {
         conversations: async () => {
           throw new Error('disk');
         },
-        kubemoot: async () => {
-          throw new Error('proxy');
-        },
       }),
     );
-    expect(v).toMatchObject({ deploymentError: 'cluster down', agentsError: 'agents forbidden', agentsFrom: 'none', helm: undefined, conversations: { total: 0 }, kubemoot: { unavailable: 'proxy' } });
+    expect(v).toMatchObject({ deploymentError: 'cluster down', agentsError: 'agents forbidden', agentsFrom: 'none', helm: undefined, conversations: { total: 0 } });
     const noCrew = await gatherVitals(
       { entry },
       deps({
@@ -181,10 +177,10 @@ describe('renderCrewPage', () => {
   const vitals = async (over: Partial<VitalsDeps> = {}) => gatherVitals({ entry }, deps(over));
   const enabled = (v: CrewVitals) => crewButtons(v).filter((b) => !b.disabled).map((b) => b.action);
 
-  it('shows a deployed crew: status, deployment times, agents by role, conditions, conversations, and discussions', async () => {
+  it('shows a deployed crew: status, deployment times, agents by role, conditions, and conversations', async () => {
     const v = await vitals();
     const html = renderCrewPage(v);
-    for (const text of ['<h1>demo <span class="badge good">Ready</span></h1>', 'crew-demo in lab', 'Chart version differs: source 0.2.2, deployed 0.46.0-rc.0', '/w/demo', 'Helm chart', '2026-09-29T10:00:00Z', 'me@example.com', '1 coordinator, 1 tooler', 'AgentsReady', 'Which nodes?', 'Agent k8s failed', 'Threads', 'k8s: tool timed out', 'qwen-8b (qwen3:8b), bare']) {
+    for (const text of ['<h1>demo <span class="badge good">Ready</span></h1>', 'crew-demo in lab', 'Chart version differs: source 0.2.2, deployed 0.46.0-rc.0', '/w/demo', 'Helm chart', '2026-09-29T10:00:00Z', 'me@example.com', '1 coordinator, 1 tooler', 'AgentsReady', 'Which nodes?', 'Agent k8s failed', 'qwen-8b (qwen3:8b), bare']) {
       expect(html).toContain(text);
     }
     expect(enabled(v)).toEqual(['deploy', 'redeploy', 'undeploy', 'ask', 'fitness', 'fitnessDashboard', 'lint', 'yaml', 'refresh']);
@@ -215,7 +211,6 @@ describe('renderCrewPage', () => {
         liveDetails: async () => {
           throw new Error('forbidden');
         },
-        kubemoot: async () => ({ unavailable: 'No Kubemoot dashboard found.' }),
         conversations: async () => ({ total: 0, turns: 0, errors: [] }),
       }),
     );
@@ -224,7 +219,7 @@ describe('renderCrewPage', () => {
     expect(html).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
     expect(html).not.toContain('<script>');
     expect(html).toContain('Cannot read the live agents: forbidden');
-    expect(html).toContain('No Kubemoot dashboard found.');
+    expect(html).not.toContain('Discussions (Kubemoot)');
     expect(html).toContain('No failed turns or agent failures saved.');
     expect(html).toContain('badge warn');
     expect(enabled(v)).toEqual(['undeploy', 'ask', 'fitnessDashboard', 'yaml', 'refresh']);

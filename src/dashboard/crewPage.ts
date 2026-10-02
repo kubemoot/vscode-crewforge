@@ -6,7 +6,7 @@ import { badge, banner, buttons, escape, facts, note, section, SELECT_CONTEXT_BU
 
 /** The crew dashboard's page body: the header, the buttons, the tabs, and the shown tab (the overview unless `body` is given). */
 export function renderCrewPage(v: CrewVitals, tab: CrewTab = 'overview', body?: string): string {
-  const shown = body ?? [sourceSection(v), deploymentSection(v), contentsSection(v), agentsSection(v), statusSection(v), conversationsSection(v), kubemootSection(v)].join('');
+  const shown = body ?? [sourceSection(v), deploymentSection(v), contentsSection(v), agentsSection(v), statusSection(v), conversationsSection(v)].join('');
   return [header(v), buttons(crewButtons(v)), tabBar(tab), shown].join('');
 }
 
@@ -158,17 +158,4 @@ function conversationsSection(v: CrewVitals): string {
   ]);
   const errors = table(['When', 'Problem'], c.errors.map((e) => [escape(e.at), escape(e.text)]), 'No failed turns or agent failures saved.');
   return section("Conversations (CrewForge's, on this computer)", `${counts}<h3>Recent problems</h3>${errors}`);
-}
-
-function kubemootSection(v: CrewVitals): string {
-  if (!v.deployment || !v.kubemoot) return '';
-  if ('unavailable' in v.kubemoot) return section('Discussions (Kubemoot)', note(v.kubemoot.unavailable));
-  const k = v.kubemoot;
-  const counts = facts([
-    ['Threads', k.threads],
-    ['Agent failures', k.failures],
-  ]);
-  const failures = table(['Recent agent failures'], k.recentFailures.map((f) => [escape(f)]), 'None.');
-  const kept = note(`From the newest ${k.messages} discussion messages the Kubemoot dashboard keeps.`);
-  return section('Discussions (Kubemoot)', [counts, failures, kept].join(''));
 }

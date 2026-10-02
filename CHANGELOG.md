@@ -20,6 +20,20 @@ generated from the conventional commits since the previous release.
   in the source and on each deployed copy, with no redeploy. Changing the Kubernetes name
   stays the heavier path that renames every object built on it.
 
+### Fitness results from the Kubernetes API
+
+- The fitness dashboard reads a suite's per-scenario results and the judge's progress,
+  scores, and reasons (a new Judge reason column) from the suite's status (`status.scenarios` and `status.judge`),
+  which the operator keeps after it removes the iterations. CrewForge no longer reads the
+  Kubemoot dashboard's API, and the `crewforge.dashboardService` setting is gone. This
+  needs a Kubemoot operator that records results in the suite status; with an older one
+  the dashboard says the status records none.
+- **Open in Kubemoot dashboard** on a suite opens the dashboard's Fitness page in your
+  browser, where you pick the run to read its transcripts; it needs
+  `crewforge.dashboardUrl`.
+- The crew dashboard no longer shows Kubemoot discussion counts; it shows CrewForge's own
+  conversation counts and recent problems.
+
 ### Deployed Crews as a flat list
 
 - Deployed Crews lists one row per crew, with its namespace in the description.

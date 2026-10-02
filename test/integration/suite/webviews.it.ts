@@ -1,7 +1,10 @@
 import * as assert from 'node:assert/strict';
 import * as vscode from 'vscode';
 import type { CrewForgeApi } from '../../../src/extension';
+import { REQUESTS_ROUTE } from '../../fakeRoutes';
 import { closeAll, crewforge, liveCrew, pageShows, sourceNode, until } from './helpers';
+
+const API = process.env.CREWFORGE_IT_API ?? '';
 
 describe('CrewForge webviews in a real VS Code', () => {
   let api: CrewForgeApi;
@@ -74,6 +77,25 @@ describe('CrewForge webviews in a real VS Code', () => {
     await vscode.commands.executeCommand('crewforge.openFitnessDashboard', node);
     await pageShows(api, 'fitness:somewhere/demo', ['Runs', 'demo-smoke']);
     assert.equal(api.pages().find((p) => p.key === 'fitness:somewhere/demo')?.title, 'Demo Crew fitness');
+  });
+
+  it('the fitness dashboard shows a finished suite from its status, reading only the Kubernetes API', async () => {
+    const node = await liveCrew(api, 'team-a', 'lab-ops');
+    await vscode.commands.executeCommand('crewforge.openFitnessDashboard', node);
+    const key = 'fitness:team-a/lab-ops';
+    await pageShows(api, key, ['Runs', 'lab-ops-baseline']);
+    assert.ok(await api.press(key, 'select', 'lab-ops-baseline'));
+    await pageShows(api, key, [
+      'Run lab-ops-baseline',
+      'Judge: done, 2 scenarios scored, mean 72',
+      'Lists every pod with its phase.',
+      'Names the warning events but misses their reasons.',
+      'transcripts stay in',
+      'Open in Kubemoot dashboard',
+    ]);
+    const requests = (await (await fetch(`${API}${REQUESTS_ROUTE}`)).json()) as string[];
+    const dashboardReads = requests.filter((r) => /\/api\/v1\/services\?|\/proxy(\/dashboard)?\/api\/(kubemoot|nats)\//.test(r));
+    assert.deepEqual(dashboardReads, [], 'CrewForge reads no Kubemoot dashboard API');
   });
 
   it('the chat opens and shows the crew', async () => {
