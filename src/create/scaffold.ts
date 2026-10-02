@@ -21,29 +21,72 @@ export function createArgs(request: CreateCrewRequest, context?: string): string
   return args;
 }
 
-/** The first kmctl release whose `create --chart` scaffolds the starter crew of 1 to 5 specialists (kubemoot/kmctl v0.14.0). */
+/** The kmctl release whose `create --chart` scaffolds the starter crew of 1 to 5 specialists, as named to the user. */
 export const KMCTL_MIN_VERSION = '0.14.0';
+
+/**
+ * The first kmctl build with the starter crew: release candidate 0.14.0-rc.2. By
+ * semver precedence 0.14.0-rc.0 < 0.14.0-rc.2 < 0.14.0, so rc.0, which predates the
+ * starter crew, is refused, while rc.2, later candidates, and every release pass.
+ */
+export const KMCTL_MIN_BUILD = '0.14.0-rc.2';
 
 export const KMCTL_RELEASES = 'https://github.com/kubemoot/kmctl/releases';
 
-/** A version's major, minor, and patch; a prerelease counts as its release, since kmctl cuts each release from its last candidate. */
-export type Version = [number, number, number];
+/** One dot-separated prerelease identifier: numeric ones compare as numbers. */
+type Identifier = number | string;
 
-/** Parses "0.14.0", "v0.14.0", or "0.15.0-rc.1"; undefined for anything else, such as "dev". */
+/** A semantic version: major, minor, and patch, and its prerelease identifiers (none for a release). */
+export interface Version {
+  release: [number, number, number];
+  prerelease: Identifier[];
+}
+
+/** A prerelease identifier per semver: a number without leading zeros, or text with a letter or hyphen. */
+const IDENTIFIER = String.raw`(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)`;
+const SEMVER = new RegExp(String.raw`^v?(\d+)\.(\d+)\.(\d+)(?:-(${IDENTIFIER}(?:\.${IDENTIFIER})*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$`);
+
+/** Parses "0.14.0", "v0.14.0", or "0.15.0-rc.1" (build metadata after "+" is ignored); undefined for anything else, such as "dev". */
 export function parseVersion(text: string): Version | undefined {
-  const m = /^v?(\d+)\.(\d+)\.(\d+)(-\S+)?$/.exec(text.trim());
-  return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : undefined;
+  const m = SEMVER.exec(text.trim());
+  if (!m) return undefined;
+  const prerelease = m[4] ? m[4].split('.').map((id): Identifier => (/^\d+$/.test(id) ? Number(id) : id)) : [];
+  return { release: [Number(m[1]), Number(m[2]), Number(m[3])], prerelease };
 }
 
-/** True when version is at least minimum. */
-export function atLeast(version: Version, minimum: Version): boolean {
-  for (let i = 0; i < 3; i++) {
-    if (version[i] !== minimum[i]) return version[i] > minimum[i];
+/** Semver precedence of two identifiers: numbers by value, below any text; text by ASCII order. */
+function compareIdentifiers(a: Identifier, b: Identifier): number {
+  if (typeof a === 'number' && typeof b === 'number') return a - b;
+  if (typeof a === 'number') return -1;
+  if (typeof b === 'number') return 1;
+  if (a === b) return 0;
+  return a < b ? -1 : 1;
+}
+
+/** Semver precedence of two prereleases: a release (none) is above any prerelease of it. */
+function comparePrereleases(a: Identifier[], b: Identifier[]): number {
+  if (a.length === 0 || b.length === 0) return b.length - a.length;
+  for (let i = 0; i < Math.min(a.length, b.length); i++) {
+    const order = compareIdentifiers(a[i], b[i]);
+    if (order !== 0) return order;
   }
-  return true;
+  return a.length - b.length;
 }
 
-const MINIMUM = parseVersion(KMCTL_MIN_VERSION) as Version;
+/** Semver precedence: negative when a is older than b, zero when equal, positive when newer. */
+export function compareVersions(a: Version, b: Version): number {
+  for (let i = 0; i < 3; i++) {
+    if (a.release[i] !== b.release[i]) return a.release[i] - b.release[i];
+  }
+  return comparePrereleases(a.prerelease, b.prerelease);
+}
+
+/** True when version is at least minimum by semver precedence, so 0.14.0-rc.1 is below 0.14.0. */
+export function atLeast(version: Version, minimum: Version): boolean {
+  return compareVersions(version, minimum) >= 0;
+}
+
+const MINIMUM = parseVersion(KMCTL_MIN_BUILD) as Version;
 
 function missingKmctl(): string {
   return `Creating a crew needs kmctl ${KMCTL_MIN_VERSION} or later on your PATH, and none was found. Install it from ${KMCTL_RELEASES}`;

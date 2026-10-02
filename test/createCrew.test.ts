@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createCrewCommand, CREW_SIZES, DEPLOY_NEXT, showCreatedCrew } from '../src/create/createCrew';
 import type { SourceNode } from '../src/views/sourceTree';
-import { atLeast, createArgs, KMCTL_MIN_VERSION, kmctlProblem, parseVersion, scaffoldCrew } from '../src/create/scaffold';
+import { atLeast, compareVersions, createArgs, KMCTL_MIN_BUILD, KMCTL_MIN_VERSION, kmctlProblem, parseVersion, scaffoldCrew } from '../src/create/scaffold';
 import type { Exec, ExecOptions } from '../src/source/render';
 import { recorded, resetFake, Uri } from './vscodeFake';
 
@@ -22,27 +22,55 @@ beforeEach(() => {
 });
 
 describe('kmctl version check', () => {
-  it('parses release, prerelease, and v-prefixed versions, and nothing else', () => {
-    expect(parseVersion('0.12.0')).toEqual([0, 12, 0]);
-    expect(parseVersion('v0.13.0-rc.1\n')).toEqual([0, 13, 0]);
+  it('parses release, prerelease, build, and v-prefixed versions, and nothing else', () => {
+    expect(parseVersion('0.12.0')).toEqual({ release: [0, 12, 0], prerelease: [] });
+    expect(parseVersion('v0.13.0-rc.1\n')).toEqual({ release: [0, 13, 0], prerelease: ['rc', 1] });
+    expect(parseVersion('1.0.0-alpha.beta+exp.sha.5114f85')).toEqual({ release: [1, 0, 0], prerelease: ['alpha', 'beta'] });
+    expect(parseVersion('1.0.0+20130313144700')).toEqual({ release: [1, 0, 0], prerelease: [] });
     expect(parseVersion('dev')).toBeUndefined();
     expect(parseVersion('kmctl version 0.12.0')).toBeUndefined();
+    expect(parseVersion('0.12')).toBeUndefined();
+    expect(parseVersion('0.12.0-')).toBeUndefined();
+    expect(parseVersion('0.12.0-rc..1')).toBeUndefined();
+    expect(parseVersion('0.12.0-rc.01')).toBeUndefined();
+    expect(parseVersion('0.12.0-rc.')).toBeUndefined();
+    expect(parseVersion('0.12.0+')).toBeUndefined();
   });
 
-  it('needs the kmctl release with the starter crew: 0.13.9 is too old, 0.14.0 will do', async () => {
-    expect(parseVersion(KMCTL_MIN_VERSION)).toEqual([0, 14, 0]);
-    version = { code: 0, stdout: '0.13.9\n', stderr: '' };
-    expect(await kmctlProblem(exec)).toContain('needs kmctl 0.14.0 or later');
-    version = { code: 0, stdout: 'v0.14.0\n', stderr: '' };
-    expect(await kmctlProblem(exec)).toBeUndefined();
+  it('needs the first kmctl build with the starter crew: 0.14.0-rc.2, named to the user as 0.14.0', async () => {
+    expect(parseVersion(KMCTL_MIN_VERSION)).toEqual({ release: [0, 14, 0], prerelease: [] });
+    expect(parseVersion(KMCTL_MIN_BUILD)).toEqual({ release: [0, 14, 0], prerelease: ['rc', 2] });
+    for (const old of ['0.13.9', '0.14.0-rc.0', 'v0.14.0-rc.1', '0.14.0-alpha', '0.14.0-rc']) {
+      version = { code: 0, stdout: `${old}\n`, stderr: '' };
+      expect(await kmctlProblem(exec), old).toContain(`needs kmctl 0.14.0 or later (for the starter crew); found kmctl ${old.trim()}`);
+    }
+    for (const ok of ['0.14.0-rc.2-3-gabc', '0.14.0-rc.2', 'v0.14.0-rc.3', '0.14.0-rc.10', 'v0.14.0', '0.14.1-rc.0', '0.15.0-rc.0']) {
+      version = { code: 0, stdout: `${ok}\n`, stderr: '' };
+      expect(await kmctlProblem(exec), ok).toBeUndefined();
+    }
   });
 
-  it('compares by major, minor, then patch; a prerelease counts as its release', () => {
+  it('orders versions by semver precedence', () => {
+    // The precedence example from semver.org, oldest first.
+    const ordered = ['1.0.0-alpha', '1.0.0-alpha.1', '1.0.0-alpha.beta', '1.0.0-beta', '1.0.0-beta.2', '1.0.0-beta.11', '1.0.0-rc.1', '1.0.0'];
+    for (let i = 0; i + 1 < ordered.length; i++) {
+      const [older, newer] = [parseVersion(ordered[i])!, parseVersion(ordered[i + 1])!];
+      expect(compareVersions(older, newer), `${ordered[i]} < ${ordered[i + 1]}`).toBeLessThan(0);
+      expect(compareVersions(newer, older), `${ordered[i + 1]} > ${ordered[i]}`).toBeGreaterThan(0);
+    }
+    expect(compareVersions(parseVersion('1.0.0-rc.1')!, parseVersion('v1.0.0-rc.1+build.7')!)).toBe(0);
+    expect(compareVersions(parseVersion('0.9.9')!, parseVersion('0.10.0')!)).toBeLessThan(0);
+    expect(compareVersions(parseVersion('2.0.0')!, parseVersion('1.99.99')!)).toBeGreaterThan(0);
+    expect(compareVersions(parseVersion('1.0.0-1')!, parseVersion('1.0.0-alpha')!)).toBeLessThan(0);
+  });
+
+  it('counts a prerelease below its release', () => {
     const min = parseVersion('0.12.0')!;
     expect(atLeast(parseVersion('0.11.3')!, min)).toBe(false);
     expect(atLeast(parseVersion('0.11.15')!, min)).toBe(false);
+    expect(atLeast(parseVersion('0.12.0-rc.1')!, min)).toBe(false);
     expect(atLeast(parseVersion('0.12.0')!, min)).toBe(true);
-    expect(atLeast(parseVersion('0.12.0-rc.1')!, min)).toBe(true);
+    expect(atLeast(parseVersion('0.12.1-rc.0')!, min)).toBe(true);
     expect(atLeast(parseVersion('0.12.1')!, min)).toBe(true);
     expect(atLeast(parseVersion('1.0.0')!, min)).toBe(true);
     expect(atLeast(parseVersion('0.9.9')!, min)).toBe(false);
