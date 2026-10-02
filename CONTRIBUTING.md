@@ -5,6 +5,11 @@ Kubemoot repositories, in the
 [Community section of kubemoot.org](https://kubemoot.org/docs/community/). To build, test,
 and run CrewForge from source, see the Develop section of the [README](README.md).
 
+## Sign your commits
+
+Every commit carries a Developer Certificate of Origin sign-off. Add it with
+`git commit -s`; the DCO check on each pull request enforces it. There is no CLA.
+
 ## Integration tests
 
 `npm run test:integration` packages the extension and runs it in a real VS Code against a
