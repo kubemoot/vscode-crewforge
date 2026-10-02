@@ -1105,7 +1105,7 @@
         "crewforge.dashboardService": {
           "type": "string",
           "default": "",
-          "markdownDescription": "The Kubemoot dashboard's Service, as `namespace/name:port`, which the crew and fitness dashboards read through the Kubernetes service proxy (read-only) for thread counts, discussion failures, fitness scores, and archived iterations. Empty finds the Service labelled `app.kubernetes.io/name=kubemoot-dashboard`."
+          "markdownDescription": "The Kubemoot dashboard's Service, as `namespace/name:port` (add `/base` when it serves under a path, such as `kubemoot/kubemoot-operator-dashboard:80/dashboard`), which the crew and fitness dashboards read through the Kubernetes service proxy (read-only) for thread counts, discussion failures, fitness scores, and archived iterations. Empty finds the Service labelled `app.kubernetes.io/part-of=kubemoot` with `app.kubernetes.io/name` `dashboard` (the operator chart) or `kubemoot-dashboard` (standalone), and its path."
         }
       }
     }

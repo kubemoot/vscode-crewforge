@@ -1,26 +1,46 @@
 import * as vscode from 'vscode';
 import { checkName } from '../k8s/paths';
 import type { KubeTransport } from '../k8s/request';
+import { KubeError } from '../k8s/request';
 import { errorText } from '../views/errors';
 
-/** Where the Kubemoot dashboard's Service is: its namespace, name, and port. */
+/** Where the Kubemoot dashboard's Service is: its namespace, name, port, and the path it serves under. */
 export interface DashboardService {
   namespace: string;
   name: string;
   port: string;
+  /** The path the dashboard serves under, such as "/dashboard"; undefined until known. */
+  base?: string;
 }
 
-/** The label the dashboard chart puts on its Service. */
-const DASHBOARD_SELECTOR = 'app.kubernetes.io/name=kubemoot-dashboard';
+/** The paths a dashboard may serve under: at the root (standalone) or "/dashboard" (the operator chart's subchart). */
+const BASE_PATHS = ['', '/dashboard'];
 
-/** Parses the `crewforge.dashboardService` setting, `namespace/name:port` (port defaults to 80). */
+/**
+ * The labels on the dashboard's Service: the operator chart's subchart names it
+ * "dashboard", a standalone install "kubemoot-dashboard"; both are part of kubemoot.
+ */
+const DASHBOARD_SELECTOR = 'app.kubernetes.io/part-of=kubemoot,app.kubernetes.io/name in (dashboard,kubemoot-dashboard)';
+
+/** Parses the `crewforge.dashboardService` setting, `namespace/name:port[/base]` (port defaults to 80). */
 export function parseService(text: string): DashboardService | undefined {
-  const m = /^([a-z0-9-]+)\/([a-z0-9-]+)(?::(\d+))?$/.exec(text.trim());
-  return m ? { namespace: m[1], name: m[2], port: m[3] ?? '80' } : undefined;
+  const m = /^([a-z0-9-]+)\/([a-z0-9-]+)(?::(\d+))?(\/[a-z0-9-]+)?$/.exec(text.trim());
+  return m ? { namespace: m[1], name: m[2], port: m[3] ?? '80', base: m[4] } : undefined;
+}
+
+interface ServicePort {
+  name?: string;
+  port?: number;
 }
 
 interface ServiceList {
-  items?: { metadata?: { name?: string; namespace?: string }; spec?: { ports?: { port?: number }[] } }[];
+  items?: { metadata?: { name?: string; namespace?: string }; spec?: { ports?: ServicePort[] } }[];
+}
+
+/** The Service's web port: the one named "http", else the first. */
+function webPort(ports: ServicePort[] | undefined): string {
+  const port = ports?.find((p) => p.name === 'http') ?? ports?.[0];
+  return String(port?.port ?? 80);
 }
 
 /**
@@ -34,15 +54,15 @@ export async function findDashboard(client: KubeTransport): Promise<DashboardSer
   try {
     const body = JSON.parse(await client.request('GET', `/api/v1/services?labelSelector=${encodeURIComponent(DASHBOARD_SELECTOR)}`)) as ServiceList;
     const svc = body.items?.find((s) => s.metadata?.name && s.metadata.namespace);
-    return svc && { namespace: svc.metadata!.namespace!, name: svc.metadata!.name!, port: String(svc.spec?.ports?.[0]?.port ?? 80) };
+    return svc && { namespace: svc.metadata!.namespace!, name: svc.metadata!.name!, port: webPort(svc.spec?.ports) };
   } catch {
     return undefined;
   }
 }
 
 /** The API server path that reaches `path` on the dashboard through the service proxy. */
-export function dashboardPath(svc: DashboardService, path: string): string {
-  return `/api/v1/namespaces/${checkName('namespace', svc.namespace)}/services/${checkName('service', svc.name)}:${svc.port}/proxy${path}`;
+export function dashboardPath(svc: DashboardService, path: string, base = svc.base ?? ''): string {
+  return `/api/v1/namespaces/${checkName('namespace', svc.namespace)}/services/${checkName('service', svc.name)}:${svc.port}/proxy${base}${path}`;
 }
 
 /** What the Kubemoot dashboard knows about a crew's discussions. */
@@ -128,10 +148,31 @@ export class DashboardApi {
     const svc = await this.service(client);
     if (!svc) return { unavailable: 'No Kubemoot dashboard found; set crewforge.dashboardService to namespace/name:port.' };
     try {
-      return JSON.parse(await client.request('GET', dashboardPath(svc, path))) as T;
+      return JSON.parse(await this.request(client, svc, path)) as T;
     } catch (err) {
       return { unavailable: `The Kubemoot dashboard did not answer: ${errorText(err)}` };
     }
+  }
+
+  /**
+   * GETs path from the dashboard under its base path. While the base path is unknown it
+   * tries each one, moving on only when the dashboard answers 404, and remembers the one
+   * that answered.
+   */
+  private async request(client: KubeTransport, svc: DashboardService, path: string): Promise<string> {
+    const bases = svc.base === undefined ? BASE_PATHS : [svc.base];
+    let missing: unknown;
+    for (const base of bases) {
+      try {
+        const body = await client.request('GET', dashboardPath(svc, path, base));
+        svc.base = base;
+        return body;
+      } catch (err) {
+        if (!(err instanceof KubeError && err.status === 404)) throw err;
+        missing = err;
+      }
+    }
+    throw missing;
   }
 }
 

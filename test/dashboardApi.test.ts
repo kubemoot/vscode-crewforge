@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { KubeTransport } from '../src/k8s/request';
+import { KubeError, type KubeTransport } from '../src/k8s/request';
 import { DashboardApi, dashboardPath, findDashboard, parseService, threadStats } from '../src/kubemoot/dashboardApi';
 import { recorded, resetFake } from './vscodeFake';
 
@@ -21,7 +21,7 @@ class ProxyCluster implements KubeTransport {
   }
 }
 
-const SERVICES = '/api/v1/services?labelSelector=app.kubernetes.io%2Fname%3Dkubemoot-dashboard';
+const SERVICES = '/api/v1/services?labelSelector=app.kubernetes.io%2Fpart-of%3Dkubemoot%2Capp.kubernetes.io%2Fname%20in%20(dashboard%2Ckubemoot-dashboard)';
 const PROXY = '/api/v1/namespaces/kubemoot/services/kubemoot-dashboard:8080/proxy';
 const msg = (threadId: string, messageType: string, agentName?: string, content?: string) => ({ subject: `kubemoot.discuss.ns.demo.general.${threadId}`, data: JSON.stringify({ threadId, messageType, agentName, content }) });
 
@@ -33,6 +33,35 @@ beforeEach(() => {
 });
 
 describe('finding the dashboard', () => {
+  it('finds the operator chart\'s dashboard by its labels, its http port, and its /dashboard path', async () => {
+    cluster.answers.set(SERVICES, { items: [{ metadata: { name: 'kubemoot-operator-dashboard', namespace: 'kubemoot' }, spec: { ports: [{ name: 'metrics', port: 9090 }, { name: 'http', port: 80 }] } }] });
+    const proxy = '/api/v1/namespaces/kubemoot/services/kubemoot-operator-dashboard:80/proxy';
+    cluster.answers.set(`${proxy}/api/kubemoot`, new KubeError('not found', 404));
+    cluster.answers.set(`${proxy}/dashboard/api/kubemoot/crewfitnesssuites/ns/s1/scores`, { scores: { a: 70 }, complete: true, judged: 1 });
+    cluster.answers.set(`${proxy}/dashboard/api/kubemoot/crewfitnesssuites/ns/s1/iterations`, { iterations: [] });
+    const api = new DashboardApi();
+    expect(await api.scores(cluster, 'ns', 's1')).toEqual({ scores: { a: 70 }, complete: true, judged: 1 });
+    const before = cluster.calls.length;
+    expect(await api.iterations(cluster, 'ns', 's1')).toEqual({ iterations: [] });
+    expect(cluster.calls.slice(before)).toEqual([`${proxy}/dashboard/api/kubemoot/crewfitnesssuites/ns/s1/iterations`]);
+  });
+
+  it('passes on an error that is not a 404 without trying another path, and says when no path answers', async () => {
+    const api = new DashboardApi();
+    cluster.answers.set(`${PROXY}/api/kubemoot`, new KubeError('forbidden', 403));
+    expect(await api.scores(cluster, 'ns', 's1')).toEqual({ unavailable: 'The Kubemoot dashboard did not answer: forbidden' });
+    const fresh = new DashboardApi();
+    const other = new ProxyCluster();
+    other.answers.set(SERVICES, { items: [{ metadata: { name: 'kubemoot-dashboard', namespace: 'kubemoot' }, spec: { ports: [{ port: 8080 }] } }] });
+    other.answers.set(PROXY, new KubeError('not found', 404));
+    expect(await fresh.scores(other, 'ns', 's1')).toEqual({ unavailable: 'The Kubemoot dashboard did not answer: not found' });
+  });
+
+  it('takes a base path in the setting', () => {
+    expect(parseService('kubemoot/kubemoot-operator-dashboard:80/dashboard')).toEqual({ namespace: 'kubemoot', name: 'kubemoot-operator-dashboard', port: '80', base: '/dashboard' });
+    expect(dashboardPath({ namespace: 'k', name: 'd', port: '80', base: '/dashboard' }, '/api/x')).toBe('/api/v1/namespaces/k/services/d:80/proxy/dashboard/api/x');
+  });
+
   it('parses the setting, with port 80 by default', () => {
     expect(parseService('kubemoot/kubemoot-dashboard:8080')).toEqual({ namespace: 'kubemoot', name: 'kubemoot-dashboard', port: '8080' });
     expect(parseService(' kubemoot/dash ')).toEqual({ namespace: 'kubemoot', name: 'dash', port: '80' });
