@@ -3,6 +3,9 @@ import { badge, banner, between, button, buttons, duration, escape, facts, note,
 import { PAGE_WAIT, PagePanel, type PageModel } from '../src/dashboard/pagePanel';
 import { recorded, resetFake, Uri } from './vscodeFake';
 
+/** Escapes every regular-expression metacharacter so a value matches literally. */
+const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
+
 describe('html helpers', () => {
   it('escapes every value and drops empty ones', () => {
     expect(escape('<b a="1">&\'</b>')).toBe('&lt;b a=&quot;1&quot;&gt;&amp;&#39;&lt;/b&gt;');
@@ -86,7 +89,7 @@ describe('PagePanel', () => {
     const html = panel.webview.html;
     const nonce = /nonce-([^']+)'/.exec(html)?.[1];
     expect(html).toContain("default-src 'none'");
-    expect(html).toMatch(new RegExp(`<script nonce="${nonce!.replace(/[+/=]/g, '\\$&')}" src="[^"]*/ext/dist/page.js"></script>`));
+    expect(html).toMatch(new RegExp(`<script nonce="${escapeRegExp(nonce!)}" src="[^"]*/ext/dist/page.js"></script>`));
     expect(html).toContain('/ext/media/page.css');
     await panel.webview.receive({ type: 'ready' });
     expect(posted().at(-1)).toEqual({ type: 'render', html: '<p>hello</p>' });

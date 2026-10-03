@@ -20,7 +20,9 @@ async function loadPage(): Promise<void> {
   resetFake();
   ChatPanel.show(Uri.file('/ext') as never, { source: 't', context: 'ctx', client: {} as KubeClient }, { name: 'lab-ops', namespace: 'team-a', ready: true, phase: 'Ready' }, new ConversationStore('/tmp/none'));
   const html = recorded.panels.at(-1)!.webview.html;
-  document.body.innerHTML = /<body>([\s\S]*)<\/body>/.exec(html)![1].replace(/<script[\s\S]*<\/script>/, '');
+  const page = new DOMParser().parseFromString(html, 'text/html');
+  for (const script of page.querySelectorAll('script')) script.remove();
+  document.body.innerHTML = page.body.innerHTML;
   sent = [];
   shown = [];
   state = undefined;
