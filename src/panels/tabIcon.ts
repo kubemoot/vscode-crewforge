@@ -1,6 +1,9 @@
 import * as vscode from 'vscode';
 
-/** The Kubemoot logo as a webview tab's icon, in a light and a dark theme variant. */
-export function tabIcon(extensionUri: vscode.Uri): { light: vscode.Uri; dark: vscode.Uri } {
-  return { light: vscode.Uri.joinPath(extensionUri, 'media', 'logo-light.svg'), dark: vscode.Uri.joinPath(extensionUri, 'media', 'logo-dark.svg') };
+/**
+ * The Kubemoot mark as a webview tab's icon: the brand's small form (the table as a solid
+ * disc, for sizes below 24 px), whose keyline lets one file serve light and dark themes.
+ */
+export function tabIcon(extensionUri: vscode.Uri): vscode.Uri {
+  return vscode.Uri.joinPath(extensionUri, 'media', 'kubemoot-favicon-small.svg');
 }

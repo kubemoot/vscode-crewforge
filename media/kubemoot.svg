@@ -1,10 +1,9 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="24" height="24">
-  <mask id="table">
-    <circle cx="100" cy="100" r="40" fill="white"/>
-    <circle cx="100" cy="100" r="30" fill="none" stroke="black" stroke-width="6"/>
-  </mask>
-  <circle cx="100" cy="100" r="40" fill="currentColor" mask="url(#table)"/>
-  <g fill="currentColor">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200" role="img" aria-label="Kubemoot: a round table with seven water drops gathered around it">
+  <title>Kubemoot</title>
+  <!-- The table with its ring cut out: the background shows through the ring. -->
+  <path fill="#1f2a37" fill-rule="evenodd" d="M60 100a40 40 0 1 0 80 0a40 40 0 1 0 -80 0Z M65.5 100a34.5 34.5 0 1 0 69 0a34.5 34.5 0 1 0 -69 0Z M70.5 100a29.5 29.5 0 1 0 59 0a29.5 29.5 0 1 0 -59 0Z"/>
+  <!-- The moot: seven drops around the table, each pointed at its center. -->
+  <g fill="#1f2a37">
     <path d="M0 0 C 11 -14, 11 -34, 0 -34 C -11 -34, -11 -14, 0 0 Z" transform="rotate(0.000 100 100) translate(100 54)"/>
     <path d="M0 0 C 11 -14, 11 -34, 0 -34 C -11 -34, -11 -14, 0 0 Z" transform="rotate(51.429 100 100) translate(100 54)"/>
     <path d="M0 0 C 11 -14, 11 -34, 0 -34 C -11 -34, -11 -14, 0 0 Z" transform="rotate(102.857 100 100) translate(100 54)"/>
