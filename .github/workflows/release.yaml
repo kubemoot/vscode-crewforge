@@ -49,7 +49,7 @@ jobs:
         if: steps.version.outputs.release_created == 'true'
         uses: actions/setup-node@v5
         with:
-          node-version: '22'
+          node-version-file: .nvmrc
           cache: npm
 
       # A candidate packages the .vsix at its version to prove the release works, and
