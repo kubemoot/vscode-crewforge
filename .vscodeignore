@@ -1,9 +1,6 @@
 **
 !dist/*.js
 !media/**
-!docs/screenshots/views.png
-!.github/assets/kubemoot-horizontal-color.png
-!.github/assets/kubemoot-horizontal-white-text.png
 !package.json
 !README.md
 !CHANGELOG.md

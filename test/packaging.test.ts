@@ -21,11 +21,15 @@ function shipped(file: string): boolean {
   return included;
 }
 
-/** The images README.md loads from the repository: `src` and `srcset` attributes and Markdown images, remote URLs left out. */
+/** Every image README.md loads: `src` and `srcset` attributes and Markdown images. */
 function readmeImages(): string[] {
-  const refs = [...read('README.md').matchAll(/(?:src|srcset)="([^"]+)"|!\[[^\]]*\]\(([^)\s]+)\)/g)].map((m) => m[1] ?? m[2]);
-  return refs.filter((ref) => !/^([a-z]+:|\/\/)/i.test(ref));
+  return [...read('README.md').matchAll(/(?:src|srcset)="([^"]+)"|!\[[^\]]*\]\(([^)\s]+)\)/g)].map((m) => m[1] ?? m[2]);
 }
+
+const isRemote = (ref: string) => /^([a-z]+:|\/\/)/i.test(ref);
+
+/** This repository's files as raw GitHub URLs, the form vsce rewrites a relative README image to. */
+const rawRepoUrl = /^https:\/\/raw\.githubusercontent\.com\/kubemoot\/vscode-crewforge\/main\/(.+)$/;
 
 describe('the packaged extension', () => {
   it('ships every script the build writes to dist, so no webview loads a missing file', () => {
@@ -46,22 +50,38 @@ describe('the packaged extension', () => {
     }
   });
 
-  it('ships every image the README names, so its header and screenshot render from the .vsix', () => {
+  it('names README images that exist in the repository, since the Marketplace page loads them from GitHub', () => {
     expect(readmeImages()).toEqual(
       expect.arrayContaining([
         '.github/assets/kubemoot-horizontal-color.png',
-        '.github/assets/kubemoot-horizontal-white-text.png',
         'docs/screenshots/views.png',
       ]),
     );
-    for (const file of readmeImages()) {
-      expect(fs.existsSync(path.join(repo, file)), file).toBe(true);
-      expect(shipped(file), file).toBe(true);
+    for (const ref of readmeImages()) {
+      const local = isRemote(ref) ? rawRepoUrl.exec(ref)?.[1] : ref;
+      if (local === undefined) {
+        expect(ref, ref).toMatch(/^https:\/\/img\.shields\.io\/|^https:\/\/github\.com\/kubemoot\/vscode-crewforge\/actions\//);
+        continue;
+      }
+      expect(fs.existsSync(path.join(repo, local)), ref).toBe(true);
     }
   });
 
-  it('uses PNG for every README image, since the Marketplace refuses SVG images in a README', () => {
-    for (const file of readmeImages()) expect(file, file).toMatch(/\.png$/);
+  it('makes every README image an https URL in the package: vsce rewrites relative ones to GitHub', () => {
+    const script = JSON.parse(read('package.json')).scripts.package as string;
+    expect(script).toMatch(/vsce package .*--githubBranch \S+/);
+    expect(script).not.toContain('--no-rewrite-relative-links');
+    // vsce rewrites `src` and Markdown images but not `srcset`, so a srcset is written absolute.
+    for (const m of read('README.md').matchAll(/srcset="([^"]+)"/g)) expect(m[1]).toMatch(rawRepoUrl);
+    for (const ref of readmeImages()) expect(ref.startsWith('http:'), ref).toBe(false);
+  });
+
+  it('uses PNG for every README image from the repository, since the Marketplace refuses SVG images in a README', () => {
+    for (const ref of readmeImages().filter((r) => !isRemote(r) || rawRepoUrl.test(r))) expect(ref, ref).toMatch(/\.png$/);
+  });
+
+  it('keeps README images out of the package, since the package links them from GitHub', () => {
+    for (const ref of readmeImages().filter((r) => !isRemote(r))) expect(shipped(ref), ref).toBe(false);
   });
 
   it('reads an ignore file the way vsce does: later lines win', () => {

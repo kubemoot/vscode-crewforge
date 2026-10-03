@@ -7,8 +7,17 @@
 # the previous release. The .vsix is packaged again from the candidate's commit at the
 # final version, since the version is part of the package. The default is a dry run:
 # the .vsix is built and kept as a workflow artifact, the run summary shows the notes,
-# and nothing is tagged or published. Publishing to the VS Code Marketplace and Open
-# VSX is not part of this workflow.
+# and nothing is tagged or published.
+#
+# With publish_marketplaces, a promotion that is not a dry run also publishes the .vsix
+# attached to the GitHub Release to the VS Code Marketplace and Open VSX. It needs the
+# registry credentials as repository secrets: OVSX_PAT for Open VSX, and for the
+# Marketplace either AZURE_CLIENT_ID and AZURE_TENANT_ID (a Microsoft Entra managed
+# identity trusted for this repository's marketplace environment) or VSCE_PAT. The
+# credentials are checked first, so a missing one stops the run before anything is
+# tagged; a dry run with publish_marketplaces checks them too. With pre_release, the
+# .vsix is packaged as a pre-release, the GitHub Release's copy included. The CLI
+# versions are the @vscode/vsce and ovsx devDependencies in package-lock.json.
 name: Promote Release
 
 on:
@@ -23,6 +32,16 @@ on:
         description: 'Dry run: build the .vsix and show the notes, publish nothing'
         required: true
         default: true
+        type: boolean
+      publish_marketplaces:
+        description: 'Also publish the .vsix to the VS Code Marketplace and Open VSX (never on a dry run)'
+        required: true
+        default: false
+        type: boolean
+      pre_release:
+        description: 'Publish to the registries as a pre-release version'
+        required: true
+        default: false
         type: boolean
 
 concurrency:
@@ -39,7 +58,34 @@ jobs:
     runs-on: homelab-runners
     permissions:
       contents: write
+    outputs:
+      commit: ${{ steps.plan.outputs.commit }}
+      final_tag: ${{ steps.plan.outputs.final_tag }}
+      marketplace_auth: ${{ steps.registries.outputs.marketplace }}
     steps:
+      - name: Check the registry credentials
+        id: registries
+        if: ${{ inputs.publish_marketplaces }}
+        env:
+          HAS_ENTRA: ${{ secrets.AZURE_CLIENT_ID != '' && secrets.AZURE_TENANT_ID != '' }}
+          HAS_VSCE_PAT: ${{ secrets.VSCE_PAT != '' }}
+          HAS_OVSX_PAT: ${{ secrets.OVSX_PAT != '' }}
+        run: |
+          missing=0
+          if [ "${HAS_ENTRA}" = true ]; then
+            echo "marketplace=entra" >> "$GITHUB_OUTPUT"
+          elif [ "${HAS_VSCE_PAT}" = true ]; then
+            echo "marketplace=pat" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::No Marketplace credential: set AZURE_CLIENT_ID and AZURE_TENANT_ID, or VSCE_PAT."
+            missing=1
+          fi
+          if [ "${HAS_OVSX_PAT}" != true ]; then
+            echo "::error::No Open VSX credential: set OVSX_PAT."
+            missing=1
+          fi
+          exit "${missing}"
+
       - name: Checkout repository
         uses: actions/checkout@v5
         with:
@@ -76,15 +122,21 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
 
+      # The README's relative images and links point at this commit on GitHub, so a
+      # registry page shows the README as it was at the release.
       - name: Test and package at the final version
         env:
           FINAL_TAG: ${{ steps.plan.outputs.final_tag }}
+          COMMIT: ${{ steps.plan.outputs.commit }}
+          PRE_RELEASE: ${{ inputs.pre_release }}
           OUT_DIR: ${{ runner.temp }}/promotion
         run: |
           npm ci
           npm test
           npm version --no-git-tag-version "${FINAL_TAG#v}"
-          npm run package
+          flags=(--githubBranch "${COMMIT}")
+          if [ "${PRE_RELEASE}" = true ]; then flags+=(--pre-release); fi
+          npm run package -- "${flags[@]}"
           mv crewforge-*.vsix "${OUT_DIR}/"
           git checkout --quiet -- package.json package-lock.json
 
@@ -136,3 +188,80 @@ jobs:
               --title "${title}" --notes-file "promotion/${notes}" \
               "promotion/crewforge-${tag#v}.vsix"
           done < promotion/releases.tsv
+
+  publish:
+    needs: [promote, release]
+    if: ${{ !inputs.dry_run && inputs.publish_marketplaces }}
+    runs-on: ubuntu-latest
+    # The Entra managed identity trusts this environment's OIDC subject
+    # (repo:kubemoot/vscode-crewforge:environment:marketplace), nothing broader; the
+    # environment's protection rules (CONTRIBUTING.md) also gate this job.
+    environment: marketplace
+    permissions:
+      contents: read # the repository's lockfile and the GitHub Release's .vsix
+      id-token: write # Microsoft Entra sign-in for the Marketplace, when configured
+    steps:
+      - name: Check out the promoted commit
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.promote.outputs.commit }}
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      # Only the publishing CLIs run here; no install script runs in a job that holds tokens.
+      - name: Install the publishing CLIs
+        run: npm ci --ignore-scripts
+
+      # The registries get exactly the file the GitHub Release carries.
+      - name: Download the .vsix from the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.promote.outputs.final_tag }}
+          OUT_DIR: ${{ runner.temp }}/vsix
+        run: |
+          gh release download "${TAG}" --repo "${GITHUB_REPOSITORY}" \
+            --pattern "crewforge-${TAG#v}.vsix" --dir "${OUT_DIR}"
+
+      - name: Sign in to Microsoft Entra
+        if: needs.promote.outputs.marketplace_auth == 'entra'
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          allow-no-subscriptions: true
+
+      # The Marketplace adds the identity to the publisher by this profile ID (it is not
+      # a secret), so the first Entra run shows the ID to add before its publish fails.
+      - name: Show the identity's Marketplace member ID
+        if: needs.promote.outputs.marketplace_auth == 'entra'
+        run: |
+          az rest -u https://app.vssps.visualstudio.com/_apis/profile/profiles/me \
+            --resource 499b84ac-1321-427f-aa17-267ca6975798 --query id -o tsv
+
+      # --skip-duplicate makes a re-run safe after one registry took the version. vsce
+      # checks that --pre-release matches how the .vsix was packaged; ovsx reads the
+      # pre-release mark from the .vsix itself.
+      - name: Publish to the VS Code Marketplace
+        env:
+          AUTH: ${{ needs.promote.outputs.marketplace_auth }}
+          VSCE_PAT: ${{ needs.promote.outputs.marketplace_auth == 'pat' && secrets.VSCE_PAT || '' }}
+          PRE_RELEASE: ${{ inputs.pre_release }}
+          TAG: ${{ needs.promote.outputs.final_tag }}
+          OUT_DIR: ${{ runner.temp }}/vsix
+        run: |
+          flags=(--skip-duplicate)
+          if [ "${PRE_RELEASE}" = true ]; then flags+=(--pre-release); fi
+          if [ "${AUTH}" = entra ]; then flags+=(--azure-credential); fi
+          npx --no-install vsce publish --packagePath "${OUT_DIR}/crewforge-${TAG#v}.vsix" "${flags[@]}"
+
+      - name: Publish to Open VSX
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+          TAG: ${{ needs.promote.outputs.final_tag }}
+          OUT_DIR: ${{ runner.temp }}/vsix
+        run: npx --no-install ovsx publish "${OUT_DIR}/crewforge-${TAG#v}.vsix" --skip-duplicate

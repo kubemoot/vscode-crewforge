@@ -1,28 +1,48 @@
 {
   "name": "crewforge",
   "displayName": "CrewForge",
-  "description": "See, ask, and deploy Kubemoot crews from VS Code, through your kubeconfig",
+  "description": "Create, deploy, ask, and test Kubemoot agent crews on Kubernetes from VS Code, through your kubeconfig",
   "version": "0.0.0",
   "publisher": "kubemoot",
   "license": "Apache-2.0",
+  "preview": true,
+  "pricing": "Free",
   "repository": {
     "type": "git",
     "url": "https://github.com/kubemoot/vscode-crewforge"
   },
-  "homepage": "https://kubemoot.org",
+  "bugs": {
+    "url": "https://github.com/kubemoot/vscode-crewforge/issues"
+  },
+  "homepage": "https://kubemoot.org/docs/ecosystem/crewforge/",
+  "qna": "https://github.com/orgs/kubemoot/discussions",
   "icon": "media/icon.png",
+  "galleryBanner": {
+    "color": "#1f2a37",
+    "theme": "dark"
+  },
   "engines": {
     "vscode": "^1.95.0"
   },
   "categories": [
-    "Other"
+    "AI",
+    "Testing"
   ],
   "keywords": [
     "kubemoot",
+    "crewforge",
     "kubernetes",
+    "k8s",
     "agents",
+    "ai agents",
+    "multi-agent",
     "llm",
-    "crew"
+    "crew",
+    "helm",
+    "gitops",
+    "flux",
+    "operator",
+    "crd"
   ],
   "main": "./dist/extension.js",
   "activationEvents": [],
@@ -1111,7 +1131,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint src test",
     "test": "vitest run",
-    "package": "node esbuild.mjs --production && vsce package --no-dependencies --no-rewrite-relative-links",
+    "package": "node esbuild.mjs --production && vsce package --no-dependencies --githubBranch main",
     "vscode:prepublish": "node esbuild.mjs --production",
     "test:coverage": "vitest run --coverage",
     "test:integration": "node esbuild.mjs --integration && node .vscode-test/out/runTest.js",
@@ -1122,6 +1142,11 @@
     "ajv": "^8.20.0",
     "js-yaml": "^4.3.2",
     "marked": "^18.0.14"
+  },
+  "overrides": {
+    "ovsx": {
+      "@vscode/vsce": "$@vscode/vsce"
+    }
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -1138,6 +1163,7 @@
     "eslint-plugin-unicorn": "^76.0.0",
     "jsdom": "^30.1.1",
     "mocha": "^12.0.2",
+    "ovsx": "^1.2.0",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.70.1",
     "vitest": "^5.0.2"

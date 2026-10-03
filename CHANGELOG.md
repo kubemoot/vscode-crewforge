@@ -8,6 +8,10 @@ generated from the conventional commits since the previous release.
 - The extension's icons are the Kubemoot brand mark: the full-color icon in the
   Marketplace, the one-color icon in the activity bar, and the small full-color mark on
   CrewForge's tabs, one file for light and dark themes.
+- The extension's listing details are ready for the VS Code Marketplace and Open VSX:
+  categories, keywords, a gallery banner, Preview status, and links to the
+  documentation, issues, and discussions. The README's images load from GitHub, at the
+  commit the package was built from.
 
 ## 0.14.0
 
