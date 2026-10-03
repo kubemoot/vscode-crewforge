@@ -26,6 +26,16 @@ updates:
     groups:
       npm:
         patterns: ["*"]
+    ignore:
+      # TypeScript 7 waits for the toolchain: typescript-eslint peers on typescript <6.1.0.
+      # Lift this once typescript-eslint accepts TypeScript 7.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
+      # @types/vscode stays in step with engines.vscode in package.json: vsce refuses to
+      # package when @types/vscode is newer than engines.vscode. It moves only together
+      # with a deliberate engines.vscode bump, by hand.
+      - dependency-name: "@types/vscode"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
     open-pull-requests-limit: 5
     commit-message:
       prefix: "chore(deps)"
