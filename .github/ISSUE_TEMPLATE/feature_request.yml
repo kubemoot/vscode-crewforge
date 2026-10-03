@@ -1,11 +1,11 @@
 name: Feature request
-description: Something you want CrewForge to do.
+description: Something new or different in CrewForge, argued from the problem it solves.
 labels:
   - enhancement
 body:
   - type: markdown
     attributes:
-      value: "This repository covers the CrewForge VS Code extension. Ideas for the operator, kmctl, or crews belong in [another repository, found through the issue chooser](https://github.com/kubemoot/vscode-crewforge/issues/new/choose)."
+      value: "This repository covers the CrewForge VS Code extension. Ideas for the operator, kmctl, or crews belong in [another repository, found through the issue chooser](https://github.com/kubemoot/vscode-crewforge/issues/new/choose). Something that worked or should work does not? File a Bug report instead; this form is for something new or different."
   - type: checkboxes
     id: searched
     attributes:
@@ -13,31 +13,51 @@ body:
       options:
         - label: I searched existing issues and discussions and did not find this one
           required: true
-  - type: textarea
-    id: problem
+  - type: dropdown
+    id: area
     attributes:
-      label: The problem
-      description: Describe the situation you are in, not only the feature you have in mind.
+      label: Part of the extension it touches
+      options:
+        - Crew browsing
+        - Crew editing
+        - Chat
+        - Rollouts
+        - Settings or install
+        - Not sure
     validations:
       required: true
   - type: textarea
+    id: problem
+    attributes:
+      label: The problem or use case
+      description: What you are trying to do, and what gets in the way today.
+    validations:
+      required: true
+  - type: textarea
+    id: beneficiaries
+    attributes:
+      label: Who benefits
+      description: Who else runs into this, and how often.
+    validations:
+      required: false
+  - type: textarea
     id: proposal
     attributes:
-      label: What you would like to see
-      description: "A rough shape is fine; a sketch of the view or command helps."
+      label: Proposed solution
+      description: "A rough shape is fine; this does not need to be a full design."
     validations:
       required: true
   - type: textarea
     id: alternatives
     attributes:
-      label: Alternatives considered
-      description: Anything else you tried, or why no workaround exists.
+      label: Alternatives and workarounds
+      description: Other approaches you considered, and any workaround you use now.
     validations:
       required: false
   - type: dropdown
     id: contribute
     attributes:
-      label: "Would you be open to contributing this?"
+      label: "Would you be willing to help implement this?"
       options:
         - "Yes"
         - Maybe
