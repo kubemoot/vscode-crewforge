@@ -78,11 +78,6 @@ beforeEach(async () => {
     memory: { redeployNamespace: () => undefined },
     exec: async (cmd, args) => (cmd === 'helm' && args.includes('status') ? { code: 0, stdout: '{"version":2,"info":{"first_deployed":"F","last_deployed":"L"}}', stderr: '' } : { code: 1, stdout: '', stderr: '' }),
     activity: new FitnessActivity(),
-    api: {
-      threads: async () => ({ threads: 4, failures: 0, recentFailures: [], messages: 10 }),
-      scores: async () => ({ scores: { a: 90 }, complete: true, judged: 1 }),
-      iterations: async () => ({ iterations: [{ scenario: 'a', iter: 0, status: 'Passed', assertionsPassed: 1, assertionsTotal: 1, durationMs: 2000 }] }),
-    } as never,
   };
 });
 
@@ -105,7 +100,8 @@ describe('the crew dashboard', () => {
     dashboards.openCrew({ kind: 'source', entry });
     const [panel] = recorded.panels;
     const html = await body(panel);
-    for (const text of ['demo', 'crew-demo in lab', 'Chart version differs: source 0.2.2, deployed 0.46.0', 'L', 'demo-coordinator', 'Agent k8s failed', 'Threads']) expect(html).toContain(text);
+    for (const text of ['demo', 'crew-demo in lab', 'Chart version differs: source 0.2.2, deployed 0.46.0', 'L', 'demo-coordinator', 'Agent k8s failed']) expect(html).toContain(text);
+    expect(html).not.toContain('Discussions (Kubemoot)');
     expect(panel.title).toBe('demo');
     for (const action of ['redeploy', 'undeploy', 'ask', 'fitness', 'lint', 'yaml', 'refresh', 'deploy']) await press(panel, action);
     expect(recorded.executed.map((e) => e.id)).toEqual([
@@ -249,7 +245,7 @@ describe('the Crews Overview', () => {
 
 describe('the fitness dashboard', () => {
   it('shows the runs and the selected one, and its controls act on the run', async () => {
-    cluster.add(suite('s-new', { phase: 'Running', iterationsTotal: 2, iterationsCompleted: 1 }), { ...suite('s-old', { phase: 'Completed', artifactRef: { bucket: 'b', objectKey: 'k' } }), metadata: { name: 's-old', namespace: NS, creationTimestamp: '2026-09-29T10:00:00Z' } });
+    cluster.add(suite('s-new', { phase: 'Running', iterationsTotal: 2, iterationsCompleted: 1 }), { ...suite('s-old', { phase: 'Completed', artifactRef: { bucket: 'b', objectKey: 'k' }, scenarios: [{ name: 'a', iterations: 1, passed: 1, meanDurationMs: 2000 }], judge: { phase: 'Complete', judged: 1, total: 1, mean: 90, completedAt: '2026-09-29T11:00:00Z', scores: [{ scenario: 'a', score: 90, reason: 'matches' }] } }), metadata: { name: 's-old', namespace: NS, creationTimestamp: '2026-09-29T10:00:00Z' } });
     recorded.settings.set('crewforge.dashboardUrl', 'http://dash/');
     const dashboards = new Dashboards(parts);
     const deployment = { namespace: NS, crew: liveCrew(), channel: 'helm' as const, linked: true };
@@ -268,10 +264,12 @@ describe('the fitness dashboard', () => {
     await press(panel, 'select', 's-old');
     html = (panel.webview.posted.at(-1) as { html: string }).html;
     expect(html).toContain('Run s-old');
-    expect(html).toContain('Judge: done, 1 scenarios scored');
-    expect(html).toContain('<td>90</td>');
+    expect(html).toContain('Judge: done, 1 scenarios scored, mean 90');
+    expect(html).toContain('<td>a</td><td>1</td><td>1</td><td>0</td><td>0</td><td>2 s</td><td>90</td><td>matches</td>');
     await press(panel, 'xlsx', 's-old');
-    expect(recorded.opened).toEqual(['http://dash/api/kubemoot/crewfitnesssuites/crew-demo/s-old/artifact']);
+    await press(panel, 'openDashboard', 's-old');
+    expect(recorded.opened).toEqual(['http://dash/api/kubemoot/crewfitnesssuites/crew-demo/s-old/artifact', 'http://dash/fitness']);
+    expect(cluster.calls.map((c) => c.path).filter((p) => p.includes('/services/'))).toEqual([]);
     await press(panel, 'run');
     expect(recorded.executed.at(-1)).toMatchObject({ id: 'crewforge.runFitness', args: [{ kind: 'deployment', entry }] });
     dashboards.openFitness({ kind: 'run', entry, deployment, run: { kind: 'CrewFitnessSuite', name: 's-new', namespace: NS, crew: 'demo', phase: 'Running', createdAt: '', assertions: [] } });

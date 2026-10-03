@@ -1,6 +1,5 @@
 import { runControls, shownPhase, type SuiteControls } from '../fitness/controls';
-import { isRunning, runSummary, scenarioResults, type FitnessRun, type ScenarioResult } from '../fitness/fitness';
-import type { SuiteIteration, SuiteScores } from '../kubemoot/dashboardApi';
+import { isRunning, runSummary, scenarioResults, scenarioResultsFromStatus, type FitnessRun, type JudgeScore, type ScenarioResult, type SuiteJudge } from '../fitness/fitness';
 import { badge, between, buttons, duration, escape, facts, note, section, SELECT_CONTEXT_BUTTON, table, type ButtonSpec, type Shown } from './html';
 
 /** What the fitness dashboard reads for one deployment. */
@@ -16,11 +15,10 @@ export interface FitnessView {
   controls: SuiteControls;
   /** The selected suite's iterations still in the cluster. */
   iterations: FitnessRun[];
-  /** The selected suite's iterations from the Kubemoot dashboard, once the cluster no longer has them. */
-  archived?: SuiteIteration[] | { unavailable: string };
-  scores?: SuiteScores | { unavailable: string };
   /** The XLSX download address, when the Kubemoot dashboard URL is set. */
   xlsxUrl?: string;
+  /** The Kubemoot dashboard's Fitness page, for a person to read the transcripts; set when its URL is. */
+  dashboardRunUrl?: string;
   /** Why fitness cannot run from here, if it cannot (no source, no definitions). */
   cannotRun?: string;
   error?: string;
@@ -63,15 +61,20 @@ function progressText(r: FitnessRun): string {
 }
 
 function runSection(v: FitnessView, r: FitnessRun): string {
+  const progress = r.iterationsTotal ? `<progress max="${r.iterationsTotal}" value="${r.iterationsCompleted ?? 0}"></progress>` : '';
+  const body = [facts(runFacts(r)), progress, buttons(runButtons(v, r)), r.kind === 'CrewFitnessSuite' ? suiteDetail(v, r) : singleDetail(r)].join('');
+  return section(`Run ${r.name}`, body);
+}
+
+function runButtons(v: FitnessView, r: FitnessRun): ButtonSpec[] {
   const controls = runControls(r, v.controls);
   const specs: ButtonSpec[] = [];
   if (controls.pause) specs.push({ action: 'pause', arg: r.name, label: 'Pause', title: 'Pause between iterations; the running iteration finishes (spec.suspend)' });
   if (controls.resume) specs.push({ action: 'resume', arg: r.name, label: 'Resume', title: 'Resume the paused suite' });
   if (controls.stop) specs.push({ action: 'stop', arg: r.name, label: 'Stop', title: r.kind === 'CrewFitnessSuite' ? 'Stop the suite; it becomes Cancelled (spec.cancel)' : 'Stop this single-scenario run (deletes it)' });
   if (r.artifact) specs.push({ action: 'xlsx', arg: r.name, label: 'Open XLSX', title: 'Download the results workbook from the Kubemoot dashboard', disabled: v.xlsxUrl ? undefined : 'Set crewforge.dashboardUrl to download the XLSX.' });
-  const progress = r.iterationsTotal ? `<progress max="${r.iterationsTotal}" value="${r.iterationsCompleted ?? 0}"></progress>` : '';
-  const body = [facts(runFacts(r)), progress, buttons(specs), r.kind === 'CrewFitnessSuite' ? suiteDetail(v, r) : singleDetail(r)].join('');
-  return section(`Run ${r.name}`, body);
+  if (r.kind === 'CrewFitnessSuite') specs.push({ action: 'openDashboard', arg: r.name, label: 'Open in Kubemoot dashboard', title: "Open the Kubemoot dashboard's Fitness page in your browser, where this run's transcripts are", disabled: v.dashboardRunUrl ? undefined : 'Set crewforge.dashboardUrl to open the Kubemoot dashboard.' });
+  return specs;
 }
 
 function runFacts(r: FitnessRun): [string, Shown][] {
@@ -90,34 +93,45 @@ function runFacts(r: FitnessRun): [string, Shown][] {
 
 function suiteDetail(v: FitnessView, r: FitnessRun): string {
   const live = v.iterations.map((i) => ({ scenario: i.testRef ?? i.name, status: i.phase, durationMs: i.durationMs }));
-  const archived = Array.isArray(v.archived) ? v.archived.map((i) => ({ scenario: i.scenario, status: i.status, durationMs: i.durationMs })) : [];
-  const results = scenarioResults(r.scripts ?? [], live.length ? live : archived);
-  const scores = v.scores && 'unavailable' in v.scores ? undefined : v.scores?.scores;
-  const rows = results.map((s) => scenarioRow(s, scores?.[s.scenario]));
-  const where = live.length ? 'From the iterations in the cluster.' : archivedNote(v.archived);
-  const judge = `Judge: ${judgeText(r, v.scores)}`;
-  return `<h3>Scenarios</h3>${table(['Scenario', 'Done', 'Passed', 'Failed', 'Errored', 'Mean duration', 'Score'], rows, 'No iterations yet.')}${note(where)}<p>${escape(judge)}</p>`;
+  const results = live.length ? scenarioResults(r.scripts ?? [], live) : scenarioResultsFromStatus(r.scripts ?? [], r.scenarios ?? []);
+  const scores = new Map((r.judge?.scores ?? []).map((s) => [s.scenario, s]));
+  const rows = withScoredOnly(results, scores).map((s) => scenarioRow(s, scores.get(s.scenario)));
+  const where = live.length ? 'From the iterations in the cluster.' : statusNote(r);
+  const judge = `Judge: ${judgeText(r)}`;
+  return `<h3>Scenarios</h3>${table(['Scenario', 'Done', 'Passed', 'Failed', 'Errored', 'Mean duration', 'Score', 'Judge reason'], rows, 'No iterations yet.')}${note(where)}<p>${escape(judge)}</p>`;
 }
 
-function scenarioRow(s: ScenarioResult, score?: number): string[] {
+/** Adds a row for each judged scenario the results do not list, so no score goes unshown. */
+function withScoredOnly(results: ScenarioResult[], scores: Map<string, JudgeScore>): ScenarioResult[] {
+  const listed = new Set(results.map((s) => s.scenario));
+  const extra = [...scores.keys()].filter((name) => !listed.has(name)).map((scenario) => ({ scenario, done: 0, passed: 0, failed: 0, errored: 0, running: 0 }));
+  return [...results, ...extra];
+}
+
+function scenarioRow(s: ScenarioResult, score?: JudgeScore): string[] {
   const running = s.running ? ` (+${s.running} running)` : '';
-  return [escape(s.scenario), escape(`${s.done}${running}`), escape(s.passed), escape(s.failed), escape(s.errored), escape(duration(s.meanMs) ?? ''), escape(score ?? '')];
+  return [escape(s.scenario), escape(`${s.done}${running}`), escape(s.passed), escape(s.failed), escape(s.errored), escape(duration(s.meanMs) ?? ''), escape(score?.score ?? ''), escape(score?.reason ?? '')];
 }
 
-function archivedNote(archived: FitnessView['archived']): string {
-  if (!archived) return 'The cluster no longer holds the iterations.';
-  return 'unavailable' in archived ? `The cluster no longer holds the iterations. ${archived.unavailable}` : 'From the iteration transcripts the Kubemoot dashboard keeps.';
+function statusNote(r: FitnessRun): string {
+  if (isRunning(r)) return 'The suite has not finished an iteration yet.';
+  if (r.scenarios) return "From the suite's status. The transcripts stay in Kubemoot's object store; open the run in the Kubemoot dashboard to read them.";
+  return "The cluster no longer holds the iterations, and the suite's status records no per-scenario results.";
 }
 
-/** Where the deferred judge stands for a suite run. */
-export function judgeText(r: FitnessRun, scores?: SuiteScores | { unavailable: string }): string {
-  if (r.phase === 'Cancelled') return 'skipped, since the suite was cancelled';
-  if (isRunning(r)) return 'waits for the suite to finish';
-  if (!scores) return 'unknown';
-  if ('unavailable' in scores) return `unknown (${scores.unavailable})`;
-  const total = r.scripts?.length ?? 0;
-  if (scores.complete) return `done, ${scores.judged ?? 0} scenarios scored`;
-  return `judging, ${scores.judged ?? 0} of ${total} scenarios scored`;
+/** Where the deferred judge stands for a suite run, from the suite's status.judge. */
+export function judgeText(r: FitnessRun): string {
+  const j = r.judge;
+  if (r.phase === 'Cancelled' || j?.phase === 'Skipped') return 'skipped, since the suite was cancelled';
+  if (isRunning(r) || j?.phase === 'Pending') return 'waits for the suite to finish';
+  return j ? judgeProgress(j, r.scripts?.length ?? 0) : "not recorded in the suite's status";
+}
+
+/** A finished run's judge: done, or how far it has got. */
+function judgeProgress(j: SuiteJudge, scripts: number): string {
+  const mean = j.mean === undefined ? '' : `, mean ${j.mean}`;
+  if (j.phase === 'Complete') return `done, ${j.judged} scenarios scored${mean}`;
+  return `judging, ${j.judged} of ${j.total || scripts} scenarios scored${mean}`;
 }
 
 function singleDetail(r: FitnessRun): string {

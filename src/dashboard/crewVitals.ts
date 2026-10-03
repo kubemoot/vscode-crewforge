@@ -4,7 +4,6 @@ import { liveCounts, type GroupCount } from '../crew/groups';
 import type { Declarations } from '../source/declared';
 import { liveDeployment } from '../deploy/liveCrew';
 import type { CrewSummary } from '../k8s/crews';
-import type { ThreadStats } from '../kubemoot/dashboardApi';
 import type { Deployment } from '../source/deployments';
 import type { ResourceDrift } from '../source/drift';
 import type { Located } from '../source/locate';
@@ -66,7 +65,6 @@ export interface CrewVitals {
   contents: GroupCount[];
   contentsFrom: 'live' | 'source' | 'none';
   conversations: ConversationStats;
-  kubemoot?: ThreadStats | { unavailable: string };
   fitnessRunning: boolean;
 }
 
@@ -82,7 +80,6 @@ export interface VitalsDeps {
   declarations?(entry: SourceEntry): Promise<Declarations>;
   helm(release: string, namespace: string): Promise<HelmInfo | undefined>;
   conversations(context: string, namespace: string, crew: string): Promise<ConversationStats>;
-  kubemoot(namespace: string, crew: string): Promise<ThreadStats | { unavailable: string }>;
   fitnessRunning(namespace: string, crew: string): boolean;
 }
 
@@ -177,17 +174,16 @@ async function declaredContents(entry: SourceEntry | undefined, deps: VitalsDeps
   }
 }
 
-/** Adds what only the cluster knows: the live agents, the Helm release, conversations, discussions, and fitness. */
+/** Adds what only the cluster knows: the live agents, the Helm release, conversations, and fitness. */
 async function withLive(vitals: CrewVitals, deployment: Deployment, deps: VitalsDeps): Promise<CrewVitals> {
   const { crew, namespace } = deployment;
-  const [agents, helm, conversations, kubemoot] = await Promise.all([
+  const [agents, helm, conversations] = await Promise.all([
     liveAgents(crew, deps),
     helmOf(deployment, deps),
     deps.conversations(vitals.context, namespace, crew.name).catch(() => NO_CONVERSATIONS),
-    deps.kubemoot(namespace, crew.name).catch((err: unknown) => ({ unavailable: errorText(err) })),
   ]);
   const live = 'details' in agents ? { agents: agents.details.agents, agentsFrom: 'live' as const, contents: liveCounts(agents.details), contentsFrom: 'live' as const } : { agentsError: agents.error };
-  return { ...vitals, ...live, helm, conversations, kubemoot, fitnessRunning: deps.fitnessRunning(namespace, crew.name) };
+  return { ...vitals, ...live, helm, conversations, fitnessRunning: deps.fitnessRunning(namespace, crew.name) };
 }
 
 async function liveAgents(crew: CrewSummary, deps: VitalsDeps): Promise<{ details: CrewDetails } | { error: string }> {

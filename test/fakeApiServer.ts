@@ -6,6 +6,7 @@ import * as path from 'node:path';
 import { KubeError } from '../src/k8s/request';
 import type { FakeCluster } from './fakeCluster';
 import { fixture } from './fakes';
+import { REQUESTS_ROUTE } from './fakeRoutes';
 
 export interface FakeApi {
   url: string;
@@ -116,6 +117,11 @@ export async function startFakeApi(options: FakeApiOptions = {}): Promise<FakeAp
     req.on('end', async () => {
       const url = req.url ?? '';
       const method = req.method ?? 'GET';
+      if (url === REQUESTS_ROUTE) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(requests));
+        return;
+      }
       requests.push(`${method} ${url}`);
       const reply = fixedRoute(method, url, body, posts, options.cluster) ?? (options.cluster ? await clusterRoute(options.cluster, method, url, body) : { status: 404, body: 'not found' });
       res.writeHead(reply.status, { 'Content-Type': reply.type ?? 'application/json' });

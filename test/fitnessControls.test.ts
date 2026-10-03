@@ -177,19 +177,26 @@ describe('renderFitnessPage', () => {
     expect(html).toContain('Judge: waits for the suite to finish');
   });
 
-  it('shows a finished suite from the archived iterations with scores, and the XLSX when it can be downloaded', () => {
-    const done = suite({ phase: 'Completed', passed: 2, failed: 0, errored: 0, artifact: { bucket: 'b', objectKey: 'ns/s1/r.xlsx' }, completedAt: '2026-09-30T10:05:00Z', startedAt: '2026-09-30T10:00:00Z' });
-    const archived = [{ scenario: 'a', iter: 0, status: 'Passed', assertionsPassed: 3, assertionsTotal: 3, durationMs: 1000 }];
-    const html = renderFitnessPage(view({ runs: [done], selected: done, archived, scores: { scores: { a: 85 }, complete: true, judged: 1 }, xlsxUrl: 'http://dash/x' }));
-    expect(html).toContain('<td>a</td><td>1</td><td>1</td><td>0</td><td>0</td><td>1 s</td><td>85</td>');
-    expect(html).toContain('From the iteration transcripts the Kubemoot dashboard keeps.');
-    expect(html).toContain('Judge: done, 1 scenarios scored');
+  it('shows a finished suite from its status, with the judge scores, the XLSX, and the dashboard link when the URL is set', () => {
+    const judge = { phase: 'Complete', judged: 2, total: 2, mean: 43, zeros: 1, completedAt: '2026-09-30T10:09:00Z', scores: [{ scenario: 'a', score: 85, reason: 'names <both> nodes' }, { scenario: 'gone', score: 0 }] };
+    const scenarios = [{ name: 'a', iterations: 1, passed: 1, failed: 0, errored: 0, meanDurationMs: 1000 }, { name: 'b', iterations: 1, passed: 1, failed: 0, errored: 0 }];
+    const done = suite({ phase: 'Completed', passed: 2, failed: 0, errored: 0, artifact: { bucket: 'b', objectKey: 'ns/s1/r.xlsx' }, completedAt: '2026-09-30T10:05:00Z', startedAt: '2026-09-30T10:00:00Z', judge, scenarios });
+    const html = renderFitnessPage(view({ runs: [done], selected: done, xlsxUrl: 'http://dash/x', dashboardRunUrl: 'http://dash/fitness' }));
+    expect(html).toContain('<td>a</td><td>1</td><td>1</td><td>0</td><td>0</td><td>1 s</td><td>85</td><td>names &lt;both&gt; nodes</td>');
+    expect(html).toContain('<td>b</td><td>1</td><td>1</td><td>0</td><td>0</td><td></td><td></td><td></td>');
+    expect(html).toContain('<td>gone</td><td>0</td><td>0</td><td>0</td><td>0</td><td></td><td>0</td><td></td>');
+    expect(html).toContain("From the suite&#39;s status.");
+    expect(html).toContain('Judge: done, 2 scenarios scored, mean 43');
     expect(html).toMatch(/data-action="xlsx" data-arg="s1" title="Download/);
+    expect(html).toMatch(/data-action="openDashboard" data-arg="s1" title="Open the Kubemoot dashboard/);
     expect(html).toContain('2 / 0 / 0');
-    const noUrl = renderFitnessPage(view({ runs: [done], selected: done, archived: { unavailable: 'No dashboard.' } }));
+    const noUrl = renderFitnessPage(view({ runs: [done], selected: done }));
     expect(noUrl).toContain('title="Set crewforge.dashboardUrl to download the XLSX." disabled');
-    expect(noUrl).toContain('The cluster no longer holds the iterations. No dashboard.');
-    expect(renderFitnessPage(view({ runs: [done], selected: done }))).toContain('The cluster no longer holds the iterations.');
+    expect(noUrl).toContain('title="Set crewforge.dashboardUrl to open the Kubemoot dashboard." disabled');
+    const older = suite({ phase: 'Completed' });
+    expect(renderFitnessPage(view({ runs: [older], selected: older }))).toContain('records no per-scenario results.');
+    const started = suite({ phase: 'Running' });
+    expect(renderFitnessPage(view({ runs: [started], selected: started }))).toContain('The suite has not finished an iteration yet.');
   });
 
   it('shows a single run\'s assertions, the Resume and Stop it may have, and errors as text', () => {
@@ -210,12 +217,16 @@ describe('renderFitnessPage', () => {
     expect(renderFitnessPage(view({ runs: [single({ phase: 'Passed' })], selected: single({ phase: 'Passed' }) }))).toContain('No assertions reported.');
   });
 
-  it('says where the judge stands', () => {
+  it('says where the judge stands, from the suite status', () => {
+    const judged = (judge: Partial<NonNullable<FitnessRun['judge']>>) => suite({ phase: 'Completed', judge: { phase: 'Judging', judged: 0, total: 0, zeros: 0, scores: [], ...judge } });
     expect(judgeText(suite({ phase: 'Cancelled' }))).toBe('skipped, since the suite was cancelled');
-    expect(judgeText(suite({ phase: 'Completed' }))).toBe('unknown');
-    expect(judgeText(suite({ phase: 'Completed' }), { unavailable: 'down' })).toBe('unknown (down)');
-    expect(judgeText(suite({ phase: 'Completed' }), { judged: 1 })).toBe('judging, 1 of 2 scenarios scored');
-    expect(judgeText(suite({ phase: 'Completed', scripts: undefined }), {})).toBe('judging, 0 of 0 scenarios scored');
-    expect(judgeText(suite({ phase: 'Completed' }), { complete: true })).toBe('done, 0 scenarios scored');
+    expect(judgeText(judged({ phase: 'Skipped' }))).toBe('skipped, since the suite was cancelled');
+    expect(judgeText(suite({ phase: 'Running' }))).toBe('waits for the suite to finish');
+    expect(judgeText(judged({ phase: 'Pending' }))).toBe('waits for the suite to finish');
+    expect(judgeText(suite({ phase: 'Completed' }))).toBe("not recorded in the suite's status");
+    expect(judgeText(judged({ judged: 1, total: 3, mean: 70 }))).toBe('judging, 1 of 3 scenarios scored, mean 70');
+    expect(judgeText(judged({ judged: 1 }))).toBe('judging, 1 of 2 scenarios scored');
+    expect(judgeText({ ...judged({}), scripts: undefined })).toBe('judging, 0 of 0 scenarios scored');
+    expect(judgeText(judged({ phase: 'Complete', judged: 2, mean: 0 }))).toBe('done, 2 scenarios scored, mean 0');
   });
 });

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { FitnessCommands } from '../src/fitness/commands';
-import { isRunning, listRuns, runName, runReport, runsInProgress, runSummary, startRun, toRun, type FitnessRun } from '../src/fitness/fitness';
+import { isRunning, judgeOf, listRuns, scenarioResults, scenarioResultsFromStatus, runName, runReport, runsInProgress, runSummary, scenariosOf, startRun, toRun, type FitnessRun } from '../src/fitness/fitness';
 import type { KubeClient } from '../src/k8s/request';
 import type { Deployment } from '../src/source/deployments';
 import type { CrewSource } from '../src/source/discover';
@@ -223,5 +223,68 @@ describe('fitness in the tree and commands', () => {
     expect(recorded.shownDocuments[0]).toContain('# f');
     await commands().showRun({ kind: 'message', text: 'x' });
     expect(recorded.shownDocuments).toHaveLength(1);
+  });
+});
+
+describe('suite results from status', () => {
+  it('reads status.judge, filling counts the operator omits at 0', () => {
+    expect(judgeOf({ phase: 'Judging', total: 3, scores: [{ scenario: 'a', score: 80, reason: 'ok' }, { scenario: 'b' }, { score: 5 }, 'x', null] })).toEqual({
+      phase: 'Judging',
+      judged: 0,
+      total: 3,
+      mean: undefined,
+      zeros: 0,
+      completedAt: undefined,
+      scores: [
+        { scenario: 'a', score: 80, reason: 'ok' },
+        { scenario: 'b', score: 0, reason: undefined },
+      ],
+    });
+    expect(judgeOf({ phase: 'Complete', judged: 2, total: 2, mean: 0, zeros: 2, completedAt: '2026-10-02T10:00:00Z', scores: 'nope' })).toMatchObject({ mean: 0, zeros: 2, completedAt: '2026-10-02T10:00:00Z', scores: [] });
+    expect(judgeOf({ phase: 'Judging', judged: Number.NaN, mean: '7', completedAt: '' })).toMatchObject({ judged: 0, mean: undefined, completedAt: undefined });
+  });
+
+  it('skips a score entry whose score is not a number, and reads an absent score as 0', () => {
+    const judge = judgeOf({ phase: 'Complete', scores: [{ scenario: 'a', score: 'high' }, { scenario: 'b', score: Number.NaN }, { scenario: 'c' }] });
+    expect(judge?.scores).toEqual([{ scenario: 'c', score: 0, reason: undefined }]);
+  });
+
+  it('rolls up the same results from live iterations and from the status, in script order', () => {
+    const live = scenarioResults(
+      ['b', 'a'],
+      [
+        { scenario: 'a', status: 'Passed', durationMs: 1000 },
+        { scenario: 'a', status: 'Failed', durationMs: 3000 },
+        { scenario: 'z', status: 'Error' },
+      ],
+    );
+    const fromStatus = scenarioResultsFromStatus(['b', 'a'], [
+      { name: 'z', iterations: 1, passed: 0, failed: 0, errored: 1 },
+      { name: 'a', iterations: 2, passed: 1, failed: 1, errored: 0, meanDurationMs: 2000 },
+    ]);
+    expect(fromStatus).toEqual(live);
+    expect(fromStatus.map((r) => r.scenario)).toEqual(['b', 'a', 'z']);
+  });
+
+  it('has no judge when status.judge is missing or malformed', () => {
+    for (const raw of [undefined, null, 'Complete', [], {}, { phase: 3 }]) expect(judgeOf(raw)).toBeUndefined();
+  });
+
+  it('reads status.scenarios, skipping entries without a name', () => {
+    expect(scenariosOf([{ name: 'a', iterations: 2, passed: 1, failed: 1, meanDurationMs: 1500 }, { iterations: 1 }, 'x'])).toEqual([{ name: 'a', iterations: 2, passed: 1, failed: 1, errored: 0, meanDurationMs: 1500 }]);
+    expect(scenariosOf(undefined)).toBeUndefined();
+    expect(scenariosOf({ name: 'a' })).toBeUndefined();
+    expect(scenariosOf([])).toEqual([]);
+  });
+
+  it('carries both on a suite run', () => {
+    const run = toRun('CrewFitnessSuite', {
+      apiVersion: 'kubemoot.ai/v1alpha1',
+      kind: 'CrewFitnessSuite',
+      metadata: { name: 's', namespace: 'ns' },
+      status: { phase: 'Completed', judge: { phase: 'Complete', judged: 1, total: 1, mean: 90, scores: [{ scenario: 'a', score: 90 }] }, scenarios: [{ name: 'a', iterations: 1, passed: 1 }] },
+    } as never);
+    expect(run.judge?.mean).toBe(90);
+    expect(run.scenarios?.[0]).toMatchObject({ name: 'a', passed: 1 });
   });
 });

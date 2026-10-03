@@ -1100,12 +1100,7 @@
         "crewforge.dashboardUrl": {
           "type": "string",
           "default": "",
-          "markdownDescription": "URL of the Kubemoot dashboard for this cluster, opened from **Powered by Kubemoot** in a chat and from **Open this turn in the Kubemoot dashboard** under a crew's answer (shown only when this is set). With a `kubectl port-forward` to the dashboard service, use its local address, for example `http://localhost:8080/dashboard`."
-        },
-        "crewforge.dashboardService": {
-          "type": "string",
-          "default": "",
-          "markdownDescription": "The Kubemoot dashboard's Service, as `namespace/name:port` (add `/base` when it serves under a path, such as `kubemoot/kubemoot-operator-dashboard:80/dashboard`), which the crew and fitness dashboards read through the Kubernetes service proxy (read-only) for thread counts, discussion failures, fitness scores, and archived iterations. Empty finds the Service labelled `app.kubernetes.io/part-of=kubemoot` with `app.kubernetes.io/name` `dashboard` (the operator chart) or `kubemoot-dashboard` (standalone), and its path."
+          "markdownDescription": "URL of the Kubemoot dashboard for this cluster, opened in your browser from:\n\n- **Powered by Kubemoot** in a chat\n- **Open this turn in the Kubemoot dashboard** under a crew's answer (shown only when this is set)\n- **Open in Kubemoot dashboard** and **Open XLSX** on the fitness dashboard\n\nCrewForge itself never reads the dashboard; it reads the cluster through the Kubernetes API. With a `kubectl port-forward` to the dashboard service, use its local address, for example `http://localhost:8080/dashboard`."
         }
       }
     }

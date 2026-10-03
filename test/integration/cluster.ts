@@ -3,7 +3,8 @@ import { FakeCluster, obj, seedCrew, seedInfrastructure } from '../fakeCluster';
 /**
  * The cluster the integration run talks to: the chart-installed crew "lab-ops" in team-a
  * with the Models, RAG sources, gateway, policies, and sinks it uses, its fitness suite
- * finished, and the bundle crew "demo" in "somewhere", deployed from the workspace's demo
+ * finished, a judged baseline suite whose results are in its status (the operator
+ * has removed its iterations), and the bundle crew "demo" in "somewhere", deployed from the workspace's demo
  * source with a changed description and a display name so its drift shows, one finished
  * fitness run, and the fitness scenarios it carries in a ConfigMap.
  */
@@ -24,7 +25,39 @@ export function integrationCluster(): FakeCluster {
     data: { 'pods.adl': 'DESCRIPTION Lists the pods.', 'events.adl': 'DESCRIPTION Reads the events.', 'gpus.adl': 'DESCRIPTION Reports the GPUs.' },
   };
   finishRunsAtOnce(cluster);
-  return cluster.add(demo, run, scenarios as never, labScenarios as never);
+  return cluster.add(demo, run, scenarios as never, labScenarios as never, judgedBaseline());
+}
+
+/** A finished lab-ops suite as the operator leaves it: no iterations, results and judge scores in status. */
+function judgedBaseline() {
+  const suite = obj('CrewFitnessSuite', 'lab-ops-baseline', 'team-a', { crewRef: 'lab-ops', iterations: 2, scripts: [{ testRef: 'pods' }, { testRef: 'events' }] }, { 'kubemoot.ai/crew': 'lab-ops' });
+  suite.metadata.creationTimestamp = '2026-09-29T10:00:00Z';
+  suite.status = {
+    phase: 'Completed',
+    runId: 'b4se1ine',
+    startedAt: '2026-09-29T10:00:00Z',
+    completedAt: '2026-09-29T10:20:00Z',
+    iterationsTotal: 4,
+    iterationsCompleted: 4,
+    passed: 3,
+    failed: 1,
+    scenarios: [
+      { name: 'pods', iterations: 2, passed: 2, meanDurationMs: 61000 },
+      { name: 'events', iterations: 2, passed: 1, failed: 1, meanDurationMs: 45000 },
+    ],
+    judge: {
+      phase: 'Complete',
+      judged: 2,
+      total: 2,
+      mean: 72,
+      completedAt: '2026-09-29T10:31:00Z',
+      scores: [
+        { scenario: 'pods', score: 88, reason: 'Lists every pod with its phase.' },
+        { scenario: 'events', score: 56, reason: 'Names the warning events but misses their reasons.' },
+      ],
+    },
+  };
+  return suite;
 }
 
 /**

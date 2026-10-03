@@ -12,7 +12,6 @@ import { isRunning, listIterations, listRuns, type FitnessRun } from '../fitness
 import { readDeployedScenarios } from '../fitness/deployed';
 import type { KubeTransport } from '../k8s/request';
 import { listCrews, type CrewSummary } from '../k8s/crews';
-import { DashboardApi } from '../kubemoot/dashboardApi';
 import { redeployTarget, type LoopMemory } from '../loop/state';
 import { ChatPanel } from '../panels/chatPanel';
 import type { Deployment } from '../source/deployments';
@@ -45,7 +44,6 @@ export interface DashboardParts {
   memory: Pick<LoopMemory, 'redeployNamespace'>;
   exec: Exec;
   activity: FitnessActivity;
-  api?: DashboardApi;
   /** Selects a group of a crew in a tree: the live crew's, else its source's. */
   revealGroup?: (where: { crew?: CrewSummary; entry?: SourceEntry }, group: Group) => Promise<void>;
 }
@@ -56,13 +54,11 @@ export const REFRESH = { crew: 10_000, overview: 15_000, fitnessRunning: 3_000 }
 /** Opens the crew dashboard, the Crews Overview, and the fitness dashboard, and keeps the connection status bar item. */
 export class Dashboards implements vscode.Disposable {
   readonly status: ConnectionStatus;
-  private readonly api: DashboardApi;
   private readonly controls = new ControlsReader();
   private readonly runControls: RunControls;
 
   constructor(private readonly parts: DashboardParts) {
     this.status = new ConnectionStatus(parts.connect, parts.crewforgeVersion);
-    this.api = parts.api ?? new DashboardApi();
     this.runControls = new RunControls(() => parts.connect().client, (client) => parts.service.kinds(client));
   }
 
@@ -138,7 +134,6 @@ export class Dashboards implements vscode.Disposable {
         return result.code === 0 ? parseHelmStatus(result.stdout) : undefined;
       },
       conversations: (context, namespace, crew) => conversationStats(parts.store, context, namespace, crew, ChatPanel.activeTurn(context, { namespace, name: crew })),
-      kubemoot: (namespace, crew) => this.api.threads(parts.connect().client, namespace, crew),
       fitnessRunning: (namespace, crew) => parts.activity.isBusy(namespace, crew),
     };
   }
@@ -193,16 +188,14 @@ export class Dashboards implements vscode.Disposable {
   private async suiteDetail(run: FitnessRun | undefined, kinds: Awaited<ReturnType<SourceService['kinds']>>): Promise<Partial<FitnessView>> {
     if (run?.kind !== 'CrewFitnessSuite') return {};
     const { client } = this.parts.connect();
+    // The iterations still in the cluster come first; after the run the suite's status carries the per-scenario results and the judge's scores.
     const iterations = await listIterations(client, kinds, run.namespace, run.name).catch(() => []);
     const base = dashboardBase();
-    const xlsxUrl = run.artifact && base ? `${base}/api/kubemoot/crewfitnesssuites/${checkName('namespace', run.namespace)}/${encodeURIComponent(run.name)}/artifact` : undefined;
-    if (isRunning(run)) return { iterations, xlsxUrl };
-    // The iterations still in the cluster come first; the dashboard's transcripts cover a run the operator has cleaned up.
-    const [archived, scores] = await Promise.all([
-      iterations.length ? undefined : this.api.iterations(client, run.namespace, run.name).then((r) => ('unavailable' in r ? r : (r.iterations ?? []))),
-      run.phase === 'Cancelled' ? undefined : this.api.scores(client, run.namespace, run.name),
-    ]);
-    return { iterations, archived, scores, xlsxUrl };
+    if (!base) return { iterations };
+    const namespace = checkName('namespace', run.namespace);
+    const xlsxUrl = run.artifact ? `${base}/api/kubemoot/crewfitnesssuites/${namespace}/${encodeURIComponent(run.name)}/artifact` : undefined;
+    // The dashboard's Fitness page takes no query: the person picks the run there.
+    return { iterations, xlsxUrl, dashboardRunUrl: `${base}/fitness` };
   }
 
   get fitnessControls(): RunControls {
@@ -422,6 +415,9 @@ class FitnessDashboard implements PageModel {
     stop: async (arg) => this.control(arg, (r) => this.dashboards.fitnessControls.stop(r)),
     xlsx: async () => {
       if (this.view?.xlsxUrl) await vscode.env.openExternal(vscode.Uri.parse(this.view.xlsxUrl));
+    },
+    openDashboard: async () => {
+      if (this.view?.dashboardRunUrl) await vscode.env.openExternal(vscode.Uri.parse(this.view.dashboardRunUrl));
     },
     refresh: async () => undefined,
     selectContext: () => selectContext(),

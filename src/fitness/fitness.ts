@@ -20,6 +20,38 @@ export interface FitnessCondition {
   message?: string;
 }
 
+/** The judge's verdict on one scenario, as a suite's status.judge.scores lists it. */
+export interface JudgeScore {
+  scenario: string;
+  /** 0 to 100, rounded. */
+  score: number;
+  /** The judge's rationale on one line, up to 200 characters. */
+  reason?: string;
+}
+
+/** Where the deferred judge stands for a suite run: the suite's status.judge. */
+export interface SuiteJudge {
+  /** Pending, Judging, Complete, or Skipped. */
+  phase: string;
+  judged: number;
+  total: number;
+  /** The mean scenario score, absent until a scenario is judged. */
+  mean?: number;
+  zeros: number;
+  completedAt?: string;
+  scores: JudgeScore[];
+}
+
+/** One scenario's finished iterations: an entry of a suite's status.scenarios. */
+export interface SuiteScenario {
+  name: string;
+  iterations: number;
+  passed: number;
+  failed: number;
+  errored: number;
+  meanDurationMs?: number;
+}
+
 /** One fitness run of a crew, as its status reports it. */
 export interface FitnessRun {
   kind: FitnessKind;
@@ -54,6 +86,10 @@ export interface FitnessRun {
   /** For an iteration a suite ran: the suite's name, and the scenario it ran. */
   iterationOf?: string;
   testRef?: string;
+  /** A suite's judge pass, as the operator records it. */
+  judge?: SuiteJudge;
+  /** A suite's per-scenario rollup, kept after the operator removes the iterations. */
+  scenarios?: SuiteScenario[];
 }
 
 /** Marks a run CrewForge started for one scenario, so its dashboard offers Stop. */
@@ -100,6 +136,8 @@ interface FitnessStatus {
   runId?: string;
   artifactRef?: { bucket: string; objectKey: string };
   conditions?: FitnessCondition[];
+  judge?: unknown;
+  scenarios?: unknown;
 }
 
 interface FitnessObject extends Manifest {
@@ -123,7 +161,49 @@ export function toRun(kind: FitnessKind, m: FitnessObject): FitnessRun {
     error: status.error || undefined,
     ...progressOf(status),
     ...controlsOf(m),
+    judge: judgeOf(status.judge),
+    scenarios: scenariosOf(status.scenarios),
   };
+}
+
+type Fields = Record<string, unknown>;
+
+const isObject = (v: unknown): v is Fields => typeof v === 'object' && v !== null && !Array.isArray(v);
+
+/** A count the operator may omit when it is 0. */
+const count = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
+
+const optionalNumber = (v: unknown): number | undefined => (typeof v === 'number' && Number.isFinite(v) ? v : undefined);
+
+const optionalText = (v: unknown): string | undefined => (typeof v === 'string' && v !== '' ? v : undefined);
+
+/** Reads status.judge; undefined when the status has none (an operator that does not record it). */
+export function judgeOf(raw: unknown): SuiteJudge | undefined {
+  if (!isObject(raw) || typeof raw.phase !== 'string') return undefined;
+  const scores = Array.isArray(raw.scores) ? raw.scores.filter(isObject).filter(validScore) : [];
+  return {
+    phase: raw.phase,
+    judged: count(raw.judged),
+    total: count(raw.total),
+    mean: optionalNumber(raw.mean),
+    zeros: count(raw.zeros),
+    completedAt: optionalText(raw.completedAt),
+    scores: scores.map((s) => ({ scenario: s.scenario as string, score: count(s.score), reason: optionalText(s.reason) })),
+  };
+}
+
+/** A score entry names its scenario, and its score is a number or absent (an absent score reads as 0). */
+function validScore(s: Fields): boolean {
+  return typeof s.scenario === 'string' && (s.score === undefined || optionalNumber(s.score) !== undefined);
+}
+
+/** Reads status.scenarios; undefined when the status has none. */
+export function scenariosOf(raw: unknown): SuiteScenario[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  return raw
+    .filter(isObject)
+    .filter((s) => typeof s.name === 'string')
+    .map((s) => ({ name: s.name as string, iterations: count(s.iterations), passed: count(s.passed), failed: count(s.failed), errored: count(s.errored), meanDurationMs: optionalNumber(s.meanDurationMs) }));
 }
 
 function progressOf(status: FitnessStatus): Partial<FitnessRun> {
@@ -173,16 +253,41 @@ export interface ScenarioResult {
 
 const OUTCOME: Record<string, keyof Pick<ScenarioResult, 'passed' | 'failed' | 'errored'>> = { Passed: 'passed', Failed: 'failed', Error: 'errored', Timeout: 'errored' };
 
+/** The suite's scripts in order, then any other scenario by name. */
+function scenarioOrder(scripts: string[], names: string[]): string[] {
+  return [...scripts, ...[...new Set(names)].filter((s) => !scripts.includes(s)).sort(byCodeUnits)];
+}
+
+/** The mean of the durations that were measured (above 0); undefined when none was. */
+function meanDuration(ms: number[]): number | undefined {
+  const timed = ms.filter((m) => m > 0);
+  return timed.length ? timed.reduce((a, b) => a + b, 0) / timed.length : undefined;
+}
+
 /** Groups iterations by scenario, in the suite's script order, then any other scenario by name. */
 export function scenarioResults(scripts: string[], iterations: { scenario: string; status: string; durationMs?: number }[]): ScenarioResult[] {
-  const order = [...scripts, ...[...new Set(iterations.map((i) => i.scenario))].filter((s) => !scripts.includes(s)).sort(byCodeUnits)];
-  return order.map((scenario) => {
+  return scenarioOrder(scripts, iterations.map((i) => i.scenario)).map((scenario) => {
     const mine = iterations.filter((i) => i.scenario === scenario);
     const finished = mine.filter((i) => OUTCOME[i.status]);
     const result: ScenarioResult = { scenario, done: finished.length, passed: 0, failed: 0, errored: 0, running: mine.length - finished.length };
     for (const i of finished) result[OUTCOME[i.status]]++;
-    const timed = finished.map((i) => i.durationMs ?? 0).filter((ms) => ms > 0);
-    if (timed.length) result.meanMs = timed.reduce((a, b) => a + b, 0) / timed.length;
+    const meanMs = meanDuration(finished.map((i) => i.durationMs ?? 0));
+    if (meanMs !== undefined) result.meanMs = meanMs;
+    return result;
+  });
+}
+
+/**
+ * The same results from the per-scenario rollup the operator keeps in a suite's status
+ * once its iterations are gone, in the same order; none of them is still running.
+ */
+export function scenarioResultsFromStatus(scripts: string[], scenarios: SuiteScenario[]): ScenarioResult[] {
+  const byName = new Map(scenarios.map((s) => [s.name, s]));
+  return scenarioOrder(scripts, scenarios.map((s) => s.name)).map((scenario) => {
+    const s = byName.get(scenario) ?? { name: scenario, iterations: 0, passed: 0, failed: 0, errored: 0 };
+    const result: ScenarioResult = { scenario, done: s.iterations, passed: s.passed, failed: s.failed, errored: s.errored, running: 0 };
+    const meanMs = meanDuration([s.meanDurationMs ?? 0]);
+    if (meanMs !== undefined) result.meanMs = meanMs;
     return result;
   });
 }
