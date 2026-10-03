@@ -46,8 +46,13 @@ class Devtools {
 
   private constructor(private readonly socket: WebSocket) {
     socket.addEventListener('message', (e) => {
-      const msg = JSON.parse(String(e.data)) as { id?: number; result?: unknown };
-      if (msg.id !== undefined) this.waiting.get(msg.id)?.(msg.result);
+      const msg = JSON.parse(String(e.data)) as { id?: unknown; result?: unknown };
+      if (typeof msg.id !== 'number') return;
+      const resolve = this.waiting.get(msg.id);
+      if (typeof resolve === 'function') {
+        this.waiting.delete(msg.id);
+        resolve(msg.result);
+      }
     });
   }
 
