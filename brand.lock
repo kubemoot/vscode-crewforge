@@ -6,3 +6,5 @@ commit b4721dd5d96d39b42a2542ff685c1c633d6f96f3
 cc83ebea650221b4f77609b9225fbe05c73dc9454328069df1c93170cfe4b802 media/icon.png icon/color/kubemoot-icon-color-512.png
 b350a8997dade7c7019c124b8dae6f51a8c5445e381107d1c131eaceb1a230d5 media/kubemoot.svg icon/black/kubemoot-icon-black.svg
 ab3f4136528a0a2f7f9d3f835dd7470203ab0ac98d4540fd30215e7efb7a3684 media/kubemoot-favicon-small.svg favicon/kubemoot-favicon-small.svg
+b85be74296989f0c56ac3f28c10dac3dfdb4ed9b0f28f6975720b77cb92d2c0a .github/assets/kubemoot-horizontal-color.png horizontal/color/kubemoot-horizontal-color.png
+41d7dbafdd5e69fb6b4fedfed7fb8d39469264ac75b4b757593c27d119496873 .github/assets/kubemoot-horizontal-white-text.png horizontal/white-text/kubemoot-horizontal-white-text.png

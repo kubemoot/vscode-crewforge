@@ -21,6 +21,12 @@ function shipped(file: string): boolean {
   return included;
 }
 
+/** The images README.md loads from the repository: `src` and `srcset` attributes and Markdown images, remote URLs left out. */
+function readmeImages(): string[] {
+  const refs = [...read('README.md').matchAll(/(?:src|srcset)="([^"]+)"|!\[[^\]]*\]\(([^)\s]+)\)/g)].map((m) => m[1] ?? m[2]);
+  return refs.filter((ref) => !/^([a-z]+:|\/\/)/i.test(ref));
+}
+
 describe('the packaged extension', () => {
   it('ships every script the build writes to dist, so no webview loads a missing file', () => {
     const outfiles = [...read('esbuild.mjs').matchAll(/outfile: '(dist\/[^']+)'/g)].map((m) => m[1]);
@@ -40,11 +46,30 @@ describe('the packaged extension', () => {
     }
   });
 
+  it('ships every image the README names, so its header and screenshot render from the .vsix', () => {
+    expect(readmeImages()).toEqual(
+      expect.arrayContaining([
+        '.github/assets/kubemoot-horizontal-color.png',
+        '.github/assets/kubemoot-horizontal-white-text.png',
+        'docs/screenshots/views.png',
+      ]),
+    );
+    for (const file of readmeImages()) {
+      expect(fs.existsSync(path.join(repo, file)), file).toBe(true);
+      expect(shipped(file), file).toBe(true);
+    }
+  });
+
+  it('uses PNG for every README image, since the Marketplace refuses SVG images in a README', () => {
+    for (const file of readmeImages()) expect(file, file).toMatch(/\.png$/);
+  });
+
   it('reads an ignore file the way vsce does: later lines win', () => {
     expect(shipped('src/extension.ts')).toBe(false);
     expect(shipped('test/fakes.ts')).toBe(false);
     expect(shipped('media/kubemoot-favicon-small.svg')).toBe(true);
     expect(shipped('brand.lock')).toBe(false);
     expect(shipped('scripts/brand-sync.sh')).toBe(false);
+    expect(shipped('.github/workflows/ci.yaml')).toBe(false);
   });
 });
