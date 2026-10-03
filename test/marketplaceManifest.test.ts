@@ -166,6 +166,14 @@ describe('publishing to the registries in Promote Release', () => {
     expect(holders('AZURE_CLIENT_ID')).toEqual(['Sign in to Microsoft Entra']);
   });
 
+  it('publishes to Open VSX with Trusted Publishing unless an OVSX_PAT is set', () => {
+    const openvsx = step(publish, 'Publish to Open VSX').step;
+    expect(openvsx.run).toContain('--trusted-publishing');
+    expect(openvsx.run).toMatch(/if \[ "\$\{AUTH\}" != pat \]; then flags\+=\(--trusted-publishing\)/);
+    expect(JSON.stringify(openvsx.env)).toContain("openvsx_auth == 'pat' && secrets.OVSX_PAT");
+    expect(publish.permissions?.['id-token']).toBe('write');
+  });
+
   it('publishes with the locked CLIs, and never repackages', () => {
     const runs = publish.steps.map((s) => s.run ?? '').join('\n');
     expect(step(publish, 'Publish to the VS Code Marketplace').step.run).toContain('npx --no-install vsce publish --packagePath');
