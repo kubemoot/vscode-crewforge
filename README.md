@@ -1,5 +1,5 @@
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset=".github/assets/kubemoot-horizontal-white-text.png">
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/kubemoot/vscode-crewforge/main/.github/assets/kubemoot-horizontal-white-text.png">
   <img src=".github/assets/kubemoot-horizontal-color.png" alt="Kubemoot" height="64">
 </picture>
 
@@ -118,7 +118,8 @@ version when they package. Every push to `main` tags a release candidate
 `vX.Y.Z-rc.N` (the conventional commits since the last release decide `X.Y.Z`) and
 packages its `.vsix` as a workflow artifact, publishing nothing. A maintainer promotes a
 tested candidate with the **Promote Release** workflow, which tags `vX.Y.Z` and writes
-the GitHub Release with the `.vsix` attached.
+the GitHub Release with the `.vsix` attached, and, only when asked, publishes the same
+`.vsix` to the VS Code Marketplace and Open VSX (see [CONTRIBUTING](CONTRIBUTING.md)).
 
 ## Community and contributing
 

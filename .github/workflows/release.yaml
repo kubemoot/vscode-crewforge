@@ -54,7 +54,8 @@ jobs:
 
       # A candidate packages the .vsix at its version to prove the release works, and
       # publishes nothing: the .vsix is kept only as this run's workflow artifact.
-      # package.json keeps 0.0.0 in git; the version is set here, never committed.
+      # package.json keeps 0.0.0 in git; the version is set here, never committed. The
+      # README's relative images and links point at this commit on GitHub.
       - name: Package the candidate
         if: steps.version.outputs.release_created == 'true'
         env:
@@ -62,7 +63,7 @@ jobs:
         run: |
           npm ci
           npm version --no-git-tag-version "${VERSION}"
-          npm run package
+          npm run package -- --githubBranch "${GITHUB_SHA}"
 
       - name: Keep the candidate .vsix
         if: steps.version.outputs.release_created == 'true'
