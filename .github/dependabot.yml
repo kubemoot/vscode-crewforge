@@ -1,0 +1,32 @@
+# Dependabot version updates: weekly, one grouped pull request per ecosystem.
+# Commit prefixes drive the semantic version bump (chore and ci are patch bumps).
+# Every pull request is reviewed by a maintainer before it merges.
+#
+# Node majors are bumped by hand on purpose: Dependabot does not update .nvmrc,
+# the single Node version source that the workflows read with node-version-file.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directories:
+      - "/"
+      - "/.github/actions/release-candidate-version"
+    schedule:
+      interval: weekly
+    groups:
+      github-actions:
+        patterns: ["*"]
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "ci"
+
+  - package-ecosystem: npm
+    directories:
+      - "/"
+    schedule:
+      interval: weekly
+    groups:
+      npm:
+        patterns: ["*"]
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"
