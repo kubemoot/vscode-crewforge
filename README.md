@@ -1,4 +1,11 @@
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset=".github/assets/kubemoot-horizontal-white-text.png">
+  <img src=".github/assets/kubemoot-horizontal-color.png" alt="Kubemoot" height="64">
+</picture>
+
 # CrewForge for VS Code
+
+[![Latest release](https://img.shields.io/github/v/release/kubemoot/vscode-crewforge?sort=semver)](https://github.com/kubemoot/vscode-crewforge/releases/latest) [![Build status](https://github.com/kubemoot/vscode-crewforge/actions/workflows/ci.yaml/badge.svg?branch=main)](https://github.com/kubemoot/vscode-crewforge/actions/workflows/ci.yaml?query=branch%3Amain) [![License: Apache 2.0](https://img.shields.io/github/license/kubemoot/vscode-crewforge)](https://github.com/kubemoot/vscode-crewforge/blob/main/LICENSE)
 
 CrewForge is a VS Code extension for building and running [Kubemoot](https://kubemoot.org)
 crews. Create a crew, edit it as code, lint it, deploy it to a namespace, ask it questions,
