@@ -32,8 +32,22 @@ async function loadPage(): Promise<void> {
     setState: (s: unknown) => (state = s),
   });
   vi.resetModules();
-  await import('../src/webview/main');
+  const start = globalThis.setInterval;
+  const record = (...args: Parameters<typeof setInterval>) => {
+    const id = start(...args);
+    intervals.push(id);
+    return id;
+  };
+  globalThis.setInterval = record as typeof setInterval;
+  try {
+    await import('../src/webview/main');
+  } finally {
+    globalThis.setInterval = start;
+  }
 }
+
+/** Intervals the page script started; cleared after each test so none fires after the DOM is gone. */
+const intervals: ReturnType<typeof setInterval>[] = [];
 
 /** What the host says about the crew's availability; a test changes it before posting. */
 let availability: StateMessage['availability'];
@@ -52,6 +66,7 @@ const $ = (id: string) => document.getElementById(id)!;
 beforeEach(loadPage);
 afterEach(() => {
   for (const p of recorded.panels) p.dispose();
+  for (const id of intervals.splice(0)) clearInterval(id);
   vi.useRealTimers();
 });
 
