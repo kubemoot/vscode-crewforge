@@ -192,7 +192,7 @@ export function judgeOf(raw: unknown): SuiteJudge | undefined {
   };
 }
 
-/** A score entry names its scenario, and its score is a number or absent (the operator omits a 0). */
+/** A score entry names its scenario, and its score is a number or absent (an absent score reads as 0). */
 function validScore(s: Fields): boolean {
   return typeof s.scenario === 'string' && (s.score === undefined || optionalNumber(s.score) !== undefined);
 }
