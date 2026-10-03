@@ -11,11 +11,13 @@
 #
 # With publish_marketplaces, a promotion that is not a dry run also publishes the .vsix
 # attached to the GitHub Release to the VS Code Marketplace and Open VSX. It needs the
-# registry credentials as repository secrets: OVSX_PAT for Open VSX, and for the
-# Marketplace either AZURE_CLIENT_ID and AZURE_TENANT_ID (a Microsoft Entra managed
-# identity trusted for this repository's marketplace environment) or VSCE_PAT. The
-# credentials are checked first, so a missing one stops the run before anything is
-# tagged; a dry run with publish_marketplaces checks them too. With pre_release, the
+# registry credentials. Open VSX: Trusted Publishing (no secret; the namespace trusts
+# this repository's promote-release.yaml in the marketplace environment), or OVSX_PAT
+# when set, which the first version of a namespace needs and which takes precedence.
+# Marketplace: AZURE_CLIENT_ID and AZURE_TENANT_ID (a Microsoft Entra managed identity
+# trusted for the marketplace environment) or VSCE_PAT. The Marketplace credential is
+# checked first, so a missing one stops the run before anything is tagged; a dry run
+# with publish_marketplaces checks it too. With pre_release, the
 # .vsix is packaged as a pre-release, the GitHub Release's copy included. The CLI
 # versions are the @vscode/vsce and ovsx devDependencies in package-lock.json.
 name: Promote Release
@@ -62,6 +64,7 @@ jobs:
       commit: ${{ steps.plan.outputs.commit }}
       final_tag: ${{ steps.plan.outputs.final_tag }}
       marketplace_auth: ${{ steps.registries.outputs.marketplace }}
+      openvsx_auth: ${{ steps.registries.outputs.openvsx }}
     steps:
       - name: Check the registry credentials
         id: registries
@@ -80,9 +83,11 @@ jobs:
             echo "::error::No Marketplace credential: set AZURE_CLIENT_ID and AZURE_TENANT_ID, or VSCE_PAT."
             missing=1
           fi
-          if [ "${HAS_OVSX_PAT}" != true ]; then
-            echo "::error::No Open VSX credential: set OVSX_PAT."
-            missing=1
+          if [ "${HAS_OVSX_PAT}" = true ]; then
+            echo "openvsx=pat" >> "$GITHUB_OUTPUT"
+          else
+            echo "openvsx=trusted" >> "$GITHUB_OUTPUT"
+            echo "Open VSX: Trusted Publishing (no OVSX_PAT). The namespace must trust this workflow and hold a published version."
           fi
           exit "${missing}"
 
@@ -199,7 +204,7 @@ jobs:
     environment: marketplace
     permissions:
       contents: read # the repository's lockfile and the GitHub Release's .vsix
-      id-token: write # Microsoft Entra sign-in for the Marketplace, when configured
+      id-token: write # Entra sign-in for the Marketplace and Open VSX Trusted Publishing
     steps:
       - name: Check out the promoted commit
         uses: actions/checkout@v5
@@ -259,9 +264,16 @@ jobs:
           if [ "${AUTH}" = entra ]; then flags+=(--azure-credential); fi
           npx --no-install vsce publish --packagePath "${OUT_DIR}/crewforge-${TAG#v}.vsix" "${flags[@]}"
 
+      # Trusted Publishing exchanges this job's GitHub OIDC token for a short-lived Open
+      # VSX token; OVSX_PAT, when set, takes precedence (needed for a namespace's first
+      # version, before the trusted publisher can be registered).
       - name: Publish to Open VSX
         env:
-          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+          AUTH: ${{ needs.promote.outputs.openvsx_auth }}
+          OVSX_PAT: ${{ needs.promote.outputs.openvsx_auth == 'pat' && secrets.OVSX_PAT || '' }}
           TAG: ${{ needs.promote.outputs.final_tag }}
           OUT_DIR: ${{ runner.temp }}/vsix
-        run: npx --no-install ovsx publish "${OUT_DIR}/crewforge-${TAG#v}.vsix" --skip-duplicate
+        run: |
+          flags=(--skip-duplicate)
+          if [ "${AUTH}" != pat ]; then flags+=(--trusted-publishing); fi
+          npx --no-install ovsx publish "${OUT_DIR}/crewforge-${TAG#v}.vsix" "${flags[@]}"

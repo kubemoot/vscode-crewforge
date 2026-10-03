@@ -121,7 +121,15 @@ gh api -X POST repos/kubemoot/vscode-crewforge/environments/marketplace/deployme
    unset OVSX_PAT
    ```
 
-4. Optionally, ask for the namespace to be verified (the extension then shows as from a
+4. After the first promotion with `publish_marketplaces` has published a version (Open
+   VSX requires one before a trusted publisher can be registered), switch to
+   [Trusted Publishing](https://github.com/eclipse-openvsx/openvsx/wiki/Trusted-Publishing),
+   so no long-lived Open VSX token is stored: on open-vsx.org, **Settings, Trusted
+   Publishers**, add organization `kubemoot`, repository `vscode-crewforge`, workflow
+   `promote-release.yaml`, environment `marketplace`. Then delete the token and its
+   secret (`gh secret delete OVSX_PAT -R kubemoot/vscode-crewforge`); the workflow uses
+   Trusted Publishing whenever `OVSX_PAT` is absent.
+5. Optionally, ask for the namespace to be verified (the extension then shows as from a
    verified publisher) by opening an issue in
    [EclipseFdn/open-vsx.org](https://github.com/EclipseFdn/open-vsx.org/issues) under
    the namespace access process.
