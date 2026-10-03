@@ -204,7 +204,6 @@ describe('DevLoop', () => {
     });
   }
 
-  const tick = () => new Promise((r) => setTimeout(r, 0));
   const source: SourceNode = { kind: 'source', entry };
 
   beforeEach(() => {
@@ -231,8 +230,7 @@ describe('DevLoop', () => {
     expect(recorded.info).toEqual(['demo in crew-demo is ready.']);
     expect(recorded.progress.at(-1)).toBe('Crew ready; 1 of 1 agents ready');
     expect(states.get(ROOT)?.kind).toBe('in-sync');
-    await tick();
-    expect(calls.at(-1)).toBe('ask crew-demo');
+    await vi.waitFor(() => expect(calls.at(-1)).toBe('ask crew-demo'));
   });
 
   it('deploys to a namespace it asks for every time, offering the last one, and remembers it for Redeploy', async () => {
@@ -268,16 +266,17 @@ describe('DevLoop', () => {
     expect(recorded.inputs).toEqual([]);
     expect(recorded.progress).toContain('Waiting for the operator to see this deploy');
     expect(recorded.info).toEqual(['demo in crew-demo is redeployed and ready.']);
-    await tick();
-    expect(calls).toEqual(['apply crew-demo helm demo', 'reveal crew-demo', 'reask crew-demo']);
+    await vi.waitFor(() => expect(calls).toEqual(['apply crew-demo helm demo', 'reveal crew-demo', 'reask crew-demo']));
     recorded.infoAnswers.push('Rerun fitness');
     await l.redeploy(source);
-    await tick();
-    expect(calls.at(-1)).toBe('fitness crew-demo');
+    await vi.waitFor(() => expect(calls.at(-1)).toBe('fitness crew-demo'));
     expect(lastPreferred).toBe('demo-starter');
     recorded.infoAnswers.push(undefined);
+    const offer = recorded.infoReplies.length;
     await l.redeploy(source);
-    await tick();
+    expect(recorded.info[offer]).toBe('demo in crew-demo is redeployed and ready.');
+    // Dismissing the offer is acted on once its reply is handled; nothing follows it.
+    await recorded.infoReplies[offer];
     expect(calls.at(-1)).toBe('reveal crew-demo');
   });
 
@@ -362,9 +361,12 @@ describe('DevLoop', () => {
     cluster.objects = [];
     recorded.infoAnswers.push('Deploy to Namespace...');
     recorded.inputs.push(undefined);
+    const offersBefore = recorded.inputOffers.length;
     await l.ask(source);
     expect(recorded.info[0]).toBe('demo is not deployed in lab. Deploy it to a namespace first.');
-    await tick();
+    // Picking Deploy to Namespace... asks for the namespace, which is dismissed.
+    await vi.waitFor(() => expect(recorded.inputOffers).toHaveLength(offersBefore + 1));
+    expect(recorded.inputs).toEqual([]);
     const blind = loop({ sources: { entries: async () => [entry], known: [entry], loadDeployments: async () => [{ kind: 'message', text: 'Forbidden' }], refresh: () => undefined } });
     await blind.runFitness(source);
     expect(recorded.errors).toEqual(['CrewForge cannot tell where demo is deployed: Forbidden']);
@@ -437,9 +439,8 @@ describe('DevLoop', () => {
     expect(states.get(ROOT)?.kind).toBe('changed');
     expect(calls).toEqual(['lintOnSave demo']);
     saved?.();
-    await tick();
+    await vi.waitFor(() => expect(states.get(ROOT)?.kind).toBe('in-sync'));
     expect(refreshed).toBe(1);
-    expect(states.get(ROOT)?.kind).toBe('in-sync');
     l.onSaved('/elsewhere/x.yaml');
     expect(calls).toHaveLength(1);
   });
@@ -448,14 +449,12 @@ describe('DevLoop', () => {
     recorded.inputs.push('crew-demo');
     recorded.infoAnswers.push('Ask');
     await loop({ chat: { ask: async () => Promise.reject(new Error('no gateway')), reaskLast: async () => undefined } }).redeploy(source);
-    await tick();
-    expect(recorded.errors).toEqual(['CrewForge: no gateway']);
+    await vi.waitFor(() => expect(recorded.errors).toEqual(['CrewForge: no gateway']));
     recorded.inputs.push('crew-demo');
     recorded.infoAnswers.push('Ask');
     cluster = new FakeCluster();
     await loop({ chat: { ask: async () => Promise.reject('odd'), reaskLast: async () => undefined } }).redeploy(source);
-    await tick();
-    expect(recorded.errors[1]).toBe('CrewForge: odd');
+    await vi.waitFor(() => expect(recorded.errors[1]).toBe('CrewForge: odd'));
   });
 
   it('reads agents only when the cluster serves them', async () => {
@@ -492,9 +491,11 @@ describe('CrewStatusBar', () => {
     bar.stateChanged(ROOT);
     expect(item.visible).toBe(false);
     bar.update(undefined);
-    const failing = new CrewStatusBar(() => [entry], new LoopStates(), async () => Promise.reject(new Error('x')));
+    const failingRefresh = vi.fn(async () => Promise.reject(new Error('x')));
+    const failing = new CrewStatusBar(() => [entry], new LoopStates(), failingRefresh);
     failing.update(`${ROOT}/Chart.yaml`);
-    await new Promise((r) => setTimeout(r, 0));
+    // The bar handles the failed refresh it started; awaiting the same promise resumes after that.
+    await expect(failingRefresh.mock.results[0].value).rejects.toThrow('x');
     bar.dispose();
     expect(item.visible).toBe(false);
     new CrewStatusBar(() => [{ ...entry, crewName: undefined }], states, async () => undefined).update(`${ROOT}/Chart.yaml`);

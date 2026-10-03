@@ -128,8 +128,15 @@ describe('lintSource', () => {
     const bad = (name: string) => `apiVersion: kubemoot.ai/v1alpha1\nkind: Agent\nmetadata:\n  name: ${name}\nspec:\n  nope: 1\n`;
     const good = 'apiVersion: kubemoot.ai/v1alpha1\nkind: Agent\nmetadata:\n  name: ok\nspec: {}\n';
     const files: Record<string, string> = { '/w/bundle/a.yaml': bad('a'), '/w/bundle/b.yaml': bad('b'), '/w/bundle/ok.yaml': good };
+    // Each read of a.yaml returns only after the matching read of b.yaml has, so a.yaml is
+    // still reading while the other objects validate, whatever the machine's speed.
+    const bReads: (() => void)[] = [];
+    const bRead = [0, 1].map((i) => new Promise<void>((r) => (bReads[i] = r)));
+    let aCount = 0;
+    let bCount = 0;
     const slowRead = async (file: string) => {
-      await new Promise((r) => setTimeout(r, file.endsWith('a.yaml') ? 20 : 0));
+      if (file.endsWith('a.yaml')) await bRead[aCount++];
+      if (file.endsWith('b.yaml')) bReads[bCount++]?.();
       return files[file];
     };
     const { findings } = await lintSource(bundle, deps(SCHEMA, {

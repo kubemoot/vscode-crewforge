@@ -1,19 +1,25 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { TurnTiming } from '../src/discussion/client';
+import { DEFAULT_TIMING, type TurnTiming } from '../src/discussion/client';
 import { ChatSession, endProblems, noticeFor, type SessionView, turnRecord } from '../src/discussion/session';
 import { newConversation, type Conversation } from '../src/store/conversation';
 import { FakeTransport, fixture } from './fakes';
 
 const FAST: TurnTiming = { firstEventMs: 50, idleMs: 80, maxMs: 1_000, reconnectMs: 1 };
 
-function setup() {
+/** A turn held open until the test stops it; the stream's safety-net timers never fire first. */
+const HELD: TurnTiming = DEFAULT_TIMING;
+
+function setup(timing: TurnTiming = FAST) {
   const t = new FakeTransport();
   const saved: Conversation[] = [];
   const views: SessionView[] = [];
   const conversation = newConversation('ctx', 'team-1', 'lab-ops', new Date('2026-09-27T01:00:00Z'));
-  const session = new ChatSession(t, conversation, async (c) => void saved.push(structuredClone(c)), (v) => views.push(v), FAST);
+  const session = new ChatSession(t, conversation, async (c) => void saved.push(structuredClone(c)), (v) => views.push(v), timing);
   return { t, saved, views, session, conversation };
 }
+
+/** Waits until the turn's event stream is open: the question was queued and the turn is under way. */
+const streamOpen = (t: FakeTransport) => vi.waitFor(() => expect(t.calls.some((c) => c.method === 'GET')).toBe(true));
 
 describe('ChatSession', () => {
   it('runs two recorded turns as one conversation', async () => {
@@ -113,7 +119,7 @@ describe('ChatSession', () => {
   });
 
   it('renames and saves the conversation, but not to a blank name or while a turn runs', async () => {
-    const { t, saved, views, session } = setup();
+    const { t, saved, views, session } = setup(HELD);
     await session.rename('  GPU inventory ');
     expect(session.view.conversation.title).toBe('GPU inventory');
     expect(saved.map((c) => c.title)).toEqual(['GPU inventory']);
@@ -125,7 +131,7 @@ describe('ChatSession', () => {
     t.responses.push('{"conversationId":"c"}');
     t.streams.push('data: {"type":"connected"}\n\n');
     const turn = session.send('q');
-    await new Promise((r) => setTimeout(r, 5));
+    await streamOpen(t);
     await session.rename('During');
     expect(session.view.conversation.title).not.toBe('During');
     expect(saved).toHaveLength(1);
@@ -148,12 +154,12 @@ describe('ChatSession', () => {
   });
 
   it('does not remove while a turn runs, and a failed remove leaves the session usable', async () => {
-    const { t, session } = setup();
+    const { t, session } = setup(HELD);
     t.holdOpen = true;
     t.responses.push('{"conversationId":"c"}');
     t.streams.push('data: {"type":"connected"}\n\n');
     const turn = session.send('q');
-    await new Promise((r) => setTimeout(r, 5));
+    await streamOpen(t);
     let called = false;
     expect(await session.remove(async () => void (called = true))).toBe(false);
     expect(called).toBe(false);
@@ -182,12 +188,12 @@ describe('ChatSession', () => {
   });
 
   it('lists the agents still working when a turn is stopped, under its notice', async () => {
-    const { t, session } = setup();
+    const { t, session } = setup(HELD);
     t.holdOpen = true;
     t.responses.push('{"conversationId":"c"}');
     t.streams.push('data: {"type":"connected"}\n\ndata: {"type":"thread_found","threadId":"A"}\n\ndata: {"type":"phase","agent":"k8s","status":"evaluating"}\n\n');
     const turn = session.send('q');
-    await new Promise((r) => setTimeout(r, 5));
+    await vi.waitFor(() => expect(session.view.turn?.cards.map((c) => c.agent)).toEqual(['k8s']));
     session.stop();
     await turn;
     expect(session.view.conversation.messages[1]).toMatchObject({ role: 'system', content: 'Stopped.', problems: ['k8s did not finish before the turn ended'] });
@@ -224,14 +230,14 @@ describe('ChatSession', () => {
   });
 
   it('ignores blank questions and a second question while a turn runs', async () => {
-    const { t, session } = setup();
+    const { t, session } = setup(HELD);
     await session.send('   ');
     expect(t.calls).toHaveLength(0);
     t.holdOpen = true;
     t.responses.push('{"conversationId":"c"}');
     t.streams.push('data: {"type":"connected"}\n\n');
     const first = session.send('first');
-    await new Promise((r) => setTimeout(r, 5));
+    await streamOpen(t);
     await session.send('second');
     session.stop();
     await first;
@@ -239,12 +245,12 @@ describe('ChatSession', () => {
   });
 
   it('keeps a synthesis that arrived before a stop', async () => {
-    const { t, session } = setup();
+    const { t, session } = setup(HELD);
     t.holdOpen = true;
     t.responses.push('{"conversationId":"c"}');
     t.streams.push('data: {"type":"synthesis","content":"partial answer"}\n\n');
     const turn = session.send('q');
-    await new Promise((r) => setTimeout(r, 5));
+    await vi.waitFor(() => expect(session.view.turn?.synthesis).toBe('partial answer'));
     session.stop();
     await turn;
     expect(session.view.conversation.messages.map((m) => m.content)).toEqual(['q', 'partial answer']);
@@ -254,7 +260,7 @@ describe('ChatSession', () => {
     const { t, session } = setup();
     t.hangRequests = true;
     const turn = session.send('q');
-    await new Promise((r) => setTimeout(r, 5));
+    await vi.waitFor(() => expect(t.calls.map((c) => c.method)).toEqual(['POST']));
     expect(session.busy).toBe(true);
     session.stop();
     await turn;
@@ -272,12 +278,12 @@ describe('ChatSession', () => {
   });
 
   it('does not replace the conversation while a turn runs', async () => {
-    const { t, session, conversation } = setup();
+    const { t, session, conversation } = setup(HELD);
     t.holdOpen = true;
     t.responses.push('{"conversationId":"c"}');
     t.streams.push('data: {"type":"connected"}\n\n');
     const turn = session.send('q');
-    await new Promise((r) => setTimeout(r, 5));
+    await streamOpen(t);
     session.load(newConversation('other', 'ns', 'crew'));
     expect(session.view.conversation).toBe(conversation);
     session.stop();

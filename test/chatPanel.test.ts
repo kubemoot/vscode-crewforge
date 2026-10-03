@@ -18,12 +18,12 @@ let store: ConversationStore;
 let transport: FakeTransport;
 let connection: Connection;
 
-/** Lets the panel's asynchronous post (it re-reads the saved list) land. */
-const settle = () => new Promise((r) => setTimeout(r, 30));
-
 function lastState(panel: FakePanel): StateMessage {
   return panel.webview.posted.at(-1) as StateMessage;
 }
+
+/** Waits until the turn's event stream is open, so the turn is under way. */
+const streamOpen = () => vi.waitFor(() => expect(transport.calls.some((call) => call.method === 'GET')).toBe(true));
 
 function open(conversation?: Parameters<typeof ChatPanel.show>[4]): FakePanel {
   ChatPanel.show(Uri.file('/ext') as never, connection, crew, store, conversation);
@@ -85,10 +85,9 @@ describe('ChatPanel', () => {
     await store.save(saved);
     const panel = open();
     await panel.webview.receive({ type: 'open', id: saved.id });
-    await settle();
-    expect(lastState(panel).view.conversation.title).toBe('An old question');
+    await vi.waitFor(() => expect(lastState(panel)?.view.conversation.title).toBe('An old question'));
     await panel.webview.receive({ type: 'new' });
-    await settle();
+    await vi.waitFor(() => expect(lastState(panel).view.conversation.id).not.toBe(saved.id));
     expect(lastState(panel).view.conversation.messages).toEqual([]);
   });
 
@@ -142,7 +141,7 @@ describe('ChatPanel', () => {
     transport.responses.push('{"conversationId":"conv-1"}');
     transport.streams.push('data: {"type":"connected"}\n\n');
     const turn = panel.webview.receive({ type: 'send', text: 'first' });
-    await settle();
+    await streamOpen();
     await panel.webview.receive({ type: 'reask', index: 0 });
     await panel.webview.receive({ type: 'stop' });
     await turn;
@@ -163,8 +162,7 @@ describe('ChatPanel', () => {
     const panel = open(c);
     recorded.inputs.push('  GPU inventory  ');
     await panel.webview.receive({ type: 'rename' });
-    await settle();
-    expect(lastState(panel).view.conversation.title).toBe('GPU inventory');
+    await vi.waitFor(() => expect(lastState(panel)?.view.conversation.title).toBe('GPU inventory'));
     expect(lastState(panel).history.map((h) => h.title)).toEqual(['GPU inventory']);
     expect((await store.load(c)).title).toBe('GPU inventory');
 
@@ -215,7 +213,7 @@ describe('ChatPanel', () => {
     transport.responses.push('{"conversationId":"conv-1"}');
     transport.streams.push('data: {"type":"connected"}\n\n');
     const turn = panel.webview.receive({ type: 'send', text: 'first' });
-    await settle();
+    await streamOpen();
     recorded.warningAnswers.push('Delete');
     await panel.webview.receive({ type: 'delete' });
     expect(recorded.info).toEqual(['Stop the turn before deleting the conversation.']);
@@ -235,8 +233,7 @@ describe('ChatPanel', () => {
     const prefills = () => panel.webview.posted.filter((m) => (m as { type: string }).type === 'prefill');
     expect(prefills()).toEqual([{ type: 'prefill', text: 'second' }]);
     chat.prefill('later');
-    await settle();
-    expect(prefills().at(-1)).toEqual({ type: 'prefill', text: 'later' });
+    await vi.waitFor(() => expect(prefills().at(-1)).toEqual({ type: 'prefill', text: 'later' }));
     await panel.webview.receive({ type: 'ready' });
     expect(prefills()).toHaveLength(2);
   });
@@ -246,8 +243,8 @@ describe('ChatPanel', () => {
     const chat = ChatPanel.active!;
     await panel.webview.receive({ type: 'ready' });
     panel.dispose();
+    // A closed panel decides synchronously, before any await, that it posts nothing.
     chat.prefill('too late');
-    await settle();
     expect(panel.webview.posted.some((m) => (m as { type: string }).type === 'prefill')).toBe(false);
   });
 
@@ -296,8 +293,7 @@ describe('ChatPanel links into the workspace and the dashboard', () => {
 
   it('tells the page which agents link to their source, and whether the dashboard is set', async () => {
     const panel = withLinks();
-    await settle();
-    expect(lastState(panel).links).toEqual({ agents: ['lab-ops-coordinator', 'k8s', 'ghost'], dashboard: false });
+    await vi.waitFor(() => expect(lastState(panel)?.links).toEqual({ agents: ['lab-ops-coordinator', 'k8s', 'ghost'], dashboard: false }));
     recorded.settings.set('crewforge.dashboardUrl', 'http://localhost:8080/dashboard/');
     await panel.webview.receive({ type: 'ready' });
     expect(lastState(panel).links.dashboard).toBe(true);
@@ -305,13 +301,12 @@ describe('ChatPanel links into the workspace and the dashboard', () => {
     expect(failing).toBe(panel);
     for (const p of recorded.panels) p.dispose();
     const fresh = withLinks({ agentSources: async () => Promise.reject(new Error('no workspace')) });
-    await settle();
-    expect(lastState(fresh).links.agents).toEqual([]);
+    await vi.waitFor(() => expect(lastState(fresh)?.links.agents).toEqual([]));
   });
 
   it("opens an agent's only definition, or the part the developer picks, at its line", async () => {
     const panel = withLinks();
-    await settle();
+    await vi.waitFor(() => expect(lastState(panel)?.links.agents).toHaveLength(3));
     await panel.webview.receive({ type: 'openAgentSource', agent: 'k8s' });
     expect(recorded.executed.at(-1)).toMatchObject({ id: 'vscode.open', args: [{ fsPath: '/w/lab/templates/agents.yaml' }, { selection: { startLine: 20 } }] });
     let offered: { label: string; description?: string }[] = [];
@@ -358,8 +353,9 @@ describe('ChatPanel links into the workspace and the dashboard', () => {
     transport.holdOpen = true;
     transport.responses.push('{"conversationId":"conv-1"}');
     transport.streams.push('data: {"type":"connected"}\n\n');
+    const streamsBefore = transport.calls.filter((call) => call.method === 'GET').length;
     const turn = ChatPanel.find('ctx', crew)!.reaskLast();
-    await settle();
+    await vi.waitFor(() => expect(transport.calls.filter((call) => call.method === 'GET')).toHaveLength(streamsBefore + 1));
     expect(await ChatPanel.find('ctx', crew)!.reaskLast()).toBe(false);
     await panel.webview.receive({ type: 'stop' });
     await turn;

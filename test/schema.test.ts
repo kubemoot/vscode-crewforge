@@ -110,7 +110,6 @@ describe('SchemaProvider', () => {
     const other: KubeTransport = { ...client };
     const offline = new SchemaProvider(() => other);
     expect(await offline.schemaText()).toBe('{}');
-    await new Promise((r) => setTimeout(r, 0));
     fail = false;
     expect(JSON.parse(await offline.schemaText()).title).toBe('Kubemoot resources');
     expect(await new SchemaProvider(() => undefined).schemaText()).toBe('{}');

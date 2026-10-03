@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { followRolloutCommand } from '../src/gitops/commands';
 import { fluxSummary, helmReleaseRef, readHelmRelease, rolloutState, toFluxState, type FluxState } from '../src/gitops/flux';
 import { followRollout, sleep } from '../src/gitops/follow';
@@ -97,13 +97,23 @@ describe('followRollout', () => {
   });
 
   it('sleeps, and wakes early when stopped', async () => {
-    const started = Date.now();
-    await sleep(5, new AbortController().signal);
-    const stop = new AbortController();
-    const waiting = sleep(60_000, stop.signal);
-    stop.abort();
-    await waiting;
-    expect(Date.now() - started).toBeLessThan(5_000);
+    vi.useFakeTimers();
+    try {
+      let slept = false;
+      const short = sleep(5, new AbortController().signal).then(() => (slept = true));
+      await vi.advanceTimersByTimeAsync(4);
+      expect(slept).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      await short;
+      expect(slept).toBe(true);
+      const stop = new AbortController();
+      const waiting = sleep(60_000, stop.signal);
+      stop.abort();
+      await waiting;
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
@@ -186,7 +196,8 @@ describe('GitOps in the tree and the Follow command', () => {
     const client = clusterWith([hr('0.1.0')]);
     const connect = () => ({ source: '/k', context: 'lab', client: client as unknown as KubeClient });
     const following = followRolloutCommand({ kind: 'deployment', entry, deployment }, () => undefined, connect, 5);
-    await new Promise((r) => setTimeout(r, 20));
+    // The progress notification offers Cancel once the follow is under way.
+    await vi.waitFor(() => expect(recorded.cancel).toBeDefined());
     recorded.cancel?.();
     await following;
     expect(recorded.info[0]).toBe('demo in ns: stopped following.');
