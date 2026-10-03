@@ -1,0 +1,46 @@
+name: Feature request
+description: Something you want CrewForge to do.
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: "This repository covers the CrewForge VS Code extension. Ideas for the operator, kmctl, or crews belong in [another repository, found through the issue chooser](https://github.com/kubemoot/vscode-crewforge/issues/new/choose)."
+  - type: checkboxes
+    id: searched
+    attributes:
+      label: Before you file
+      options:
+        - label: I searched existing issues and discussions and did not find this one
+          required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: Describe the situation you are in, not only the feature you have in mind.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you would like to see
+      description: "A rough shape is fine; a sketch of the view or command helps."
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Anything else you tried, or why no workaround exists.
+    validations:
+      required: false
+  - type: dropdown
+    id: contribute
+    attributes:
+      label: "Would you be open to contributing this?"
+      options:
+        - "Yes"
+        - Maybe
+        - "No"
+    validations:
+      required: false
