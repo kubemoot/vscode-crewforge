@@ -49,8 +49,8 @@ jobs:
           token: ${{ secrets.RELEASE_TOKEN || github.token }}
           fetch-depth: 0
 
-      - name: Test the release helpers
-        run: bash .github/scripts/test-release-lib.sh
+      - name: Set up the release helpers
+        uses: kubemoot/release-actions/setup@cee9e2e1fd27c0cc9196578af77dd7b07a585e4f # v0.1.0
 
       # Plans the promotion without tagging, so a failed build leaves no final tag.
       - name: Plan the final version
@@ -60,7 +60,8 @@ jobs:
           DRY_RUN: 'true'
           OUT_DIR: ${{ runner.temp }}/promotion
         run: |
-          source .github/scripts/release-lib.sh
+          # shellcheck source=/dev/null
+          source "${RELEASE_LIB}"
           rl_promote_single v CrewForge "${OUT_DIR}" >> "$GITHUB_OUTPUT"
           cat "${OUT_DIR}/notes.md" >> "$GITHUB_STEP_SUMMARY"
 
@@ -96,7 +97,8 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          source .github/scripts/release-lib.sh
+          # shellcheck source=/dev/null
+          source "${RELEASE_LIB}"
           rl_promote_single v CrewForge "${OUT_DIR}"
 
       - name: Keep the promotion output
