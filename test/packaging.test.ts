@@ -33,7 +33,7 @@ describe('the packaged extension', () => {
     for (const file of ['src/dashboard/pagePanel.ts', 'src/panels/chatPanel.ts', 'src/panels/tabIcon.ts']) {
       for (const m of read(file).matchAll(/'(dist|media)', '([^']+)'/g)) named.add(`${m[1]}/${m[2]}`);
     }
-    expect(named.size).toBeGreaterThanOrEqual(6);
+    expect(named.size).toBeGreaterThanOrEqual(5);
     for (const file of named) {
       expect(fs.existsSync(path.join(repo, file)) || file.startsWith('dist/'), file).toBe(true);
       expect(shipped(file), file).toBe(true);
@@ -43,6 +43,8 @@ describe('the packaged extension', () => {
   it('reads an ignore file the way vsce does: later lines win', () => {
     expect(shipped('src/extension.ts')).toBe(false);
     expect(shipped('test/fakes.ts')).toBe(false);
-    expect(shipped('media/logo-dark.svg')).toBe(true);
+    expect(shipped('media/kubemoot-favicon-small.svg')).toBe(true);
+    expect(shipped('brand.lock')).toBe(false);
+    expect(shipped('scripts/brand-sync.sh')).toBe(false);
   });
 });

@@ -5,6 +5,10 @@ generated from the conventional commits since the previous release.
 
 ## Unreleased
 
+- The extension's icons are the Kubemoot brand mark: the full-color icon in the
+  Marketplace, the one-color icon in the activity bar, and the small full-color mark on
+  CrewForge's tabs, one file for light and dark themes.
+
 ## 0.14.0
 
 ### Display names
