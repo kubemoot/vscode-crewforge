@@ -18,13 +18,8 @@ reach works, no crew needs a public address, and no extra credential is involved
 
 ## Install
 
-1. Download `crewforge-<version>.vsix` from the repository's
-   [GitHub Releases](https://github.com/kubemoot/vscode-crewforge/releases).
-2. Install it: run **Extensions: Install from VSIX...** from the Command Palette, or
-   `code --install-extension crewforge-<version>.vsix`. In a WSL or other remote window,
-   install into the remote.
-
-Listings in the Visual Studio Marketplace and Open VSX are coming.
+Install CrewForge from the VS Code Marketplace. For other editors (Open VSX) and the
+offline `.vsix`, see [Install and connect](https://kubemoot.org/docs/ecosystem/crewforge/install-and-connect/).
 
 You need VS Code 1.95 or later and a kubeconfig with access to a cluster that runs the
 Kubemoot operator. Developing a crew also needs `helm` (deploy and lint), `kubectl`
