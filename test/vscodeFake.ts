@@ -186,6 +186,12 @@ export const recorded = {
   documentProviders: new Map<string, { provideTextDocumentContent(uri: Uri): string }>(),
   /** Answers for information messages with actions, in order; undefined dismisses. */
   infoAnswers: [] as (string | undefined)[],
+  /**
+   * The reply each information message gave, in order. Awaiting one resumes after the
+   * handler the code under test attached to it first, so the synchronous part of acting
+   * on the answer has run; take it by its index, captured before the message is shown.
+   */
+  infoReplies: [] as Promise<string | undefined>[],
   /** The value each input box offered, in order. */
   inputOffers: [] as (string | undefined)[],
   /** Context keys set with setContext, by name. */
@@ -244,6 +250,7 @@ export function resetFake(): void {
   recorded.cancel = undefined;
   recorded.activeEditor = undefined;
   recorded.infoAnswers = [];
+  recorded.infoReplies = [];
   recorded.contexts = new Map();
   recorded.inputOffers = [];
   recorded.errorAnswers = [];
@@ -391,7 +398,9 @@ export const window = {
   },
   showInformationMessage(message: string, ...actions: unknown[]) {
     recorded.info.push(message);
-    return Promise.resolve(actions.length && typeof actions[0] === 'string' ? recorded.infoAnswers.shift() : undefined);
+    const reply = Promise.resolve(actions.length && typeof actions[0] === 'string' ? recorded.infoAnswers.shift() : undefined);
+    recorded.infoReplies.push(reply);
+    return reply;
   },
   showErrorMessage(message: string, options?: { modal?: boolean } | string) {
     recorded.errors.push(message);

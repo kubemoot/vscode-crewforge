@@ -274,8 +274,7 @@ describe('the fitness dashboard', () => {
     expect(recorded.executed.at(-1)).toMatchObject({ id: 'crewforge.runFitness', args: [{ kind: 'deployment', entry }] });
     dashboards.openFitness({ kind: 'run', entry, deployment, run: { kind: 'CrewFitnessSuite', name: 's-new', namespace: NS, crew: 'demo', phase: 'Running', createdAt: '', assertions: [] } });
     expect(recorded.panels).toHaveLength(1);
-    await new Promise((r) => setTimeout(r, 20));
-    expect((panel.webview.posted.at(-1) as { html: string }).html).toContain('Run s-new');
+    await vi.waitFor(() => expect((panel.webview.posted.at(-1) as { html: string }).html).toContain('Run s-new'));
   });
 
   it('opens for a live crew without a source, and says why it cannot run or read', async () => {

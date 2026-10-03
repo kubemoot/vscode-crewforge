@@ -1,7 +1,7 @@
 import * as http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { KubeConfig } from '@kubernetes/client-node';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { getEventListeners } from 'node:events';
 import { ConnectionError, CredentialsError, describeFailure, KubeClient, KubeError, retryDelayMs, statusMessage } from '../src/k8s/request';
 
@@ -25,6 +25,9 @@ beforeAll(async () => {
 afterAll(() => new Promise<void>((r) => server.close(() => r())));
 
 let busyLeft = 0;
+
+/** Waits until the test server has received a request for `url` since the `before`th one. */
+const received = (url: string, before: number) => vi.waitFor(() => expect(seen.slice(before).map((s) => s.url)).toContain(url));
 
 function route(url: string, res: http.ServerResponse): void {
   if (url.endsWith('/busy')) {
@@ -110,17 +113,28 @@ describe('KubeClient', () => {
 
   it('stops a request in flight when its signal aborts', async () => {
     const abort = new AbortController();
-    setTimeout(() => abort.abort(), 20);
+    const before = seen.length;
     const started = Date.now();
-    await expect(client().request('POST', '/api/slow', {}, abort.signal)).rejects.toMatchObject({ name: 'AbortError' });
+    const asking = client().request('POST', '/api/slow', {}, abort.signal);
+    await received('/api/slow', before);
+    abort.abort();
+    await expect(asking).rejects.toMatchObject({ name: 'AbortError' });
     expect(Date.now() - started).toBeLessThan(1_000);
   });
 
   it('stops while waiting to retry', async () => {
     const abort = new AbortController();
-    setTimeout(() => abort.abort(), 50);
     const started = Date.now();
-    await expect(client().request('GET', '/apis/wait-long', undefined, abort.signal)).rejects.toMatchObject({ name: 'AbortError' });
+    // The client's wait before the retry is the 10 s timer the server's Retry-After asks for.
+    const timers = vi.spyOn(globalThis, 'setTimeout');
+    try {
+      const asking = client().request('GET', '/apis/wait-long', undefined, abort.signal);
+      await vi.waitFor(() => expect(timers.mock.calls.some(([, ms]) => ms === 10_000)).toBe(true));
+      abort.abort();
+      await expect(asking).rejects.toMatchObject({ name: 'AbortError' });
+    } finally {
+      timers.mockRestore();
+    }
     expect(Date.now() - started).toBeLessThan(2_000);
   });
 
@@ -198,8 +212,15 @@ describe('KubeClient', () => {
   it('lets a stream stay quiet longer than a request may', async () => {
     const abort = new AbortController();
     const chunks: string[] = [];
-    const done = client(base, 30).stream('/api/forever', (c) => chunks.push(c), abort.signal);
-    setTimeout(() => abort.abort(), 120);
+    const quiet = client(base, 30);
+    let settled = false;
+    const done = quiet.stream('/api/forever', (c) => chunks.push(c), abort.signal).finally(() => (settled = true));
+    await vi.waitFor(() => expect(chunks).toHaveLength(1));
+    // A request to the same quiet server, started after the stream went quiet, times out;
+    // the stream has been quiet longer and is still open.
+    await expect(quiet.request('GET', '/api/forever')).rejects.toMatchObject({ name: 'ConnectionError', detail: expect.stringMatching(/no response in 0.03 s/) });
+    expect(settled).toBe(false);
+    abort.abort();
     await expect(done).resolves.toBeUndefined();
     expect(chunks).toHaveLength(1);
   });

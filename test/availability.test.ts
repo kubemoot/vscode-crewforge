@@ -91,8 +91,9 @@ describe('ChatPanel availability', () => {
   let connection: Connection;
   let store: ConversationStore;
   let answers: (CrewAvailability | Error)[];
-  const settle = () => new Promise((r) => setTimeout(r, 30));
   const states = () => recorded.panels[0].webview.posted as StateMessage[];
+  /** Waits until the panel has posted the availability its first read found. */
+  const firstReadPosted = () => vi.waitFor(() => expect(states().at(-1)?.availability).toEqual({ state: 'ready' }));
 
   beforeEach(() => {
     resetFake();
@@ -118,13 +119,11 @@ describe('ChatPanel availability', () => {
   it('posts the availability it reads on open, and a failed read as unreachable', async () => {
     answers.push({ state: 'not-ready', reason: 'The crew is not ready: phase Pending' });
     ChatPanel.show(Uri.file('/ext') as never, connection, crew(), store, undefined, links);
-    await settle();
-    expect(states().at(-1)?.availability).toEqual({ state: 'not-ready', reason: 'The crew is not ready: phase Pending' });
+    await vi.waitFor(() => expect(states().at(-1)?.availability).toEqual({ state: 'not-ready', reason: 'The crew is not ready: phase Pending' }));
     recorded.panels[0].dispose();
     answers.push(new Error('boom'));
     ChatPanel.show(Uri.file('/ext') as never, connection, crew(), store, undefined, links);
-    await settle();
-    expect(recorded.panels[1].webview.posted.at(-1)).toMatchObject({ availability: { state: 'unreachable', reason: 'Cannot reach the cluster: boom' } });
+    await vi.waitFor(() => expect(recorded.panels[1].webview.posted.at(-1)).toMatchObject({ availability: { state: 'unreachable', reason: 'Cannot reach the cluster: boom' } }));
   });
 
   it('reads it again while visible, not while hidden, and stops when closed', async () => {
@@ -150,7 +149,8 @@ describe('ChatPanel availability', () => {
     recorded.panels[0].setVisible(true);
     expect(slow.availability).toHaveBeenCalledTimes(1);
     finish({ state: 'ready' });
-    await settle();
+    // The read ends before it posts what it found, so the post shows it is done.
+    await firstReadPosted();
     recorded.panels[0].setVisible(true);
     expect(slow.availability).toHaveBeenCalledTimes(2);
   });
@@ -158,41 +158,41 @@ describe('ChatPanel availability', () => {
   it('posts the end of a turn at once, without waiting for the availability read it starts', async () => {
     const hang = { agentSources: async () => new Map(), availability: vi.fn(async (): Promise<CrewAvailability> => ({ state: 'ready' })) };
     ChatPanel.show(Uri.file('/ext') as never, connection, crew(), store, undefined, hang);
-    await settle();
+    await firstReadPosted();
     hang.availability.mockImplementation(() => new Promise<CrewAvailability>(() => undefined));
     transport.responses.push('{"conversationId":"conv-1"}');
     transport.streams.push(fixture('turn1.sse'));
     await recorded.panels[0].webview.receive({ type: 'send', text: 'Hi?' });
-    await settle();
-    expect(hang.availability).toHaveBeenCalledTimes(2);
-    expect(states().at(-1)).toMatchObject({ view: { busy: false }, availability: { state: 'ready' } });
+    // The read the turn's end starts never finishes, so this post proves the panel did not wait for it.
+    await vi.waitFor(() => {
+      expect(hang.availability).toHaveBeenCalledTimes(2);
+      expect(states().at(-1)).toMatchObject({ view: { busy: false }, availability: { state: 'ready' } });
+    });
   });
 
   it('names the question of the turn running now, and none when idle or closed', async () => {
     expect(ChatPanel.activeTurn('ctx', crew())).toBeUndefined();
     ChatPanel.show(Uri.file('/ext') as never, connection, crew(), store, undefined, links);
-    await settle();
+    await firstReadPosted();
     expect(ChatPanel.activeTurn('ctx', crew())).toBeUndefined();
     transport.responses.push('{"conversationId":"conv-1"}');
     transport.holdOpen = true;
     transport.streams.push(fixture('turn1.sse').split('data: {"type":"done"}')[0]);
     void recorded.panels[0].webview.receive({ type: 'send', text: 'Which nodes?' });
-    await settle();
-    expect(ChatPanel.activeTurn('ctx', crew())).toBe('Which nodes?');
+    await vi.waitFor(() => expect(ChatPanel.activeTurn('ctx', crew())).toBe('Which nodes?'));
     recorded.panels[0].dispose();
     expect(ChatPanel.activeTurn('ctx', crew())).toBeUndefined();
   });
 
   it('reads it again when a turn ends', async () => {
     ChatPanel.show(Uri.file('/ext') as never, connection, crew(), store, undefined, links);
-    await settle();
+    await firstReadPosted();
     links.availability.mockClear();
     answers.push({ state: 'error', reason: 'The crew is in an error state: Agent a is Failed' });
     transport.responses.push('{"conversationId":"conv-1"}');
     transport.streams.push(fixture('turn1.sse'));
     await recorded.panels[0].webview.receive({ type: 'send', text: 'Hi?' });
-    await settle();
+    await vi.waitFor(() => expect(states().at(-1)).toMatchObject({ view: { busy: false }, availability: { state: 'error' } }));
     expect(links.availability).toHaveBeenCalledTimes(1);
-    expect(states().at(-1)).toMatchObject({ view: { busy: false }, availability: { state: 'error' } });
   });
 });

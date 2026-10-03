@@ -152,11 +152,19 @@ describe('streamTurn', () => {
     const t = new FakeTransport();
     for (let i = 0; i < 100; i++) t.streams.push(new KubeError('no endpoints', 503));
     const stop = new AbortController();
-    setTimeout(() => stop.abort(), 20);
-    expect(await streamTurn(t, 'ns', 'crew', turn(), () => {}, stop.signal, { ...FAST, reconnectMs: 5 })).toEqual({ kind: 'aborted' });
-    const calls = t.calls.length;
-    await new Promise((r) => setTimeout(r, 30));
-    expect(t.calls).toHaveLength(calls);
+    vi.useFakeTimers();
+    try {
+      const ending = streamTurn(t, 'ns', 'crew', turn(), () => {}, stop.signal, { ...FAST, reconnectMs: 5 });
+      await vi.advanceTimersByTimeAsync(20);
+      expect(t.calls.length).toBeGreaterThan(1);
+      stop.abort();
+      expect(await ending).toEqual({ kind: 'aborted' });
+      const calls = t.calls.length;
+      await vi.advanceTimersByTimeAsync(FAST.maxMs * 2);
+      expect(t.calls).toHaveLength(calls);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('times out when no event arrives at all', async () => {
@@ -184,8 +192,10 @@ describe('streamTurn', () => {
     t.holdOpen = true;
     t.streams.push('data: {"type":"connected"}\n\n');
     const during = new AbortController();
-    setTimeout(() => during.abort(), 10);
-    expect(await streamTurn(t, 'ns', 'crew', turn(), () => {}, during.signal, FAST)).toEqual({ kind: 'aborted' });
+    const abortOnceConnected = (e: DiscussionEvent) => {
+      if (e.type === 'connected') during.abort();
+    };
+    expect(await streamTurn(t, 'ns', 'crew', turn(), abortOnceConnected, during.signal, FAST)).toEqual({ kind: 'aborted' });
   });
 });
 

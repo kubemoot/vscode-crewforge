@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createCrewCommand, CREW_SIZES, DEPLOY_NEXT, showCreatedCrew } from '../src/create/createCrew';
 import type { SourceNode } from '../src/views/sourceTree';
 import { atLeast, compareVersions, createArgs, KMCTL_MIN_BUILD, KMCTL_MIN_VERSION, kmctlProblem, parseVersion, scaffoldCrew } from '../src/create/scaffold';
@@ -312,13 +312,15 @@ describe('showCreatedCrew', () => {
     expect(recorded.shownDocuments).toEqual(['/w/demo/README.md', '/w/demo/templates/crew.yaml']);
     expect(recorded.shownOptions[1]).toEqual({ viewColumn: -2, preview: false });
     expect(recorded.info[0]).toContain('Next: deploy it to a namespace');
-    await new Promise((r) => setTimeout(r, 0));
-    expect(recorded.executed).toEqual([{ id: 'crewforge.deployToNamespace', args: [nodes[2]] }]);
+    await vi.waitFor(() => expect(recorded.executed).toEqual([{ id: 'crewforge.deployToNamespace', args: [nodes[2]] }]));
   });
 
   it('does nothing more when the offer is dismissed, and says when the crew is outside the workspace', async () => {
+    const offer = recorded.infoReplies.length;
     await showCreatedCrew('/w/demo', deps());
-    await new Promise((r) => setTimeout(r, 0));
+    expect(recorded.info[offer]).toContain('Next: deploy it to a namespace');
+    // Dismissing the offer is acted on once its reply is handled; nothing runs.
+    await recorded.infoReplies[offer];
     expect(recorded.executed).toEqual([]);
     await showCreatedCrew('/tmp/lost', deps());
     expect(revealed).toHaveLength(1);

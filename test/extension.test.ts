@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { activate, Commands, deactivate, type CrewForgeApi } from '../src/extension';
 import { PagePanel } from '../src/dashboard/pagePanel';
 import { newConversation } from '../src/store/conversation';
@@ -120,8 +120,9 @@ describe('commands', () => {
     const panel = recorded.panels[0];
     expect(panel.title).toMatch(/^Ask /);
     await panel.webview.receive({ type: 'ready' });
-    await new Promise((r) => setTimeout(r, 30));
-    expect(panel.webview.posted.find((m) => (m as { type: string }).type === 'prefill')).toEqual({ type: 'prefill', text: 'From src/app.ts:\n\n```typescript\nconst a = 1;\n```\n\n' });
+    await vi.waitFor(() =>
+      expect(panel.webview.posted.find((m) => (m as { type: string }).type === 'prefill')).toEqual({ type: 'prefill', text: 'From src/app.ts:\n\n```typescript\nconst a = 1;\n```\n\n' }),
+    );
   });
 
   it('askAboutSelection needs a selection, and does nothing when no crew is picked', async () => {
@@ -315,12 +316,10 @@ describe('the inner loop in the extension', () => {
     const provider = recorded.treeViews[1].options.treeDataProvider as { getChildren: () => Promise<{ kind: string; entry: unknown }[]> };
     return (await provider.getChildren())[0];
   };
-  const tick = () => new Promise((r) => setTimeout(r, 30));
 
   it('marks the crew folders for the Explorer menu, and View in CrewForge selects the Crew and opens the dashboard', async () => {
     await loadBundle();
-    await tick();
-    expect(recorded.contexts.get('crewforge.crewRoots')).toMatchObject({ [BUNDLE]: true });
+    await vi.waitFor(() => expect(recorded.contexts.get('crewforge.crewRoots')).toMatchObject({ [BUNDLE]: true }));
     await run('crewforge.viewInCrewForge', Uri.file(path.join(BUNDLE, '02-crew.yaml')));
     expect(recorded.revealed.at(-1)).toMatchObject({ view: 'crewforge.sources', node: { kind: 'declared', item: { label: 'demo' } }, options: { select: true, expand: false } });
     expect(recorded.panels.map((p) => p.title)).toEqual(['demo']);
@@ -342,18 +341,17 @@ describe('the inner loop in the extension', () => {
     await loadBundle();
     const source = await loadBundle();
     const provider = recorded.treeViews[1].options.treeDataProvider as { getTreeItem: (n: unknown) => { description?: string; contextValue?: string } };
-    await tick();
     // Every source's state is read when the sources load, before any of its files is open.
-    expect(provider.getTreeItem(source)).toMatchObject({ description: 'not deployed · bundle in crew' });
+    await vi.waitFor(() => expect(provider.getTreeItem(source)).toMatchObject({ description: 'not deployed · bundle in crew' }));
     recorded.editorListeners.forEach((l) => l({ document: { uri: Uri.file(path.join(BUNDLE, '02-crew.yaml')) } }));
     expect(recorded.statusBarItems[0]).toMatchObject({ visible: true, text: expect.stringContaining('demo: ') });
-    await tick();
-    expect(recorded.statusBarItems[0].text).toBe('$(organization) demo: not deployed');
+    await vi.waitFor(() => expect(recorded.statusBarItems[0].text).toBe('$(organization) demo: not deployed'));
     expect(provider.getTreeItem(source)).toMatchObject({ description: 'not deployed · bundle in crew', contextValue: 'source-bundle' });
     recorded.editorListeners.forEach((l) => l(undefined));
     expect(recorded.statusBarItems[0].visible).toBe(false);
-    recorded.saveListeners.forEach((l) => l({ uri: Uri.file('/nowhere/x.yaml') }));
-    await tick();
+    // The save listener is wired; what a save does is covered in loop.test.ts.
+    expect(recorded.saveListeners).toHaveLength(1);
+    expect(() => recorded.saveListeners.forEach((l) => l({ uri: Uri.file('/nowhere/x.yaml') }))).not.toThrow();
   });
 
   it('lints a bundle source from its node, without helm', async () => {
@@ -390,9 +388,8 @@ describe('the inner loop in the extension', () => {
   it('links a chat to the agents of the crew source open in the workspace', async () => {
     await loadBundle();
     await run('crewforge.askCrew', { kind: 'crew', crew: { name: 'demo', namespace: 'somewhere', ready: true, phase: 'Ready' } });
-    await tick();
-    const states = recorded.panels[0].webview.posted as { type: string; links?: { agents: string[] } }[];
-    expect(states.at(-1)?.links?.agents).toEqual([]);
+    const states = () => recorded.panels[0].webview.posted as { type: string; links?: { agents: string[] } }[];
+    await vi.waitFor(() => expect(states().at(-1)?.links?.agents).toEqual([]));
   });
 });
 
