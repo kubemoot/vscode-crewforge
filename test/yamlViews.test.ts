@@ -93,6 +93,9 @@ describe('readChart', () => {
     expect(await readChart('/w/demo', text)).toEqual({ name: 'demo', version: '0.2.2', appVersion: '1.10', description: 'A crew' });
     expect(await readChart('/w/demo', async () => 'name: [1]\n')).toEqual({ name: undefined, version: undefined, appVersion: undefined, description: undefined });
     expect(await readChart('/w/demo', async () => '')).toEqual({ name: undefined, version: undefined, appVersion: undefined, description: undefined });
+    expect(await readChart('/w/demo', async () => '# no fields yet\n')).toEqual({ name: undefined, version: undefined, appVersion: undefined, description: undefined });
+    expect(await readChart('/w/demo', async () => 'name: a\n---\nname: b\n')).toBeUndefined();
+    expect(await readChart('/w/demo', async () => 'name: [unclosed\n')).toBeUndefined();
     expect(await readChart('/w/demo', async () => Promise.reject(new Error('ENOENT')))).toBeUndefined();
   });
 });
