@@ -1,5 +1,5 @@
 import * as path from 'node:path';
-import { FAILSAFE_SCHEMA, load } from 'js-yaml';
+import { FAILSAFE_SCHEMA, loadAll } from 'js-yaml';
 import type { CrewSummary } from '../k8s/crews';
 import type { KubeTransport } from '../k8s/request';
 import { deploymentsOf, type Deployment } from './deployments';
@@ -53,7 +53,10 @@ export interface ChartInfo {
 export async function readChart(root: string, readText: ReadText): Promise<ChartInfo | undefined> {
   try {
     // Every scalar as written: a version like 1.10 must not become the number 1.1.
-    const doc = load(await readText(path.join(root, 'Chart.yaml')), { schema: FAILSAFE_SCHEMA }) as Record<string, unknown> | null;
+    // An empty or comment-only file reads as a chart with no fields; a Chart.yaml with several documents is malformed.
+    const docs = loadAll(await readText(path.join(root, 'Chart.yaml')), { schema: FAILSAFE_SCHEMA });
+    if (docs.length > 1) return undefined;
+    const doc = docs[0] as Record<string, unknown> | null | undefined;
     const text = (key: string) => (typeof doc?.[key] === 'string' ? doc[key] : undefined);
     return { name: text('name'), version: text('version'), appVersion: text('appVersion'), description: text('description') };
   } catch {

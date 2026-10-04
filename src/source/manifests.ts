@@ -1,4 +1,7 @@
-import { dump, loadAll } from 'js-yaml';
+import { CORE_SCHEMA, dump, loadAll, mergeTag } from 'js-yaml';
+
+/** YAML 1.2 plus merge keys (<<), which kubectl and Helm resolve in manifests. */
+const MANIFEST_SCHEMA = CORE_SCHEMA.withTags(mergeTag);
 
 /** YAML as CrewForge shows objects in an editor: long lines kept, no anchors. */
 export function dumpYaml(value: unknown): string {
@@ -23,7 +26,7 @@ export const KUBEMOOT_GROUP = 'kubemoot.ai';
 
 /** Parses a multi-document YAML text into the objects that have a kind and a name; skips empty documents. */
 export function parseManifests(text: string): Manifest[] {
-  return loadAll(text).filter(isManifest);
+  return loadAll(text, { schema: MANIFEST_SCHEMA }).filter(isManifest);
 }
 
 function isManifest(doc: unknown): doc is Manifest {
