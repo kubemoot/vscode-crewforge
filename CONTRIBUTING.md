@@ -40,6 +40,34 @@ resulting PNG files into the `kubemoot-docs` repository, in
 `content/en/docs/ecosystem/crewforge/`. The README's `docs/screenshots/views.png` is a copy
 of the `views.png` the script produces.
 
+## Signed releases
+
+Every GitHub Release carries, next to `crewforge-<version>.vsix`:
+
+- `crewforge-<version>.vsix.sigstore.json`, a keyless Sigstore signature: the **sign**
+  job of Promote Release signs with a short-lived certificate Sigstore issues to the
+  workflow's GitHub OIDC identity, so no signing key is stored anywhere, and the
+  signature is recorded in Sigstore's public transparency log.
+- `crewforge-<version>.intoto.jsonl`, the SLSA build provenance from `actions/attest`
+  (also listed under the repository's attestations), naming the workflow run and commit
+  that built the `.vsix`.
+
+The release job creates the release with all three files in one call, since GitHub's
+immutable releases lock the assets once a release is published, and the publish job
+sends the registries that same `.vsix`. A dry run signs and verifies its `.vsix` too;
+only a real promotion attests. To verify a download from the GitHub Release with
+[cosign](https://docs.sigstore.dev/cosign/system_config/installation/) or the GitHub CLI:
+
+```bash
+cosign verify-blob crewforge-<version>.vsix \
+  --bundle crewforge-<version>.vsix.sigstore.json \
+  --certificate-identity https://github.com/kubemoot/vscode-crewforge/.github/workflows/promote-release.yaml@refs/heads/main \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+
+gh attestation verify crewforge-<version>.vsix --repo kubemoot/vscode-crewforge \
+  --signer-workflow kubemoot/vscode-crewforge/.github/workflows/promote-release.yaml
+```
+
 ## Publishing to the VS Code Marketplace and Open VSX
 
 This section is for maintainers. **Promote Release** publishes to both registries only

@@ -187,3 +187,87 @@ describe('publishing to the registries in Promote Release', () => {
     expect(read('.github/workflows/release.yaml')).toContain('npm run package -- --githubBranch "${GITHUB_SHA}"');
   });
 });
+
+describe('signing the release in Promote Release', () => {
+  const workflow = load(read('.github/workflows/promote-release.yaml')) as Workflow & { permissions?: Record<string, string> };
+  const { promote, sign, release } = workflow.jobs;
+  const step = (job: Job, name: string) => {
+    const index = job.steps.findIndex((s) => s.name === name);
+    expect(index, name).toBeGreaterThanOrEqual(0);
+    return { index, step: job.steps[index] };
+  };
+  const create = () => step(release, 'Create the GitHub Release with the .vsix');
+
+  it('signs before the GitHub Release exists, so every asset is attached before it is published', () => {
+    expect([sign.needs].flat()).toEqual(['promote']);
+    expect(release.needs).toEqual(expect.arrayContaining(['promote', 'sign']));
+    expect(release.steps.map((s) => s.run ?? '').join('\n')).not.toContain('gh release upload');
+    expect(create().step.run).toContain('gh release create');
+  });
+
+  it('attaches the .vsix, its Sigstore bundle, and the provenance in the one create call', () => {
+    const run = create().step.run ?? '';
+    const createCall = run.slice(run.indexOf('gh release create'));
+    const files = [...createCall.matchAll(/"(promotion\/crewforge-[^"]+)"/g)].map((m) => m[1]);
+    expect(files).toEqual([
+      'promotion/crewforge-${tag#v}.vsix',
+      'promotion/crewforge-${tag#v}.vsix.sigstore.json',
+      'promotion/crewforge-${tag#v}.intoto.jsonl',
+    ]);
+    expect(run).toContain('--verify-tag');
+  });
+
+  it('hands the signatures to the release job under one artifact name, with the names it attaches', () => {
+    const upload = step(sign, 'Keep the signatures').step;
+    const download = step(release, 'Download the signatures').step;
+    expect(download.with?.name).toBe(upload.with?.name);
+    expect(upload.with?.path).toBe('signatures/');
+    expect(download.with?.path).toBe('promotion');
+    const signed = step(sign, 'Sign the .vsix with Sigstore').step.run ?? '';
+    expect(signed).toContain('bundle="signatures/$(basename "${vsix}").sigstore.json"');
+    const named = step(sign, 'Name the provenance for the release').step.run ?? '';
+    expect(named.replace('signatures/', 'promotion/').replace('FINAL_TAG', 'tag')).toContain('promotion/crewforge-${tag#v}.intoto.jsonl');
+  });
+
+  it('signs keylessly with cosign under this workflow identity and verifies the signature', () => {
+    const signing = step(sign, 'Sign the .vsix with Sigstore').step;
+    expect(signing.env?.IDENTITY).toBe('https://github.com/${{ github.workflow_ref }}');
+    expect(signing.run).toContain('cosign sign-blob --yes --bundle "${bundle}" "${vsix}"');
+    expect(signing.run).toContain('cosign verify-blob "${vsix}" --bundle "${bundle}"');
+    expect(signing.run).toContain('--certificate-oidc-issuer https://token.actions.githubusercontent.com');
+    expect(signing.run).not.toMatch(/--key\b|COSIGN_PRIVATE_KEY|COSIGN_PASSWORD/);
+    expect(JSON.stringify(sign)).not.toContain('secrets.');
+    expect(step(sign, 'Install cosign').index).toBeLessThan(step(sign, 'Sign the .vsix with Sigstore').index);
+  });
+
+  it('attests provenance only for a real promotion and names it *.intoto.jsonl for the release', () => {
+    const attest = step(sign, 'Attest the build provenance');
+    expect(attest.step.if).toContain('!inputs.dry_run');
+    expect(attest.step.uses).toMatch(/^actions\/attest@[0-9a-f]{40}$/);
+    expect(attest.step.with?.['subject-path']).toBe('promotion/crewforge-*.vsix');
+    const name = step(sign, 'Name the provenance for the release');
+    expect(name.index).toBeGreaterThan(attest.index);
+    expect(name.step.run).toContain('signatures/crewforge-${FINAL_TAG#v}.intoto.jsonl');
+  });
+
+  it('verifies the .vsix against its provenance before creating the release', () => {
+    const verify = step(release, 'Verify the .vsix against its provenance');
+    expect(verify.index).toBeLessThan(create().index);
+    expect(verify.step.run).toContain('gh attestation verify');
+    expect(verify.step.run).toContain('--signer-workflow "${GITHUB_REPOSITORY}/.github/workflows/promote-release.yaml"');
+  });
+
+  it('grants id-token only to the signing job and the registry publish job', () => {
+    expect(workflow.permissions).toEqual({ contents: 'read' });
+    expect(sign.permissions).toEqual({ contents: 'read', 'id-token': 'write', attestations: 'write' });
+    const holders = Object.entries(workflow.jobs).filter(([, job]) => job.permissions?.['id-token']).map(([name]) => name);
+    expect(holders.sort()).toEqual(['publish', 'sign']);
+    expect(promote.permissions?.attestations).toBeUndefined();
+    expect(release.permissions).toEqual({ contents: 'write' });
+  });
+
+  it('runs on a dry run too, so a signing problem shows before anything is tagged', () => {
+    expect(sign.if).toBeUndefined();
+    expect(release.if).toContain('!inputs.dry_run');
+  });
+});

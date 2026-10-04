@@ -113,8 +113,9 @@ version when they package. Every push to `main` tags a release candidate
 `vX.Y.Z-rc.N` (the conventional commits since the last release decide `X.Y.Z`) and
 packages its `.vsix` as a workflow artifact, publishing nothing. A maintainer promotes a
 tested candidate with the **Promote Release** workflow, which tags `vX.Y.Z` and writes
-the GitHub Release with the `.vsix` attached, and, only when asked, publishes the same
-`.vsix` to the VS Code Marketplace and Open VSX (see [CONTRIBUTING](CONTRIBUTING.md)).
+the GitHub Release with the `.vsix`, its Sigstore signature, and its build provenance
+attached, and, only when asked, publishes the same `.vsix` to the VS Code Marketplace
+and Open VSX (see [CONTRIBUTING](CONTRIBUTING.md)).
 
 ## Community and contributing
 
