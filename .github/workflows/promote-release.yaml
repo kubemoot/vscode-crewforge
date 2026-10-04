@@ -216,13 +216,13 @@ jobs:
       id-token: write # Entra sign-in for the Marketplace and Open VSX Trusted Publishing
     steps:
       - name: Check out the promoted commit
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           ref: ${{ needs.promote.outputs.commit }}
           persist-credentials: false
 
       - name: Set up Node
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: npm
