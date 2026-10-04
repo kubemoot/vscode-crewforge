@@ -39,6 +39,17 @@ afterEach(() => {
 
 const run = (id: string, ...args: unknown[]) => recorded.commands.get(id)!(...args);
 
+/** Runs a step with an empty PATH, so a program the extension spawns (helm, kmctl) is missing whatever the host has installed. */
+async function withoutPrograms(step: () => Promise<void>): Promise<void> {
+  const saved = process.env.PATH;
+  process.env.PATH = '';
+  try {
+    await step();
+  } finally {
+    process.env.PATH = saved;
+  }
+}
+
 describe('activate', () => {
   it('registers every command the manifest contributes, and the Deployed Crews view', () => {
     const declared = manifest.contributes.commands.map((c) => c.command).sort();
@@ -373,14 +384,10 @@ describe('the inner loop in the extension', () => {
   });
 
   it('creates a crew in the Explorer folder, and reports a missing kmctl before asking anything', async () => {
-    const saved = process.env.PATH;
-    process.env.PATH = '';
-    try {
+    await withoutPrograms(async () => {
       await run('crewforge.newCrewHere', Uri.file('/w/crews'));
       await run('crewforge.createCrew');
-    } finally {
-      process.env.PATH = saved;
-    }
+    });
     expect(recorded.modalErrors).toHaveLength(2);
     expect(recorded.modalErrors[0]).toContain('needs kmctl');
   });
@@ -435,9 +442,12 @@ describe('defining a crew in the extension', () => {
       recorded.settings.set('crewforge.kubeconfig', live.kubeconfig);
       const crew = { name: 'lab-ops', namespace: 'team-a', ready: true, phase: 'Ready' };
       await run('crewforge.openCrewDashboard', { kind: 'crew', crew });
-      // The first press reads the crew, as the page does when its script starts.
-      await exported.press('crew:team-a/lab-ops', 'refresh');
-      await exported.press('crew:team-a/lab-ops', 'group', 'rag');
+      // Each read of the page runs `helm status` for the release; without helm the read is quick and the same on every host.
+      await withoutPrograms(async () => {
+        // The first press reads the crew, as the page does when its script starts.
+        await exported.press('crew:team-a/lab-ops', 'refresh');
+        await exported.press('crew:team-a/lab-ops', 'group', 'rag');
+      });
       expect(recorded.revealed.at(-1)).toMatchObject({ view: 'crewforge.crews', node: { kind: 'section', section: 'rag' }, options: { select: true, expand: true } });
       const tool = { kind: 'member', crew, view: { label: 't', tooltip: '', icon: 'wrench', tool: { info: { name: 't', agents: ['k8s'] } } } };
       await run('crewforge.showToolDetails', tool);
