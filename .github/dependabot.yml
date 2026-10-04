@@ -36,6 +36,11 @@ updates:
       # with a deliberate engines.vscode bump, by hand.
       - dependency-name: "@types/vscode"
         update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      # @types/node stays on the Node major that VS Code's runtime ships (Node 22), so the
+      # types never offer an API the extension host lacks. It moves only together with the
+      # Node that VS Code ships, by hand.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
     open-pull-requests-limit: 5
     commit-message:
       prefix: "chore(deps)"
