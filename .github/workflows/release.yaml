@@ -45,6 +45,15 @@ jobs:
             git push origin "${TAG}"
           fi
 
+      # CHANGELOG.md comes from the GitHub Releases, the candidate on top; the token is
+      # only in this step, so no install or build script sees it.
+      - name: Write the changelog
+        if: steps.version.outputs.release_created == 'true'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/changelog.sh "${VERSION}" > CHANGELOG.md
+
       - name: Set up Node
         if: steps.version.outputs.release_created == 'true'
         uses: actions/setup-node@v7

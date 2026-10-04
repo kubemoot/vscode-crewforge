@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# A stand-in for curl that serves the GitHub releases API from a file, so
+# test/changelog.test.ts needs no network. CURL_STUB_RELEASES names a JSON list served as
+# page 1 (later pages are empty); CURL_STUB_FAIL=1 fails as curl -f does on an HTTP error.
+# Each call's arguments are appended to CURL_STUB_LOG, one line per call.
+set -euo pipefail
+
+printf '%s\n' "$*" >>"${CURL_STUB_LOG:-/dev/null}"
+if [ "${CURL_STUB_FAIL:-}" = 1 ]; then
+  echo "curl: (22) The requested URL returned error: 503" >&2
+  exit 22
+fi
+url="${*: -1}"
+case "$url" in
+  */releases\?per_page=100\&page=1) cat "$CURL_STUB_RELEASES" ;;
+  */releases\?per_page=100\&page=*) echo '[]' ;;
+  *)
+    echo "curl stub: unexpected URL $url" >&2
+    exit 3
+    ;;
+esac

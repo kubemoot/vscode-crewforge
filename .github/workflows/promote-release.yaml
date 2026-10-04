@@ -121,6 +121,15 @@ jobs:
           COMMIT: ${{ steps.plan.outputs.commit }}
         run: git checkout --quiet "${COMMIT}"
 
+      # CHANGELOG.md comes from the GitHub Releases, this version's notes on top, so the
+      # registries' Changelog tab matches them; the token is only in this step, so no
+      # install or build script sees it.
+      - name: Write the changelog
+        env:
+          FINAL_TAG: ${{ steps.plan.outputs.final_tag }}
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/changelog.sh "${FINAL_TAG#v}" > CHANGELOG.md
+
       - name: Set up Node
         uses: actions/setup-node@v7
         with:
@@ -143,7 +152,7 @@ jobs:
           if [ "${PRE_RELEASE}" = true ]; then flags+=(--pre-release); fi
           npm run package -- "${flags[@]}"
           mv crewforge-*.vsix "${OUT_DIR}/"
-          git checkout --quiet -- package.json package-lock.json
+          git checkout --quiet -- package.json package-lock.json CHANGELOG.md
 
       - name: Tag the final version
         if: ${{ !inputs.dry_run }}
