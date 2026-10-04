@@ -57,7 +57,9 @@ is never pasted into a chat, an issue, or a file.
 ### The `marketplace` environment
 
 The publish job runs in the GitHub environment `marketplace`. Restrict it to `main` and
-require a maintainer's approval, so no run reaches the registry credentials unseen:
+require a maintainer's approval, so no run reaches the registry credentials unseen. The
+kubemoot organization declares this environment, and the Entra app below, in its
+infrastructure code; without that, create the environment with:
 
 ```bash
 me=$(gh api user --jq .id)
@@ -75,20 +77,28 @@ gh api -X POST repos/kubemoot/vscode-crewforge/environments/marketplace/deployme
    that will own the publisher, and choose **Create publisher**: ID `kubemoot` (it
    cannot change later; the extension ID is `kubemoot.crewforge`), name `Kubemoot`.
 2. Give the workflow a credential, one of:
-   - **Microsoft Entra (lasting).** In an Azure subscription (a free one works), create a
-     user-assigned managed identity. Under **Federated credentials**, add one for
-     **GitHub Actions deploying Azure resources**: organization `kubemoot`, repository
-     `vscode-crewforge`, entity **Environment**, name `marketplace`. Set its IDs as
-     secrets:
+   - **Microsoft Entra (lasting).** In a Microsoft Entra directory you own, register an
+     app (no Azure subscription is needed for an app registration; a personal Microsoft
+     account gets its own directory through the Azure free sign-up). Under **Federated
+     credentials**, add one with issuer `https://token.actions.githubusercontent.com`,
+     audience `api://AzureADTokenExchange`, and the subject GitHub actually issues. This
+     repository uses GitHub's immutable subject, which names the org and repository by
+     numeric ID as well as by name:
+     `repo:kubemoot@<org id>/vscode-crewforge@<repo id>:environment:marketplace`
+     (`gh api repos/kubemoot/vscode-crewforge/actions/oidc/customization/sub` shows the
+     prefix). The portal's **GitHub Actions** template builds the name-only subject,
+     which does not match. Set the app's IDs as secrets:
 
      ```bash
-     gh secret set AZURE_CLIENT_ID -R kubemoot/vscode-crewforge   # the identity's client ID
-     gh secret set AZURE_TENANT_ID -R kubemoot/vscode-crewforge   # its tenant ID
+     gh secret set AZURE_CLIENT_ID -R kubemoot/vscode-crewforge   # the app's client ID
+     gh secret set AZURE_TENANT_ID -R kubemoot/vscode-crewforge   # the directory's tenant ID
      ```
 
      The first publishing run prints the identity's Marketplace member ID in **Show the
      identity's Marketplace member ID**, then fails at the publish. On the publisher's
-     **Members** page, add that ID with the **Contributor** role, and re-run the job.
+     **Members** page, add that ID with the **Creator** role (publishing a new extension
+     needs it; once the extension exists, **Contributor** is enough for updates), and
+     re-run the job.
    - **Personal access token (until 2026-12-01).** Azure DevOps retires global personal
      access tokens on 2026-12-01, and the Marketplace accepts only a global one, so this
      works until then. In any Azure DevOps organization, create a token with
