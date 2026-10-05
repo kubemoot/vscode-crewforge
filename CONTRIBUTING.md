@@ -45,7 +45,7 @@ of the `views.png` the script produces.
 Every GitHub Release carries, next to `crewforge-<version>.vsix`:
 
 - `crewforge-<version>.vsix.sigstore.json`, a keyless Sigstore signature: the **sign**
-  job of Promote Release signs with a short-lived certificate Sigstore issues to the
+  job of Publish Release signs with a short-lived certificate Sigstore issues to the
   workflow's GitHub OIDC identity, so no signing key is stored anywhere, and the
   signature is recorded in Sigstore's public transparency log.
 - `crewforge-<version>.intoto.jsonl`, the SLSA build provenance from `actions/attest`
@@ -55,22 +55,22 @@ Every GitHub Release carries, next to `crewforge-<version>.vsix`:
 The release job creates the release with all three files in one call, since GitHub's
 immutable releases lock the assets once a release is published, and the publish job
 sends the registries that same `.vsix`. A dry run signs and verifies its `.vsix` too;
-only a real promotion attests. To verify a download from the GitHub Release with
+only a real release attests. To verify a download from the GitHub Release with
 [cosign](https://docs.sigstore.dev/cosign/system_config/installation/) or the GitHub CLI:
 
 ```bash
 cosign verify-blob crewforge-<version>.vsix \
   --bundle crewforge-<version>.vsix.sigstore.json \
-  --certificate-identity https://github.com/kubemoot/vscode-crewforge/.github/workflows/promote-release.yaml@refs/heads/main \
+  --certificate-identity https://github.com/kubemoot/vscode-crewforge/.github/workflows/publish-release.yaml@refs/heads/main \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 
 gh attestation verify crewforge-<version>.vsix --repo kubemoot/vscode-crewforge \
-  --signer-workflow kubemoot/vscode-crewforge/.github/workflows/promote-release.yaml
+  --signer-workflow kubemoot/vscode-crewforge/.github/workflows/publish-release.yaml
 ```
 
 ## Publishing to the VS Code Marketplace and Open VSX
 
-This section is for maintainers. **Promote Release** publishes to both registries only
+This section is for maintainers. **Publish Release** publishes to both registries only
 when it is not a dry run and `publish_marketplaces` is checked. It publishes the `.vsix`
 the GitHub Release carries, with the `@vscode/vsce` and `ovsx` versions locked in
 `package-lock.json`. With `pre_release`, that `.vsix` is packaged as a pre-release and
@@ -159,12 +159,12 @@ gh api -X POST repos/kubemoot/vscode-crewforge/environments/marketplace/deployme
    unset OVSX_PAT
    ```
 
-4. After the first promotion with `publish_marketplaces` has published a version (Open
+4. After the first run with `publish_marketplaces` has published a version (Open
    VSX requires one before a trusted publisher can be registered), switch to
    [Trusted Publishing](https://github.com/eclipse-openvsx/openvsx/wiki/Trusted-Publishing),
    so no long-lived Open VSX token is stored: on open-vsx.org, **Settings, Trusted
    Publishers**, add organization `kubemoot`, repository `vscode-crewforge`, workflow
-   `promote-release.yaml`, environment `marketplace`. Then delete the token and its
+   `publish-release.yaml`, environment `marketplace`. Then delete the token and its
    secret (`gh secret delete OVSX_PAT -R kubemoot/vscode-crewforge`); the workflow uses
    Trusted Publishing whenever `OVSX_PAT` is absent.
 5. Optionally, ask for the namespace to be verified (the extension then shows as from a
@@ -176,5 +176,5 @@ gh api -X POST repos/kubemoot/vscode-crewforge/environments/marketplace/deployme
 
 Both registries accept only `major.minor.patch` versions, and a pre-release and a
 release never share a version. The release tags are already of that form, and every
-promotion has a new version, so either channel works. While CrewForge is 0.x, its
+release has a new version, so either channel works. While CrewForge is 0.x, its
 `preview` flag shows a Preview badge on the listing.

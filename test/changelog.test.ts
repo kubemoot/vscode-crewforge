@@ -82,7 +82,7 @@ afterEach(() => fs.rmSync(work, { recursive: true, force: true }));
 
 /**
  * The script runs against the stand-in library always, and also against the real
- * release-lib.sh when RELEASE_LIB names it: Promote Release runs the tests after its
+ * release-lib.sh when RELEASE_LIB names it: Publish Release runs the tests after its
  * setup step exports RELEASE_LIB, and a developer can set it to a local clone.
  */
 const libraries: [string, string][] = [['the stand-in release library', stubLib]];
@@ -124,7 +124,7 @@ describe.each(libraries)('scripts/changelog.sh with %s', (_name, lib) => {
     expect(lines[2]).toMatch(/^Generated from the release notes/);
   });
 
-  it('lists the version being promoted on top, then each final GitHub Release newest first', () => {
+  it('lists the version being published on top, then each final GitHub Release newest first', () => {
     releasedRepo();
     expect(headings(changelog('0.2.0'))).toEqual(['0.2.0', '0.1.1', '0.1.0', '0.0.9']);
   });
@@ -154,7 +154,7 @@ describe.each(libraries)('scripts/changelog.sh with %s', (_name, lib) => {
     expect(sectionOf(changelog('0.2.0'), '0.0.9')).toBe('Maintenance only.');
   });
 
-  it('gives the version being promoted the release notes since the last final tag, candidates included', () => {
+  it('gives the version being published the release notes since the last final tag, candidates included', () => {
     const shas = releasedRepo();
     const top = sectionOf(changelog('0.2.0'), '0.2.0');
     expect(top).toContain(`- Show the crew dashboard (${shas.show})`);
@@ -247,7 +247,7 @@ describe.each(libraries)('scripts/changelog.sh with %s', (_name, lib) => {
 });
 
 describe('the committed CHANGELOG.md', () => {
-  // Read from the commit, not the working tree: Promote Release writes the real
+  // Read from the commit, not the working tree: Publish Release writes the real
   // changelog before it runs these tests.
   const text = execFileSync('git', ['show', 'HEAD:CHANGELOG.md'], { cwd: repo, encoding: 'utf8' });
 
@@ -277,8 +277,8 @@ describe('writing the changelog in each packaging path', () => {
       lib: 'release-candidate-version',
     },
     {
-      workflow: 'promote-release.yaml',
-      job: 'promote',
+      workflow: 'publish-release.yaml',
+      job: 'prepare',
       pack: 'Test and package at the final version',
       write: 'scripts/changelog.sh "${FINAL_TAG#v}" > CHANGELOG.md',
       lib: 'release-actions/setup',
@@ -326,8 +326,8 @@ describe('writing the changelog in each packaging path', () => {
     expect(exporter).toBeLessThan(indexOf(steps, writeStep));
   });
 
-  it('restores the stub after a promotion packages', () => {
-    const steps = stepsOf('promote-release.yaml', 'promote');
+  it('restores the stub after the final version packages', () => {
+    const steps = stepsOf('publish-release.yaml', 'prepare');
     expect(steps[indexOf(steps, 'Test and package at the final version')].run).toMatch(/git checkout --quiet -- .*CHANGELOG\.md/);
   });
 });

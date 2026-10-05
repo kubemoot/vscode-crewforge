@@ -6,7 +6,7 @@
 #
 # Each final release (a vX.Y.Z tag, not a draft or pre-release) is one section, newest
 # first, holding its release body without the body's own "## Changes since" heading and
-# "All commits:" link. A VERSION with no final release yet (the version being promoted,
+# "All commits:" link. A VERSION with no final release yet (the version being published,
 # or a candidate) gets a section on top: the release notes from the last final tag to
 # HEAD, what its release body will hold.
 #

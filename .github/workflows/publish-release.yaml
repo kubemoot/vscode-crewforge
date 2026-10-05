@@ -1,4 +1,4 @@
-# Promote Release: publish a tested CrewForge release candidate as a GitHub Release.
+# Publish Release: publish a tested CrewForge release candidate as a GitHub Release.
 #
 # Every push to main tags a release candidate vX.Y.Z-rc.N and packages its .vsix
 # without publishing it. A maintainer runs this workflow (Actions tab, Run workflow;
@@ -17,10 +17,10 @@
 # GitHub's immutable releases lock the assets on publish. A dry run signs and verifies
 # its .vsix too, so a signing problem shows before anything is tagged; it attests nothing.
 #
-# With publish_marketplaces, a promotion that is not a dry run also publishes the .vsix
+# With publish_marketplaces, a run that is not a dry run also publishes the .vsix
 # attached to the GitHub Release to the VS Code Marketplace and Open VSX. It needs the
 # registry credentials. Open VSX: Trusted Publishing (no secret; the namespace trusts
-# this repository's promote-release.yaml in the marketplace environment), or OVSX_PAT
+# this repository's publish-release.yaml in the marketplace environment), or OVSX_PAT
 # when set, which the first version of a namespace needs and which takes precedence.
 # Marketplace: AZURE_CLIENT_ID and AZURE_TENANT_ID (a Microsoft Entra managed identity
 # trusted for the marketplace environment) or VSCE_PAT. The Marketplace credential is
@@ -28,7 +28,7 @@
 # with publish_marketplaces checks it too. With pre_release, the
 # .vsix is packaged as a pre-release, the GitHub Release's copy included. The CLI
 # versions are the @vscode/vsce and ovsx devDependencies in package-lock.json.
-name: Promote Release
+name: Publish Release
 
 on:
   workflow_dispatch:
@@ -55,14 +55,14 @@ on:
         type: boolean
 
 concurrency:
-  group: promote-release
+  group: publish-release
   cancel-in-progress: false
 
 permissions:
   contents: read
 
 jobs:
-  promote:
+  prepare:
     # The same runners as every release in the ecosystem, and only from main.
     if: github.ref == 'refs/heads/main'
     runs-on: homelab-runners
@@ -111,20 +111,20 @@ jobs:
       - name: Set up the release helpers
         uses: kubemoot/release-actions/setup@76c35a749b9db4105e73307b91b8f7cf1359b755 # v0.4.0
 
-      # Plans the promotion without tagging, so a failed build leaves no final tag.
+      # Plans the release without tagging, so a failed build leaves no final tag.
       - name: Plan the final version
         id: plan
         env:
           RC_TAG: ${{ inputs.rc_tag }}
           DRY_RUN: 'true'
-          OUT_DIR: ${{ runner.temp }}/promotion
+          OUT_DIR: ${{ runner.temp }}/release-files
         run: |
           # shellcheck source=/dev/null
           source "${RELEASE_LIB}"
           rl_promote_single v CrewForge "${OUT_DIR}" >> "$GITHUB_OUTPUT"
           cat "${OUT_DIR}/notes.md" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Check out the promoted commit
+      - name: Check out the release commit
         env:
           COMMIT: ${{ steps.plan.outputs.commit }}
         run: git checkout --quiet "${COMMIT}"
@@ -151,7 +151,7 @@ jobs:
           FINAL_TAG: ${{ steps.plan.outputs.final_tag }}
           COMMIT: ${{ steps.plan.outputs.commit }}
           PRE_RELEASE: ${{ inputs.pre_release }}
-          OUT_DIR: ${{ runner.temp }}/promotion
+          OUT_DIR: ${{ runner.temp }}/release-files
         run: |
           npm ci
           npm test
@@ -167,7 +167,7 @@ jobs:
         env:
           RC_TAG: ${{ inputs.rc_tag }}
           DRY_RUN: 'false'
-          OUT_DIR: ${{ runner.temp }}/promotion
+          OUT_DIR: ${{ runner.temp }}/release-files
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -175,39 +175,39 @@ jobs:
           source "${RELEASE_LIB}"
           rl_promote_single v CrewForge "${OUT_DIR}"
 
-      - name: Keep the promotion output
+      - name: Keep the release files
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: promotion
-          path: ${{ runner.temp }}/promotion/
+          name: release-files
+          path: ${{ runner.temp }}/release-files/
           if-no-files-found: error
           retention-days: 30
 
   # Runs where the .vsix was built, so the provenance names that runner environment.
   sign:
-    needs: promote
+    needs: prepare
     runs-on: homelab-runners
     permissions:
       contents: read
       id-token: write # Sigstore keyless signing and the provenance attestation
       attestations: write # store the provenance attestation in the repository
     steps:
-      - name: Download the promotion output
+      - name: Download the release files
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: promotion
-          path: promotion
+          name: release-files
+          path: release-files
 
       - name: Install cosign
         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
 
-      # The certificate names the workflow that signed: promote-release.yaml on main.
+      # The certificate names the workflow that signed: publish-release.yaml on main.
       - name: Sign the .vsix with Sigstore
         env:
           IDENTITY: https://github.com/${{ github.workflow_ref }}
         run: |
           mkdir signatures
-          for vsix in promotion/crewforge-*.vsix; do
+          for vsix in release-files/crewforge-*.vsix; do
             bundle="signatures/$(basename "${vsix}").sigstore.json"
             cosign sign-blob --yes --bundle "${bundle}" "${vsix}"
             cosign verify-blob "${vsix}" --bundle "${bundle}" \
@@ -220,13 +220,13 @@ jobs:
         if: ${{ !inputs.dry_run }}
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
-          subject-path: promotion/crewforge-*.vsix
+          subject-path: release-files/crewforge-*.vsix
 
       - name: Name the provenance for the release
         if: ${{ !inputs.dry_run }}
         env:
           BUNDLE: ${{ steps.attest.outputs.bundle-path }}
-          FINAL_TAG: ${{ needs.promote.outputs.final_tag }}
+          FINAL_TAG: ${{ needs.prepare.outputs.final_tag }}
         run: cp "${BUNDLE}" "signatures/crewforge-${FINAL_TAG#v}.intoto.jsonl"
 
       - name: Keep the signatures
@@ -238,53 +238,53 @@ jobs:
           retention-days: 30
 
   release:
-    needs: [promote, sign]
+    needs: [prepare, sign]
     if: ${{ !inputs.dry_run }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - name: Download the promotion output
+      - name: Download the release files
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: promotion
-          path: promotion
+          name: release-files
+          path: release-files
 
       - name: Download the signatures
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: signatures
-          path: promotion
+          path: release-files
 
       # The release carries only a .vsix whose provenance verifies as this workflow's.
       - name: Verify the .vsix against its provenance
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ needs.promote.outputs.final_tag }}
+          TAG: ${{ needs.prepare.outputs.final_tag }}
         run: |
-          gh attestation verify "promotion/crewforge-${TAG#v}.vsix" --repo "${GITHUB_REPOSITORY}" \
-            --bundle "promotion/crewforge-${TAG#v}.intoto.jsonl" \
-            --signer-workflow "${GITHUB_REPOSITORY}/.github/workflows/promote-release.yaml"
+          gh attestation verify "release-files/crewforge-${TAG#v}.vsix" --repo "${GITHUB_REPOSITORY}" \
+            --bundle "release-files/crewforge-${TAG#v}.intoto.jsonl" \
+            --signer-workflow "${GITHUB_REPOSITORY}/.github/workflows/publish-release.yaml"
 
       - name: Create the GitHub Release with the .vsix
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # promotion/releases.tsv: tag, title, notes file (one release per line).
+          # release-files/releases.tsv: tag, title, notes file (one release per line).
           while IFS=$'\t' read -r tag title notes; do
             if gh release view "${tag}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
               echo "${tag} already has a release"
               continue
             fi
             gh release create "${tag}" --repo "${GITHUB_REPOSITORY}" --verify-tag \
-              --title "${title}" --notes-file "promotion/${notes}" \
-              "promotion/crewforge-${tag#v}.vsix" \
-              "promotion/crewforge-${tag#v}.vsix.sigstore.json" \
-              "promotion/crewforge-${tag#v}.intoto.jsonl"
-          done < promotion/releases.tsv
+              --title "${title}" --notes-file "release-files/${notes}" \
+              "release-files/crewforge-${tag#v}.vsix" \
+              "release-files/crewforge-${tag#v}.vsix.sigstore.json" \
+              "release-files/crewforge-${tag#v}.intoto.jsonl"
+          done < release-files/releases.tsv
 
   publish:
-    needs: [promote, release]
+    needs: [prepare, release]
     if: ${{ !inputs.dry_run && inputs.publish_marketplaces }}
     runs-on: ubuntu-latest
     # The Entra managed identity trusts this environment's OIDC subject
@@ -295,10 +295,10 @@ jobs:
       contents: read # the repository's lockfile and the GitHub Release's .vsix
       id-token: write # Entra sign-in for the Marketplace and Open VSX Trusted Publishing
     steps:
-      - name: Check out the promoted commit
+      - name: Check out the release commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ needs.promote.outputs.commit }}
+          ref: ${{ needs.prepare.outputs.commit }}
           persist-credentials: false
 
       - name: Set up Node
@@ -315,14 +315,14 @@ jobs:
       - name: Download the .vsix from the GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ needs.promote.outputs.final_tag }}
+          TAG: ${{ needs.prepare.outputs.final_tag }}
           OUT_DIR: ${{ runner.temp }}/vsix
         run: |
           gh release download "${TAG}" --repo "${GITHUB_REPOSITORY}" \
             --pattern "crewforge-${TAG#v}.vsix" --dir "${OUT_DIR}"
 
       - name: Sign in to Microsoft Entra
-        if: needs.promote.outputs.marketplace_auth == 'entra'
+        if: needs.prepare.outputs.marketplace_auth == 'entra'
         uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
@@ -332,7 +332,7 @@ jobs:
       # The Marketplace adds the identity to the publisher by this profile ID (it is not
       # a secret), so the first Entra run shows the ID to add before its publish fails.
       - name: Show the identity's Marketplace member ID
-        if: needs.promote.outputs.marketplace_auth == 'entra'
+        if: needs.prepare.outputs.marketplace_auth == 'entra'
         run: |
           az rest -u https://app.vssps.visualstudio.com/_apis/profile/profiles/me \
             --resource 499b84ac-1321-427f-aa17-267ca6975798 --query id -o tsv
@@ -342,10 +342,10 @@ jobs:
       # pre-release mark from the .vsix itself.
       - name: Publish to the VS Code Marketplace
         env:
-          AUTH: ${{ needs.promote.outputs.marketplace_auth }}
-          VSCE_PAT: ${{ needs.promote.outputs.marketplace_auth == 'pat' && secrets.VSCE_PAT || '' }}
+          AUTH: ${{ needs.prepare.outputs.marketplace_auth }}
+          VSCE_PAT: ${{ needs.prepare.outputs.marketplace_auth == 'pat' && secrets.VSCE_PAT || '' }}
           PRE_RELEASE: ${{ inputs.pre_release }}
-          TAG: ${{ needs.promote.outputs.final_tag }}
+          TAG: ${{ needs.prepare.outputs.final_tag }}
           OUT_DIR: ${{ runner.temp }}/vsix
         run: |
           flags=(--skip-duplicate)
@@ -358,9 +358,9 @@ jobs:
       # version, before the trusted publisher can be registered).
       - name: Publish to Open VSX
         env:
-          AUTH: ${{ needs.promote.outputs.openvsx_auth }}
-          OVSX_PAT: ${{ needs.promote.outputs.openvsx_auth == 'pat' && secrets.OVSX_PAT || '' }}
-          TAG: ${{ needs.promote.outputs.final_tag }}
+          AUTH: ${{ needs.prepare.outputs.openvsx_auth }}
+          OVSX_PAT: ${{ needs.prepare.outputs.openvsx_auth == 'pat' && secrets.OVSX_PAT || '' }}
+          TAG: ${{ needs.prepare.outputs.final_tag }}
           OUT_DIR: ${{ runner.temp }}/vsix
         run: |
           flags=(--skip-duplicate)

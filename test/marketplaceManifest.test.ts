@@ -107,11 +107,11 @@ interface Workflow {
   jobs: Record<string, Job>;
 }
 
-describe('publishing to the registries in Promote Release', () => {
-  const text = read('.github/workflows/promote-release.yaml');
+describe('publishing to the registries in Publish Release', () => {
+  const text = read('.github/workflows/publish-release.yaml');
   const workflow = load(text) as Workflow;
   const inputs = workflow.on.workflow_dispatch.inputs;
-  const { promote, publish } = workflow.jobs;
+  const { prepare, publish } = workflow.jobs;
   const step = (job: Job, name: string) => {
     const index = job.steps.findIndex((s) => s.name === name);
     expect(index, name).toBeGreaterThanOrEqual(0);
@@ -131,9 +131,9 @@ describe('publishing to the registries in Promote Release', () => {
   });
 
   it('checks every credential before the final tag exists', () => {
-    const check = step(promote, 'Check the registry credentials');
+    const check = step(prepare, 'Check the registry credentials');
     expect(check.index).toBe(0);
-    expect(check.index).toBeLessThan(step(promote, 'Tag the final version').index);
+    expect(check.index).toBeLessThan(step(prepare, 'Tag the final version').index);
     expect(check.step.if).toContain('inputs.publish_marketplaces');
     const env = Object.values(check.step.env ?? {}).join(' ');
     for (const secret of ['AZURE_CLIENT_ID', 'AZURE_TENANT_ID', 'VSCE_PAT', 'OVSX_PAT']) expect(env).toContain(`secrets.${secret}`);
@@ -141,22 +141,22 @@ describe('publishing to the registries in Promote Release', () => {
   });
 
   it('packages a pre-release when asked, so the GitHub Release and the registries carry the same file', () => {
-    const pack = step(promote, 'Test and package at the final version').step;
+    const pack = step(prepare, 'Test and package at the final version').step;
     expect(pack.env?.PRE_RELEASE).toBe('${{ inputs.pre_release }}');
     expect(pack.run).toContain('flags+=(--pre-release)');
     expect(pack.run).toContain('npm run package -- "${flags[@]}"');
   });
 
   it('runs after the GitHub Release and publishes the .vsix that release carries', () => {
-    expect(publish.needs).toEqual(expect.arrayContaining(['promote', 'release']));
+    expect(publish.needs).toEqual(expect.arrayContaining(['prepare', 'release']));
     expect(step(publish, 'Download the .vsix from the GitHub Release').step.run).toContain('gh release download "${TAG}"');
   });
 
   it('can only read the repository and request an OIDC token, and keeps no git credential', () => {
     expect(publish.permissions).toEqual({ contents: 'read', 'id-token': 'write' });
     expect(publish.environment).toBe('marketplace');
-    const checkout = step(publish, 'Check out the promoted commit').step;
-    expect(checkout.with).toMatchObject({ ref: '${{ needs.promote.outputs.commit }}', 'persist-credentials': false });
+    const checkout = step(publish, 'Check out the release commit').step;
+    expect(checkout.with).toMatchObject({ ref: '${{ needs.prepare.outputs.commit }}', 'persist-credentials': false });
   });
 
   it('hands each registry secret only to the step that uses it', () => {
@@ -188,9 +188,9 @@ describe('publishing to the registries in Promote Release', () => {
   });
 });
 
-describe('signing the release in Promote Release', () => {
-  const workflow = load(read('.github/workflows/promote-release.yaml')) as Workflow & { permissions?: Record<string, string> };
-  const { promote, sign, release } = workflow.jobs;
+describe('signing the release in Publish Release', () => {
+  const workflow = load(read('.github/workflows/publish-release.yaml')) as Workflow & { permissions?: Record<string, string> };
+  const { prepare, sign, release } = workflow.jobs;
   const step = (job: Job, name: string) => {
     const index = job.steps.findIndex((s) => s.name === name);
     expect(index, name).toBeGreaterThanOrEqual(0);
@@ -199,8 +199,8 @@ describe('signing the release in Promote Release', () => {
   const create = () => step(release, 'Create the GitHub Release with the .vsix');
 
   it('signs before the GitHub Release exists, so every asset is attached before it is published', () => {
-    expect([sign.needs].flat()).toEqual(['promote']);
-    expect(release.needs).toEqual(expect.arrayContaining(['promote', 'sign']));
+    expect([sign.needs].flat()).toEqual(['prepare']);
+    expect(release.needs).toEqual(expect.arrayContaining(['prepare', 'sign']));
     expect(release.steps.map((s) => s.run ?? '').join('\n')).not.toContain('gh release upload');
     expect(create().step.run).toContain('gh release create');
   });
@@ -208,11 +208,11 @@ describe('signing the release in Promote Release', () => {
   it('attaches the .vsix, its Sigstore bundle, and the provenance in the one create call', () => {
     const run = create().step.run ?? '';
     const createCall = run.slice(run.indexOf('gh release create'));
-    const files = [...createCall.matchAll(/"(promotion\/crewforge-[^"]+)"/g)].map((m) => m[1]);
+    const files = [...createCall.matchAll(/"(release-files\/crewforge-[^"]+)"/g)].map((m) => m[1]);
     expect(files).toEqual([
-      'promotion/crewforge-${tag#v}.vsix',
-      'promotion/crewforge-${tag#v}.vsix.sigstore.json',
-      'promotion/crewforge-${tag#v}.intoto.jsonl',
+      'release-files/crewforge-${tag#v}.vsix',
+      'release-files/crewforge-${tag#v}.vsix.sigstore.json',
+      'release-files/crewforge-${tag#v}.intoto.jsonl',
     ]);
     expect(run).toContain('--verify-tag');
   });
@@ -222,11 +222,11 @@ describe('signing the release in Promote Release', () => {
     const download = step(release, 'Download the signatures').step;
     expect(download.with?.name).toBe(upload.with?.name);
     expect(upload.with?.path).toBe('signatures/');
-    expect(download.with?.path).toBe('promotion');
+    expect(download.with?.path).toBe('release-files');
     const signed = step(sign, 'Sign the .vsix with Sigstore').step.run ?? '';
     expect(signed).toContain('bundle="signatures/$(basename "${vsix}").sigstore.json"');
     const named = step(sign, 'Name the provenance for the release').step.run ?? '';
-    expect(named.replace('signatures/', 'promotion/').replace('FINAL_TAG', 'tag')).toContain('promotion/crewforge-${tag#v}.intoto.jsonl');
+    expect(named.replace('signatures/', 'release-files/').replace('FINAL_TAG', 'tag')).toContain('release-files/crewforge-${tag#v}.intoto.jsonl');
   });
 
   it('signs keylessly with cosign under this workflow identity and verifies the signature', () => {
@@ -240,11 +240,11 @@ describe('signing the release in Promote Release', () => {
     expect(step(sign, 'Install cosign').index).toBeLessThan(step(sign, 'Sign the .vsix with Sigstore').index);
   });
 
-  it('attests provenance only for a real promotion and names it *.intoto.jsonl for the release', () => {
+  it('attests provenance only for a real release and names it *.intoto.jsonl for the release', () => {
     const attest = step(sign, 'Attest the build provenance');
     expect(attest.step.if).toContain('!inputs.dry_run');
     expect(attest.step.uses).toMatch(/^actions\/attest@[0-9a-f]{40}$/);
-    expect(attest.step.with?.['subject-path']).toBe('promotion/crewforge-*.vsix');
+    expect(attest.step.with?.['subject-path']).toBe('release-files/crewforge-*.vsix');
     const name = step(sign, 'Name the provenance for the release');
     expect(name.index).toBeGreaterThan(attest.index);
     expect(name.step.run).toContain('signatures/crewforge-${FINAL_TAG#v}.intoto.jsonl');
@@ -254,7 +254,7 @@ describe('signing the release in Promote Release', () => {
     const verify = step(release, 'Verify the .vsix against its provenance');
     expect(verify.index).toBeLessThan(create().index);
     expect(verify.step.run).toContain('gh attestation verify');
-    expect(verify.step.run).toContain('--signer-workflow "${GITHUB_REPOSITORY}/.github/workflows/promote-release.yaml"');
+    expect(verify.step.run).toContain('--signer-workflow "${GITHUB_REPOSITORY}/.github/workflows/publish-release.yaml"');
   });
 
   it('grants id-token only to the signing job and the registry publish job', () => {
@@ -262,7 +262,7 @@ describe('signing the release in Promote Release', () => {
     expect(sign.permissions).toEqual({ contents: 'read', 'id-token': 'write', attestations: 'write' });
     const holders = Object.entries(workflow.jobs).filter(([, job]) => job.permissions?.['id-token']).map(([name]) => name);
     expect(holders.sort()).toEqual(['publish', 'sign']);
-    expect(promote.permissions?.attestations).toBeUndefined();
+    expect(prepare.permissions?.attestations).toBeUndefined();
     expect(release.permissions).toEqual({ contents: 'write' });
   });
 
