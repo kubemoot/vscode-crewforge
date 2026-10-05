@@ -75,6 +75,16 @@ describe('schemaIssues', () => {
     expect(nested.map((i) => i.message)).toEqual(['Agent/helper: spec.mcpServers[1].name is not valid.', 'Agent/helper: the object is not valid.']);
   });
 
+  it('puts a dot before every key but the first, and brackets around every index, wherever it sits', () => {
+    const agent = { apiVersion: 'kubemoot.ai/v1alpha1', kind: 'Agent', metadata: { name: 'helper' } };
+    const at = (instancePath: string) => schemaIssues(agent, [{ keyword: 'type', instancePath, schemaPath: '', params: {}, message: 'is wrong' }])[0].message;
+    expect(at('/spec')).toBe('Agent/helper: spec is wrong.');
+    expect(at('/0')).toBe('Agent/helper: [0] is wrong.');
+    expect(at('/0/name')).toBe('Agent/helper: [0].name is wrong.');
+    expect(at('/spec/tools/0/1/name')).toBe('Agent/helper: spec.tools[0][1].name is wrong.');
+    expect(at('/spec/env/2/valueFrom/key')).toBe('Agent/helper: spec.env[2].valueFrom.key is wrong.');
+  });
+
   it('compiles a schema once per text, and none for an empty schema', () => {
     expect(compiled(SCHEMA)).toBe(compiled(SCHEMA));
     expect(compiled('{}')).toBeUndefined();
