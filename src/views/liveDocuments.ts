@@ -1,9 +1,9 @@
 import * as vscode from 'vscode';
-import { connect, type Connection } from '../connection';
+import { connect, yamlFormat, type Connection } from '../connection';
 import { bundleObjects, loadCrewDetails } from '../crew/details';
 import { checkName } from '../k8s/paths';
 import { clusterPath, discoverKinds, objectPath, type KubemootKind } from '../source/live';
-import { dumpYaml, KUBEMOOT_GROUP, toLiveYaml, type Manifest } from '../source/manifests';
+import { dumpYaml, joinDocuments, KUBEMOOT_GROUP, toLiveYaml, type Manifest, type YamlFormat } from '../source/manifests';
 import { NORMALIZED_NOTE, normalizedYaml } from '../source/normalize';
 import { toolDocument } from '../crew/toolCatalog';
 import type { DetailNode, ObjectRef } from './crewDetailsTree';
@@ -55,7 +55,10 @@ export class LiveDocuments implements vscode.TextDocumentContentProvider {
   private readonly changed = new vscode.EventEmitter<vscode.Uri>();
   readonly onDidChange = this.changed.event;
 
-  constructor(private readonly connectTo: () => Connection = () => connect()) {}
+  constructor(
+    private readonly connectTo: () => Connection = () => connect(),
+    private readonly format: () => YamlFormat = yamlFormat,
+  ) {}
 
   async provideTextDocumentContent(uri: vscode.Uri): Promise<string> {
     const target = this.targets.get(uri.toString());
@@ -85,15 +88,16 @@ export class LiveDocuments implements vscode.TextDocumentContentProvider {
   private async render(target: LiveTarget): Promise<string> {
     if (target.kind === 'text') return target.text;
     const { client } = this.connectTo();
+    const format = this.format();
     const kinds = await discoverKinds(client);
     if (target.kind === 'bundle') {
       const details = await loadCrewDetails(client, kinds, target.namespace, target.crew);
-      return bundleObjects(details).map(toLiveYaml).join('---\n');
+      return joinDocuments(bundleObjects(details).map((m) => toLiveYaml(m, format)), format);
     }
     const read = JSON.parse(await client.request('GET', livePath(target.ref, kinds))) as Manifest;
     const object = { ...read, apiVersion: read.apiVersion ?? `${KUBEMOOT_GROUP}/v1alpha1`, kind: read.kind ?? target.ref.kind };
-    if (target.raw) return `# ${target.ref.kind}/${target.ref.name} as the API server holds it, with all its metadata and status.\n${dumpYaml(object)}`;
-    return `${NORMALIZED_NOTE}\n# Show Live YAML (raw) shows everything.\n${normalizedYaml(object)}`;
+    if (target.raw) return `# ${target.ref.kind}/${target.ref.name} as the API server holds it, with all its metadata and status.\n${dumpYaml(object, format)}`;
+    return `${NORMALIZED_NOTE}\n# Show Live YAML (raw) shows everything.\n${normalizedYaml(object, format)}`;
   }
 }
 

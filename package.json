@@ -1117,6 +1117,19 @@
           "minimum": 60,
           "description": "Longest a single turn may stream before CrewForge gives up on it."
         },
+        "crewforge.yamlFormat": {
+          "type": "string",
+          "enum": [
+            "yaml",
+            "kyaml"
+          ],
+          "enumDescriptions": [
+            "Block YAML.",
+            "KYAML, the strict YAML subset `kubectl get -o kyaml` prints: every string quoted, maps in `{ }` and lists in `[ ]`. Still valid YAML."
+          ],
+          "default": "yaml",
+          "markdownDescription": "How **Show Live YAML**, **Show Source YAML**, and **Compare with Live** write objects. `kyaml` writes KYAML, the strict YAML subset `kubectl get -o kyaml` prints, where no value can be read as the wrong type."
+        },
         "crewforge.dashboardUrl": {
           "type": "string",
           "default": "",

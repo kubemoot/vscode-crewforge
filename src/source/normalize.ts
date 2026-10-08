@@ -1,4 +1,4 @@
-import { dumpYaml, type Manifest } from './manifests';
+import { dumpYaml, type Manifest, type YamlFormat } from './manifests';
 
 /** The first line of a normalized document, saying what was left out. */
 export const NORMALIZED_NOTE = '# Normalized: status and the metadata the cluster, Helm, Flux, the operator, and CrewForge add are left out; keys are sorted.';
@@ -27,9 +27,9 @@ export function normalizeForDiff(m: Manifest): Record<string, unknown> {
   return sortKeys({ ...rest, metadata: cleaned }) as Record<string, unknown>;
 }
 
-/** The normalized object as YAML. */
-export function normalizedYaml(m: Manifest): string {
-  return dumpYaml(normalizeForDiff(m));
+/** The normalized object as YAML or KYAML. */
+export function normalizedYaml(m: Manifest, format: YamlFormat = 'yaml'): string {
+  return dumpYaml(normalizeForDiff(m), format);
 }
 
 /** A copy with every object's keys in order; arrays keep their order, since it can matter. */
