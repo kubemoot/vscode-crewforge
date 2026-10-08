@@ -1,5 +1,7 @@
 import * as vscode from 'vscode';
+import { yamlFormat } from '../connection';
 import type { ResourceDrift } from '../source/drift';
+import type { YamlFormat } from '../source/manifests';
 import { chartVersionBanner, NORMALIZED_NOTE, normalizedYaml } from '../source/normalize';
 import type { SourceLocation } from '../source/render';
 
@@ -22,6 +24,8 @@ export class ManifestDocuments implements vscode.TextDocumentContentProvider {
   private readonly changed = new vscode.EventEmitter<vscode.Uri>();
   readonly onDidChange = this.changed.event;
 
+  constructor(private readonly format: () => YamlFormat = yamlFormat) {}
+
   provideTextDocumentContent(uri: vscode.Uri): string {
     return this.texts.get(uri.toString()) ?? '';
   }
@@ -40,8 +44,9 @@ export class ManifestDocuments implements vscode.TextDocumentContentProvider {
     const { namespace, drift } = view;
     const name = `${drift.kind}-${drift.name}.yaml`;
     const header = headerOf(view);
-    const live = this.put(`/live/${namespace}/${name}`, header + (drift.live ? normalizedYaml(drift.live) : '# not deployed\n'), view);
-    const source = this.put(`/source/${namespace}/${name}`, header + (drift.rendered ? normalizedYaml(drift.rendered) : '# not in the source\n'), view);
+    const format = this.format();
+    const live = this.put(`/live/${namespace}/${name}`, header + (drift.live ? normalizedYaml(drift.live, format) : '# not deployed\n'), view);
+    const source = this.put(`/source/${namespace}/${name}`, header + (drift.rendered ? normalizedYaml(drift.rendered, format) : '# not in the source\n'), view);
     const banner = chartVersionBanner(view.versions?.source, view.versions?.deployed);
     const versions = banner ? ` (${banner})` : '';
     const title = `${drift.kind}/${drift.name}: live in ${namespace} vs source${versions}`;
@@ -55,7 +60,7 @@ export class ManifestDocuments implements vscode.TextDocumentContentProvider {
   async showSource(view: ResourceView): Promise<void> {
     const { namespace, drift, at } = view;
     const edit = at ? `# Edit it in ${vscode.Uri.file(at.file).toString()}#L${at.line + 1}\n` : '';
-    const body = drift.rendered ? normalizedYaml(drift.rendered) : '# The source does not render this object; it exists only in the cluster.\n';
+    const body = drift.rendered ? normalizedYaml(drift.rendered, this.format()) : '# The source does not render this object; it exists only in the cluster.\n';
     const uri = this.put(`/rendered/${namespace}/${drift.kind}-${drift.name}.yaml`, `# ${drift.kind}/${drift.name} as the source renders it for ${namespace}\n${edit}${body}`, view);
     const document = await vscode.workspace.openTextDocument(uri);
     await vscode.languages.setTextDocumentLanguage(document, 'yaml');

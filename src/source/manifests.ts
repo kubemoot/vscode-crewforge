@@ -1,11 +1,20 @@
 import { CORE_SCHEMA, dump, loadAll, mergeTag } from 'js-yaml';
+import { toKyaml } from './kyaml';
 
 /** YAML 1.2 plus merge keys (<<), which kubectl and Helm resolve in manifests. */
 const MANIFEST_SCHEMA = CORE_SCHEMA.withTags(mergeTag);
 
-/** YAML as CrewForge shows objects in an editor: long lines kept, no anchors. */
-export function dumpYaml(value: unknown): string {
-  return dump(value, { lineWidth: 120, noRefs: true });
+/** How CrewForge writes an object it shows: block YAML, or KYAML as `kubectl get -o kyaml` prints it. */
+export type YamlFormat = 'yaml' | 'kyaml';
+
+/** YAML as CrewForge shows objects in an editor: long lines kept, no anchors; or one KYAML document. */
+export function dumpYaml(value: unknown, format: YamlFormat = 'yaml'): string {
+  return format === 'kyaml' ? toKyaml(value) : dump(value, { lineWidth: 120, noRefs: true });
+}
+
+/** Joins documents into one stream; KYAML documents open with their own `---`. */
+export function joinDocuments(documents: string[], format: YamlFormat = 'yaml'): string {
+  return documents.join(format === 'kyaml' ? '' : '---\n');
 }
 
 /** A Kubernetes object as it appears in a manifest file or comes back from the API server. */
@@ -58,8 +67,8 @@ export function objectKey(m: Pick<Manifest, 'kind' | 'metadata'>): string {
 export const LAST_APPLIED = 'kubectl.kubernetes.io/last-applied-configuration';
 
 /** YAML of a live object as the API server holds it, less managedFields and kubectl's last-applied copy of the object. */
-export function toLiveYaml(m: Manifest): string {
-  return dumpYaml(stripMetadata(m, ['managedFields']));
+export function toLiveYaml(m: Manifest, format: YamlFormat = 'yaml'): string {
+  return dumpYaml(stripMetadata(m, ['managedFields']), format);
 }
 
 /** A copy of the object without the named metadata fields and kubectl's last-applied annotation; an emptied annotation map goes too. */

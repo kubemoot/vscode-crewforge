@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { loadKubeconfig } from './k8s/kubeconfig';
 import { KubeClient } from './k8s/request';
+import type { YamlFormat } from './source/manifests';
 import { trimEnd } from './text';
 
 /** The cluster CrewForge talks to: which kubeconfig, which context, and a client for it. */
@@ -35,4 +36,9 @@ export function dashboardUrl(): string {
 /** The dashboard URL without a trailing slash, for building paths on it; empty when unset. */
 export function dashboardBase(): string {
   return trimEnd(dashboardUrl(), '/');
+}
+
+/** How the YAML views write objects: `kyaml` when the setting says so, otherwise block YAML. */
+export function yamlFormat(): YamlFormat {
+  return vscode.workspace.getConfiguration('crewforge').get<string>('yamlFormat', 'yaml') === 'kyaml' ? 'kyaml' : 'yaml';
 }
