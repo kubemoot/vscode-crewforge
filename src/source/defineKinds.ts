@@ -188,8 +188,8 @@ const EMBEDDING_MODEL: KindDefinition = {
   section: 'rag',
   questions: [
     nameQuestion('EmbeddingModel'),
-    { key: 'model', type: 'text', title: 'Model', prompt: 'The embedding model the provider serves, such as nomic-embed-text.', value: () => 'nomic-embed-text', check: plainText('a model name') },
-    { key: 'provider', type: 'text', title: 'ModelProvider', prompt: 'The ModelProvider that serves it.', value: (c) => firstField(c, 'Model', (s) => s.providerRef) ?? 'ollama', check: (v) => nameProblem('ModelProvider', v) },
+    { key: 'model', type: 'text', title: 'Model', prompt: 'The embedding model the server serves, such as nomic-embed-text.', value: () => 'nomic-embed-text', check: plainText('a model name') },
+    { key: 'server', type: 'text', title: 'ModelServer', prompt: 'The ModelServer that serves it.', value: (c) => firstField(c, 'Model', (s) => s.serverRef) ?? 'ollama', check: (v) => nameProblem('ModelServer', v) },
     { key: 'dimensions', type: 'text', title: 'Dimensions', prompt: 'The size of the vectors the model makes.', value: () => '768', check: wholeNumber('The dimensions', 65536) },
   ],
   yaml: embeddingModelYaml,
@@ -200,8 +200,8 @@ const MODEL: KindDefinition = {
   section: 'models',
   questions: [
     nameQuestion('Model'),
-    { key: 'model', type: 'text', title: 'Model', prompt: 'The model the provider serves, such as qwen3:8b.', check: plainText('a model name') },
-    { key: 'provider', type: 'text', title: 'ModelProvider', prompt: 'The ModelProvider it runs on.', value: (c) => firstField(c, 'Model', (s) => s.providerRef) ?? 'ollama', check: (v) => nameProblem('ModelProvider', v) },
+    { key: 'model', type: 'text', title: 'Model', prompt: 'The model the server serves, such as qwen3:8b.', check: plainText('a model name') },
+    { key: 'server', type: 'text', title: 'ModelServer', prompt: 'The ModelServer it runs on.', value: (c) => firstField(c, 'Model', (s) => s.serverRef) ?? 'ollama', check: (v) => nameProblem('ModelServer', v) },
     { key: 'capabilities', type: 'text', title: 'Capabilities', prompt: 'The capabilities it offers, comma-separated; the scheduler matches them to the agents\'.', value: () => 'tool-calling', check: tokenList('capability') },
     {
       key: 'latencyClass',

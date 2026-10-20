@@ -27,31 +27,31 @@ const leaves = (d: CrewDetails, section: string) => membersOf((sectionsOf(summar
 const shown = (members: Member[]) => members.map((m) => `${m.view.label}|${m.view.description ?? ''}`);
 
 describe('a live crew with its infrastructure', () => {
-  it('reads every kind it may use: namespace kinds, the system namespace providers, and the cluster-scoped kinds', async () => {
+  it('reads every kind it may use: namespace kinds, the system namespace model servers, and the cluster-scoped kinds', async () => {
     await details();
     const paths = cluster.calls.map((c) => c.path);
-    expect(paths).toContain('/apis/kubemoot.ai/v1alpha1/namespaces/kubemoot/modelproviders');
+    expect(paths).toContain('/apis/kubemoot.ai/v1alpha1/namespaces/kubemoot/modelservers');
     expect(paths).toContain('/apis/kubemoot.ai/v1alpha1/mootarchetypes');
     expect(paths).toContain('/apis/kubemoot.ai/v1alpha1/kubemootconfigs');
     expect(paths).toContain(`/apis/kubemoot.ai/v1alpha1/namespaces/${NS}/notificationsinks`);
     expect(cluster.calls.every((c) => c.method === 'GET')).toBe(true);
   });
 
-  it('shows its Models and the provider they run on, the shared ones marked with their owner', async () => {
+  it('shows its Models and the model server they run on, the shared ones marked with their owner', async () => {
     const d = await details();
     expect(shown(leaves(d, 'models'))).toEqual([
       'big|Model · shared · qwen3:32b · high tier · 32768 context',
       'qwen-8b|Model · qwen3:8b · low tier · 40960 context',
-      'ollama|ModelProvider · shared · ollama · http://ollama:11434',
+      'ollama|ModelServer · shared · ollama · http://ollama:11434',
     ]);
-    const [big, mine, provider] = leaves(d, 'models').map(memberItem);
+    const [big, mine, server] = leaves(d, 'models').map(memberItem);
     expect(big.contextValue).toBe('liveObject-shared');
     expect(big.tooltip).toContain('Shared: owned by crew other. CrewForge shows it read-only.');
     expect(mine).toMatchObject({ contextValue: 'liveObject', command: { command: 'crewforge.showLiveYaml' } });
     expect(mine.tooltip).toContain('Capabilities: tool-calling');
     expect((mine.iconPath as ThemeIcon).id).toBe('pass-filled');
-    expect(provider.tooltip).toContain('ModelProvider kubemoot/ollama');
-    expect(leaves(d, 'models')[2].view.ref).toEqual({ kind: 'ModelProvider', name: 'ollama', namespace: 'kubemoot' });
+    expect(server.tooltip).toContain('ModelServer kubemoot/ollama');
+    expect(leaves(d, 'models')[2].view.ref).toEqual({ kind: 'ModelServer', name: 'ollama', namespace: 'kubemoot' });
   });
 
   it('shows its RAG sources with the embedding model, its MCP infrastructure, policies, notifications, fitness, and the operator', async () => {
@@ -70,13 +70,13 @@ describe('a live crew with its infrastructure', () => {
   });
 
   it('marks a named object that is missing, and one a namespace account cannot read', async () => {
-    cluster.failures.set('/apis/kubemoot.ai/v1alpha1/namespaces/kubemoot/modelproviders', new KubeError('forbidden', 403));
+    cluster.failures.set('/apis/kubemoot.ai/v1alpha1/namespaces/kubemoot/modelservers', new KubeError('forbidden', 403));
     cluster.failures.set('/apis/kubemoot.ai/v1alpha1/mootarchetypes', new KubeError('forbidden', 403));
     const d = await details();
     expect(d.problems).toEqual([]);
-    const provider = leaves(d, 'models')[2];
-    expect(provider.view).toMatchObject({ description: 'ModelProvider · shared · ModelProvider · not found', icon: 'warning', ref: undefined });
-    expect(provider.view.tooltip).toContain('a Model runs on it; this account cannot read it');
+    const server = leaves(d, 'models')[2];
+    expect(server.view).toMatchObject({ description: 'ModelServer · shared · ModelServer · not found', icon: 'warning', ref: undefined });
+    expect(server.view.tooltip).toContain('a Model runs on it; this account cannot read it');
     expect(leaves(d, 'policies')[1].view.tooltip).toContain('the scheduling policy runs it; this account cannot read it');
     expect(missingText(new Set())('Model')).toBe('not found');
   });
@@ -86,7 +86,7 @@ describe('a live crew with its infrastructure', () => {
     expect((await details()).problems).toEqual(['RAGSource: ragsources is forbidden']);
     const system = seedCrew(new FakeCluster(), 'kubemoot');
     await loadCrewDetails(system, await discoverKinds(system), 'kubemoot', 'lab-ops');
-    expect(system.calls.filter((c) => c.path.endsWith('/namespaces/kubemoot/modelproviders'))).toHaveLength(1);
+    expect(system.calls.filter((c) => c.path.endsWith('/namespaces/kubemoot/modelservers'))).toHaveLength(1);
   });
 
   it('reads no cluster-scoped kind the cluster does not serve', async () => {

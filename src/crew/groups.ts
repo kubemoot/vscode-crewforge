@@ -19,7 +19,7 @@ export const GROUPS: Record<Group, GroupInfo> = {
   models: {
     label: 'Models',
     icon: 'chip',
-    rule: "Models in the crew's namespace, which the scheduler may bind its agents to by capability label, then the ModelProviders they run on (the crew's namespace, then kubemoot).",
+    rule: "Models in the crew's namespace, which the scheduler may bind its agents to by capability label, then the ModelServers they run on (the crew's namespace, then kubemoot).",
   },
   rag: { label: 'RAG Sources', icon: 'book', rule: "RAGSources the agents or skills name (or were matched to by keyword) and the crew's own, then the EmbeddingModels they embed with." },
   mcp: {

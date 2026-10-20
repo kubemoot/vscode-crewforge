@@ -44,7 +44,7 @@ export function modelCapabilities(o: Obj): string[] {
     .sort(byCodeUnits);
 }
 
-/** A Model's context length: its spec override, else what the provider reported, else its contextWindow label. */
+/** A Model's context length: its spec override, else what the server reported, else its contextWindow label. */
 export function contextLength(o: Obj): string | undefined {
   const value = num(o.spec?.contextLength) ?? num(obj(o.status?.modelInfo).contextLength) ?? o.metadata.labels?.contextWindow;
   return value === undefined ? undefined : String(value);
@@ -58,7 +58,7 @@ function model(o: Obj): KindFacts {
     description: line(text(o.spec?.model), tier && `${tier} tier`, ctx && `${ctx} context`),
     lines: [
       fact('Model', o.spec?.model),
-      fact('Provider', o.spec?.providerRef),
+      fact('Server', o.spec?.serverRef),
       fact('Capability tier (latencyClass)', tier),
       fact('Capabilities', caps.join(', ') || 'none labeled'),
       fact('Context length', ctx),
@@ -70,7 +70,7 @@ function model(o: Obj): KindFacts {
   };
 }
 
-function provider(o: Obj): KindFacts {
+function server(o: Obj): KindFacts {
   const scheduling = obj(o.spec?.scheduling);
   return {
     description: line(text(o.spec?.type), text(o.spec?.endpoint)),
@@ -84,7 +84,7 @@ function embeddingModel(o: Obj): KindFacts {
   const dims = scalar(o.spec?.dimensions);
   return {
     description: line(text(o.spec?.model), dims !== undefined && `${dims} dimensions`),
-    lines: [fact('Model', o.spec?.model), fact('Provider', o.spec?.providerRef), fact('Dimensions', dims), fact('Batch size', o.spec?.batchSize), fact('State', o.status?.state)].filter(defined),
+    lines: [fact('Model', o.spec?.model), fact('Server', o.spec?.serverRef), fact('Dimensions', dims), fact('Batch size', o.spec?.batchSize), fact('State', o.status?.state)].filter(defined),
     icon: 'symbol-array',
     ready: readyOf(o),
   };
@@ -271,7 +271,7 @@ function config(o: Obj): KindFacts {
 
 const FACTS: Record<string, (o: Obj) => KindFacts> = {
   Model: model,
-  ModelProvider: provider,
+  ModelServer: server,
   EmbeddingModel: embeddingModel,
   RAGSource: ragSource,
   MCPGateway: gateway,

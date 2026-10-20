@@ -25,9 +25,9 @@ const ANSWERS: Record<string, Answers> = {
   Agent: { name: 'k8s-pods', role: 'tooler', capabilities: 'tool-calling, kubernetes', promptRefs: ['rules', 'style'], tools: 'pods_list, events_list' },
   PromptModule: { name: 'rules', form: 'ADL', order: '20' },
   Skill: { name: 'restart', description: 'Restart a crashing pod safely', order: '100' },
-  Model: { name: 'qwen-8b', model: 'qwen3:8b', provider: 'ollama', capabilities: 'tool-calling, reasoning', latencyClass: 'low', contextWindow: '40960' },
+  Model: { name: 'qwen-8b', model: 'qwen3:8b', server: 'ollama', capabilities: 'tool-calling, reasoning', latencyClass: 'low', contextWindow: '40960' },
   RAGSource: { name: 'team-docs', url: 'https://example.com/docs.git', branch: 'main', paths: 'docs/, adr/', embeddingModel: 'nomic', endpoint: 'pg:5432/vectors' },
-  EmbeddingModel: { name: 'nomic', model: 'nomic-embed-text', provider: 'ollama', dimensions: '768' },
+  EmbeddingModel: { name: 'nomic', model: 'nomic-embed-text', server: 'ollama', dimensions: '768' },
   MCPServer: { name: 'search', from: 'image', where: 'ghcr.io/example/search:1.0' },
   CrewSchedulingPolicy: { name: 'lab-scheduling', archetype: 'consent-3' },
   NotificationSink: { name: 'pager', url: 'https://ntfy.example.com/lab' },
@@ -112,7 +112,7 @@ describe('the Add <Kind> commands in the manifest', () => {
 });
 
 describe('the questions of Add <Kind>', () => {
-  const context: DefineContext = { crew: 'lab', objects: [obj('Agent', 'k8s', 'n', { enabledTools: ['b', 'a', 7] }), obj('PromptModule', 'rules', 'n'), obj('Model', 'm', 'n', { providerRef: 'gpu' }), obj('CrewSchedulingPolicy', 'lab-scheduling', 'n', { crewRef: 'lab' })] };
+  const context: DefineContext = { crew: 'lab', objects: [obj('Agent', 'k8s', 'n', { enabledTools: ['b', 'a', 7] }), obj('PromptModule', 'rules', 'n'), obj('Model', 'm', 'n', { serverRef: 'gpu' }), obj('CrewSchedulingPolicy', 'lab-scheduling', 'n', { crewRef: 'lab' })] };
 
   it('check names, lists, numbers, text, and URLs', () => {
     expect(newName('Agent')('k8s', context)).toBe('The source already declares Agent k8s.');
@@ -138,8 +138,8 @@ describe('the questions of Add <Kind>', () => {
   it('offer what the source already uses as defaults and examples, and refuse a second scheduling policy', () => {
     expect(toolsPrompt(context)).toBe('The MCP tools the agent may call, comma-separated; empty for none. The other agents enable: a, b.');
     expect(toolsPrompt({ crew: 'lab', objects: [] })).toBe('The MCP tools the agent may call, comma-separated; empty for none.');
-    expect(defaultOf('Model', 'provider', context)).toBe('gpu');
-    expect(defaultOf('Model', 'provider', { crew: 'lab', objects: [] })).toBe('ollama');
+    expect(defaultOf('Model', 'server', context)).toBe('gpu');
+    expect(defaultOf('Model', 'server', { crew: 'lab', objects: [] })).toBe('ollama');
     expect(DEFINITIONS.CrewSchedulingPolicy.refuse?.(context)).toMatch(/already declares CrewSchedulingPolicy lab-scheduling/);
     expect(DEFINITIONS.CrewSchedulingPolicy.refuse?.({ crew: 'other', objects: context.objects })).toBeUndefined();
     expect(defaultOf('CrewSchedulingPolicy', 'name', context)).toBe('lab-scheduling');

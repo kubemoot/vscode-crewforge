@@ -82,7 +82,7 @@ roleRef:
 # Source: test/templates/models.yaml
 # Model CRs for the crew. The scheduler binds agents to these just-in-time, so a
 # crew needs at least one Model in its namespace to run a discussion. Each Model
-# binds a model name to a ModelProvider and is labeled by capability + latencyClass.
+# binds a model name to a ModelServer and is labeled by capability + latencyClass.
 # These are starting defaults for the chosen family; edit model names/VRAM to match.
 
 ---
@@ -208,8 +208,8 @@ spec:
   # Preferred model family chosen at scaffold time: qwen.
   # To pin it, label your Models (e.g. model/family: qwen) and add
   # that label under require.matchLabels above.
-  # Providers selected at scaffold time: ollama.
-  # Provider allow-listing is a tune-up; by default agents use any ready provider.
+  # Servers selected at scaffold time: ollama.
+  # Server allow-listing is a tune-up; by default agents use any ready server.
 
 ---
 # Source: test/templates/tools.yaml
@@ -281,7 +281,7 @@ metadata:
     capability/reasoning: "true"
 spec:
   model: "qwen3:8b"
-  providerRef: "ollama"
+  serverRef: "ollama"
   vramMib: 5120
 
 ---
@@ -300,7 +300,7 @@ metadata:
     capability/reasoning: "true"
 spec:
   model: "qwen3:14b"
-  providerRef: "ollama"
+  serverRef: "ollama"
   vramMib: 10240
 
 ---
@@ -319,7 +319,7 @@ metadata:
     capability/reasoning: "true"
 spec:
   model: "qwen3:32b"
-  providerRef: "ollama"
+  serverRef: "ollama"
   vramMib: 20480
 
 ---

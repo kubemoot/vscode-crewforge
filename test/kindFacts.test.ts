@@ -9,14 +9,14 @@ const withStatus = (o: Obj, status: Record<string, unknown>): Obj => ({ ...o, st
 
 describe('Model facts', () => {
   it('give the model name, capability tier, and context length, with every capability label on hover', () => {
-    const model = withStatus(obj('Model', 'qwen-8b', NS, { model: 'qwen3:8b', providerRef: 'ollama', vramMib: 5120 }, { latencyClass: 'low', contextWindow: '40960', 'capability/tool-calling': 'true', 'capability/reasoning': 'true', 'capability/off': 'false' }), { ready: true, state: 'Available' });
+    const model = withStatus(obj('Model', 'qwen-8b', NS, { model: 'qwen3:8b', serverRef: 'ollama', vramMib: 5120 }, { latencyClass: 'low', contextWindow: '40960', 'capability/tool-calling': 'true', 'capability/reasoning': 'true', 'capability/off': 'false' }), { ready: true, state: 'Available' });
     const facts = factsOf(related(model));
     expect(facts.description).toBe('qwen3:8b · low tier · 40960 context');
-    expect(facts.lines).toEqual(['Model: qwen3:8b', 'Provider: ollama', 'Capability tier (latencyClass): low', 'Capabilities: reasoning, tool-calling', 'Context length: 40960', 'VRAM (MiB): 5120', 'State: Available']);
+    expect(facts.lines).toEqual(['Model: qwen3:8b', 'Server: ollama', 'Capability tier (latencyClass): low', 'Capabilities: reasoning, tool-calling', 'Context length: 40960', 'VRAM (MiB): 5120', 'State: Available']);
     expect(facts).toMatchObject({ icon: 'chip', ready: true });
   });
 
-  it('take the context length from the spec, then what the provider reported, then the label', () => {
+  it('take the context length from the spec, then what the server reported, then the label', () => {
     expect(contextLength(obj('Model', 'm', NS, { contextLength: 8192 }, { contextWindow: '1' }))).toBe('8192');
     expect(contextLength(withStatus(obj('Model', 'm', NS, {}, { contextWindow: '1' }), { modelInfo: { contextLength: 4096 } }))).toBe('4096');
     expect(contextLength(obj('Model', 'm', NS, {}, { contextWindow: '1' }))).toBe('1');
@@ -64,18 +64,18 @@ describe('RAG facts', () => {
   });
 
   it('describe an embedding model', () => {
-    const facts = factsOf(related(obj('EmbeddingModel', 'nomic', NS, { model: 'nomic-embed-text', providerRef: 'ollama', dimensions: 768, batchSize: 32 })));
+    const facts = factsOf(related(obj('EmbeddingModel', 'nomic', NS, { model: 'nomic-embed-text', serverRef: 'ollama', dimensions: 768, batchSize: 32 })));
     expect(facts.description).toBe('nomic-embed-text · 768 dimensions');
-    expect(facts.lines).toEqual(['Model: nomic-embed-text', 'Provider: ollama', 'Dimensions: 768', 'Batch size: 32']);
+    expect(facts.lines).toEqual(['Model: nomic-embed-text', 'Server: ollama', 'Dimensions: 768', 'Batch size: 32']);
     expect(factsOf(related(obj('EmbeddingModel', 'e', NS, { model: 'm' }))).description).toBe('m');
   });
 });
 
-describe('MCP and provider facts', () => {
-  it('describe a provider, a gateway, a quality policy, a catalog, and a report', () => {
-    const provider = factsOf(related(withStatus(obj('ModelProvider', 'ollama', 'kubemoot', { type: 'ollama', endpoint: 'http://o:11434', scheduling: { weight: 100, memoryMiB: 24000 } }), { ready: false, phase: 'Pending' })));
-    expect(provider).toMatchObject({ description: 'ollama · http://o:11434', ready: false });
-    expect(provider.lines).toEqual(['Type: ollama', 'Endpoint: http://o:11434', 'Weight: 100', 'Memory budget (MiB): 24000', 'Phase: Pending']);
+describe('MCP and model server facts', () => {
+  it('describe a model server, a gateway, a quality policy, a catalog, and a report', () => {
+    const server = factsOf(related(withStatus(obj('ModelServer', 'ollama', 'kubemoot', { type: 'ollama', endpoint: 'http://o:11434', scheduling: { weight: 100, memoryMiB: 24000 } }), { ready: false, phase: 'Pending' })));
+    expect(server).toMatchObject({ description: 'ollama · http://o:11434', ready: false });
+    expect(server.lines).toEqual(['Type: ollama', 'Endpoint: http://o:11434', 'Weight: 100', 'Memory budget (MiB): 24000', 'Phase: Pending']);
 
     const gateway = factsOf(related(withStatus(obj('MCPGateway', 'gw', NS, { port: 9090, qualityPolicyRef: 'q', catalogRefs: ['c'] }), { ready: true, mcpServers: ['a', 'b'] })));
     expect(gateway.description).toBe('kubemoot · 2 servers');

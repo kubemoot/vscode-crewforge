@@ -44,7 +44,7 @@ describe('who owns an object', () => {
   it('names the owner of a shared object: its crew, its release, its namespace, or the cluster', () => {
     expect(ownerOf(obj('Model', 'a', NS, {}, { 'kubemoot.ai/crew': 'other' }))).toBe('crew other');
     expect(ownerOf(obj('Model', 'a', NS, {}, { 'app.kubernetes.io/instance': 'x' }))).toBe('release x');
-    expect(ownerOf(obj('ModelProvider', 'p', 'kubemoot'))).toBe('namespace kubemoot');
+    expect(ownerOf(obj('ModelServer', 'p', 'kubemoot'))).toBe('namespace kubemoot');
     expect(ownerOf({ apiVersion: 'kubemoot.ai/v1alpha1', kind: 'MootArchetype', metadata: { name: 'consent-3' } })).toBe('the cluster');
   });
 
@@ -55,30 +55,30 @@ describe('who owns an object', () => {
 });
 
 describe('Models', () => {
-  it('lists every Model in the namespace, own or shared, then the providers they run on, from the namespace before the system namespace', () => {
+  it('lists every Model in the namespace, own or shared, then the model servers they run on, from the namespace before the system namespace', () => {
     const items = modelsOf(
       input([
-        obj('Model', 'mine', NS, { providerRef: 'local' }, RELEASE),
-        obj('Model', 'theirs', NS, { providerRef: 'ollama' }, { 'kubemoot.ai/crew': 'other' }),
-        obj('Model', 'elsewhere', 'team-b', { providerRef: 'x' }),
+        obj('Model', 'mine', NS, { serverRef: 'local' }, RELEASE),
+        obj('Model', 'theirs', NS, { serverRef: 'ollama' }, { 'kubemoot.ai/crew': 'other' }),
+        obj('Model', 'elsewhere', 'team-b', { serverRef: 'x' }),
         obj('Model', 'bare', NS, {}, RELEASE),
-        obj('ModelProvider', 'local', NS, {}, RELEASE),
-        obj('ModelProvider', 'ollama', 'kubemoot'),
-        obj('ModelProvider', 'ollama', 'other-ns'),
+        obj('ModelServer', 'local', NS, {}, RELEASE),
+        obj('ModelServer', 'ollama', 'kubemoot'),
+        obj('ModelServer', 'ollama', 'other-ns'),
       ]),
     );
     expect(summary(items)).toEqual([
       'Model/bare|own|declared for this crew|found',
       'Model/mine|own|declared for this crew|found',
       'Model/theirs|crew other|in the namespace, so the scheduler may bind it|found',
-      'ModelProvider/local|own|a Model runs on it|found',
-      'ModelProvider/ollama|namespace kubemoot|a Model runs on it|found',
+      'ModelServer/local|own|a Model runs on it|found',
+      'ModelServer/ollama|namespace kubemoot|a Model runs on it|found',
     ]);
   });
 
-  it('keeps a provider no namespace has as missing and shared with the cluster, saying why', () => {
-    const items = modelsOf(input([obj('Model', 'm', NS, { providerRef: 'gone' }, RELEASE)], { missing: (k) => `${k} cannot be read` }));
-    expect(summary(items).at(-1)).toBe('ModelProvider/gone|the cluster|a Model runs on it; ModelProvider cannot be read|missing');
+  it('keeps a model server no namespace has as missing and shared with the cluster, saying why', () => {
+    const items = modelsOf(input([obj('Model', 'm', NS, { serverRef: 'gone' }, RELEASE)], { missing: (k) => `${k} cannot be read` }));
+    expect(summary(items).at(-1)).toBe('ModelServer/gone|the cluster|a Model runs on it; ModelServer cannot be read|missing');
   });
 });
 

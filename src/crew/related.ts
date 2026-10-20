@@ -11,7 +11,7 @@ const INSTANCE_LABEL = 'app.kubernetes.io/instance';
 /** The archetype a CrewSchedulingPolicy runs when it names none (the CRD default). */
 export const DEFAULT_ARCHETYPE = 'consent-3';
 
-/** The namespace the operator looks in for a ModelProvider after the crew's own. */
+/** The namespace the operator looks in for a ModelServer after the crew's own. */
 export const SYSTEM_NAMESPACE = 'kubemoot';
 
 export type Obj = Manifest & { spec?: Record<string, unknown>; status?: Record<string, unknown> };
@@ -37,7 +37,7 @@ export type RelatedGroups = Record<RelatedGroup, Related[]>;
 
 /**
  * Where relations are looked up. `pool` holds every object of each kind that was read:
- * the crew's namespace (and the system namespace, for ModelProviders) for a live crew,
+ * the crew's namespace (and the system namespace, for ModelServers) for a live crew,
  * the rendered objects for a source. `own` says whether an object is the crew's own.
  * `missing` says why a named object is not there.
  */
@@ -100,22 +100,22 @@ const named = (names: string[], reason: string) => new Map(names.map((n) => [n, 
 
 /**
  * The Models the scheduler may bind the crew's agents to (every Model in the namespace,
- * since it lists them there), then the ModelProviders they name, looked up in the crew's
+ * since it lists them there), then the ModelServers they name, looked up in the crew's
  * namespace and then the system namespace, as the operator does.
  */
 export function modelsOf(input: RelationInput): Related[] {
   const models = (input.pool.get('Model') ?? []).filter((m) => m.metadata.namespace === input.namespace);
   const modelItems = models.map((m) => found(m, input, input.own(m) ? 'declared for this crew' : 'in the namespace, so the scheduler may bind it')).sort(byName);
-  const providerNames = [...new Set(models.map((m) => text(m.spec?.providerRef)).filter((p): p is string => p !== undefined))].sort(byCodeUnits);
-  return [...modelItems, ...providerNames.map((name) => providerOf(input, name))];
+  const serverNames = [...new Set(models.map((m) => text(m.spec?.serverRef)).filter((s): s is string => s !== undefined))].sort(byCodeUnits);
+  return [...modelItems, ...serverNames.map((name) => serverOf(input, name))];
 }
 
-function providerOf(input: RelationInput, name: string): Related {
-  const all = input.pool.get('ModelProvider') ?? [];
+function serverOf(input: RelationInput, name: string): Related {
+  const all = input.pool.get('ModelServer') ?? [];
   const reason = 'a Model runs on it';
   const o = [input.namespace, SYSTEM_NAMESPACE].map((ns) => all.find((p) => p.metadata.name === name && p.metadata.namespace === ns)).find(Boolean);
   if (o) return found(o, input, reason);
-  return { kind: 'ModelProvider', name, reason: `${reason}; ${input.missing('ModelProvider')}`, sharedBy: 'the cluster' };
+  return { kind: 'ModelServer', name, reason: `${reason}; ${input.missing('ModelServer')}`, sharedBy: 'the cluster' };
 }
 
 /** The RAGSources the agents and skills name or were matched to, and the crew's own; then the EmbeddingModels they embed with. */

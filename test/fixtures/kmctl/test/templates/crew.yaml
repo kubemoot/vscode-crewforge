@@ -39,5 +39,5 @@ spec:
   # Preferred model family chosen at scaffold time: qwen.
   # To pin it, label your Models (e.g. model/family: qwen) and add
   # that label under require.matchLabels above.
-  # Providers selected at scaffold time: ollama.
-  # Provider allow-listing is a tune-up; by default agents use any ready provider.
+  # Servers selected at scaffold time: ollama.
+  # Server allow-listing is a tune-up; by default agents use any ready server.

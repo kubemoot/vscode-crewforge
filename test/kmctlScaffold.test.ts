@@ -10,7 +10,7 @@ import { FakeCluster } from './fakeCluster';
 import { resetFake } from './vscodeFake';
 
 /**
- * A crew scaffolded by `kmctl create test --chart --members 2 --model-family qwen --providers ollama --no-input`,
+ * A crew scaffolded by `kmctl create test --chart --members 2 --model-family qwen --servers ollama --no-input`,
  * and what `helm template test <chart> --namespace default` renders from it.
  */
 const SCAFFOLD = path.join(__dirname, 'fixtures', 'kmctl', 'test');
@@ -68,7 +68,7 @@ describe('an undeployed kmctl scaffold in Crew Sources', () => {
       'qwen-14b-ollama|Model · qwen3:14b · medium tier · 40960 context',
       'qwen-32b-ollama|Model · qwen3:32b · high tier · 40960 context',
       'qwen-8b-ollama|Model · qwen3:8b · low tier · 40960 context',
-      'ollama|ModelProvider · shared, installed elsewhere',
+      'ollama|ModelServer · shared, installed elsewhere',
     ]);
     expect(models[0].contextValue).toBe('declared-object');
     expect(models[3].contextValue).toBe('declared');
