@@ -668,7 +668,7 @@
          "type": "array"
         },
         "topologyKey": {
-         "default": "provider",
+         "default": "server",
          "type": "string"
         },
         "whenUnsatisfiable": {
@@ -815,13 +815,13 @@
       "model": {
        "type": "string"
       },
-      "providerRef": {
+      "serverRef": {
        "type": "string"
       }
      },
      "required": [
       "model",
-      "providerRef"
+      "serverRef"
      ],
      "type": "object"
     },
@@ -2538,7 +2538,7 @@
       "model": {
        "type": "string"
       },
-      "providerRef": {
+      "serverRef": {
        "type": "string"
       },
       "quantization": {
@@ -2552,7 +2552,7 @@
      },
      "required": [
       "model",
-      "providerRef"
+      "serverRef"
      ],
      "type": "object"
     },

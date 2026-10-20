@@ -13,7 +13,7 @@ export const KINDS: Record<string, string> = {
   Skill: 'skills',
   MCPServer: 'mcpservers',
   CrewSchedulingPolicy: 'crewschedulingpolicies',
-  ModelProvider: 'modelproviders',
+  ModelServer: 'modelservers',
   EmbeddingModel: 'embeddingmodels',
   RAGSource: 'ragsources',
   MCPGateway: 'mcpgateways',
@@ -168,18 +168,18 @@ export function seedCrew(cluster: FakeCluster, namespace = 'team-a'): FakeCluste
 
 /**
  * What a crew uses beyond its members, as a cluster holds it: a Model of the crew and one
- * of another crew, the ModelProvider they run on in the system namespace, a RAGSource the
+ * of another crew, the ModelServer they run on in the system namespace, a RAGSource the
  * coordinator names with its EmbeddingModel, the namespace's MCPGateway with a quality
  * policy, a NotificationSink, a fitness suite, the consent-3 archetype, and the
  * operator's KubemootConfig. The gateway's tool catalog answers through the service proxy.
  */
 export function seedInfrastructure(cluster: FakeCluster, namespace = 'team-a'): FakeCluster {
   const release = { 'app.kubernetes.io/instance': 'lab' };
-  const own = obj('Model', 'qwen-8b', namespace, { model: 'qwen3:8b', providerRef: 'ollama', vramMib: 5120 }, { ...release, latencyClass: 'low', contextWindow: '40960', 'capability/tool-calling': 'true' });
+  const own = obj('Model', 'qwen-8b', namespace, { model: 'qwen3:8b', serverRef: 'ollama', vramMib: 5120 }, { ...release, latencyClass: 'low', contextWindow: '40960', 'capability/tool-calling': 'true' });
   own.status = { ready: true, state: 'Available' };
-  const other = obj('Model', 'big', namespace, { model: 'qwen3:32b', providerRef: 'ollama', contextLength: 32768 }, { 'kubemoot.ai/crew': 'other', latencyClass: 'high' });
-  const provider = obj('ModelProvider', 'ollama', 'kubemoot', { type: 'ollama', endpoint: 'http://ollama:11434', scheduling: { weight: 100 } });
-  provider.status = { ready: true, phase: 'Ready' };
+  const other = obj('Model', 'big', namespace, { model: 'qwen3:32b', serverRef: 'ollama', contextLength: 32768 }, { 'kubemoot.ai/crew': 'other', latencyClass: 'high' });
+  const server = obj('ModelServer', 'ollama', 'kubemoot', { type: 'ollama', endpoint: 'http://ollama:11434', scheduling: { weight: 100 } });
+  server.status = { ready: true, phase: 'Ready' };
   const rag = obj('RAGSource', 'docs', namespace, { source: { type: 'git', git: { url: 'https://example.com/docs.git', branch: 'main', paths: ['docs/'] } }, embeddingModelRef: 'nomic', vectorStore: { type: 'pgvector', endpoint: 'pg:5432/v', collection: 'docs' }, chunking: { chunkSize: 800 } }, release);
   rag.status = { ready: true, phase: 'Ready', indexingStats: { lastIndexed: '2026-09-30T08:00:00Z', documentCount: 12 } };
   const gateway = obj('MCPGateway', 'lab-gateway', namespace, { implementation: 'kubemoot', qualityPolicyRef: 'lab-quality' }, release);
@@ -193,8 +193,8 @@ export function seedInfrastructure(cluster: FakeCluster, namespace = 'team-a'): 
   return cluster.add(
     own,
     other,
-    provider,
-    obj('EmbeddingModel', 'nomic', namespace, { model: 'nomic-embed-text', providerRef: 'ollama', dimensions: 768 }, release),
+    server,
+    obj('EmbeddingModel', 'nomic', namespace, { model: 'nomic-embed-text', serverRef: 'ollama', dimensions: 768 }, release),
     rag,
     gateway,
     obj('MCPServer', 'helm-tools', namespace, {}),

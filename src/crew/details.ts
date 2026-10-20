@@ -77,7 +77,7 @@ export interface CrewDetails {
   tools: ToolInfo[];
   /** The MootArchetype of the crew's CrewSchedulingPolicy, when it has one. */
   archetype?: string;
-  /** Models and providers, RAG sources, MCP infrastructure, policies, notifications, fitness, and the operator's defaults. */
+  /** Models and model servers, RAG sources, MCP infrastructure, policies, notifications, fitness, and the operator's defaults. */
   related: RelatedGroups;
   /** The MCPGateway the agents call tools through: the first in the namespace by name, as the operator wires it. */
   gateway?: Manifest;
@@ -241,28 +241,28 @@ async function listClusterKind(client: KubeTransport, kinds: Map<string, Kubemoo
 const MEMBER_KINDS = ['Agent', 'Skill', 'PromptModule', 'MCPServer', 'CrewSchedulingPolicy'] as const;
 
 /** The kinds in the crew's namespace whose objects the crew may use beyond its members. */
-const NAMESPACE_KINDS = ['Model', 'ModelProvider', 'EmbeddingModel', 'RAGSource', 'MCPGateway', 'MCPQualityPolicy', 'MCPCatalog', 'MCPServerReport', 'NotificationSink', 'CrewFitness', 'CrewFitnessSuite'] as const;
+const NAMESPACE_KINDS = ['Model', 'ModelServer', 'EmbeddingModel', 'RAGSource', 'MCPGateway', 'MCPQualityPolicy', 'MCPCatalog', 'MCPServerReport', 'NotificationSink', 'CrewFitness', 'CrewFitnessSuite'] as const;
 
 /** Cluster-scoped kinds a crew uses: its archetype and the operator's defaults. */
 const CLUSTER_KINDS = ['MootArchetype', 'KubemootConfig'] as const;
 
 /**
  * Reads every kind a crew may use. A failure to read a kind in the crew's namespace is a
- * problem to show; one outside it (the system namespace's ModelProviders, cluster-scoped
+ * problem to show; one outside it (the system namespace's ModelServers, cluster-scoped
  * kinds) only makes those objects unknown, since a namespace account may not see them.
  */
 async function readPool(client: KubeTransport, kinds: Map<string, KubemootKind>, namespace: string): Promise<{ pool: Map<string, Obj[]>; problems: string[]; unreadable: Set<string> }> {
-  const system = namespace === SYSTEM_NAMESPACE ? Promise.resolve<Listed>({ items: [] }) : listOptional(client, kinds, 'ModelProvider', SYSTEM_NAMESPACE);
-  const [local, providers, cluster] = await Promise.all([
+  const system = namespace === SYSTEM_NAMESPACE ? Promise.resolve<Listed>({ items: [] }) : listOptional(client, kinds, 'ModelServer', SYSTEM_NAMESPACE);
+  const [local, servers, cluster] = await Promise.all([
     Promise.all(NAMESPACE_KINDS.map((k) => listOptional(client, kinds, k, namespace))),
     system,
     Promise.all(CLUSTER_KINDS.map((k) => listClusterKind(client, kinds, k))),
   ]);
   const pool = new Map<string, Obj[]>(NAMESPACE_KINDS.map((k, i) => [k, local[i].items]));
-  pool.set('ModelProvider', [...(pool.get('ModelProvider') ?? []), ...providers.items]);
+  pool.set('ModelServer', [...(pool.get('ModelServer') ?? []), ...servers.items]);
   for (const [i, k] of CLUSTER_KINDS.entries()) pool.set(k, cluster[i].items);
   const unreadable = new Set<string>();
-  if (providers.problem) unreadable.add('ModelProvider');
+  if (servers.problem) unreadable.add('ModelServer');
   for (const [i, k] of CLUSTER_KINDS.entries()) if (cluster[i].problem) unreadable.add(k);
   return { pool, problems: local.map((l) => l.problem).filter((p): p is string => p !== undefined), unreadable };
 }

@@ -138,7 +138,7 @@ export function ragSourceYaml(style: SourceStyle, a: Answers): string {
 }
 
 export function embeddingModelYaml(style: SourceStyle, a: Answers): string {
-  return [...head(style, 'EmbeddingModel', one(a, 'name')), 'spec:', `  model: ${quoted(one(a, 'model'))}`, `  providerRef: ${one(a, 'provider')}`, `  dimensions: ${Number(one(a, 'dimensions'))}`, ''].join('\n');
+  return [...head(style, 'EmbeddingModel', one(a, 'name')), 'spec:', `  model: ${quoted(one(a, 'model'))}`, `  serverRef: ${one(a, 'server')}`, `  dimensions: ${Number(one(a, 'dimensions'))}`, ''].join('\n');
 }
 
 /** A Model labeled the way the scheduler selects Models: capability labels, a latency class, and a context window. */
@@ -147,7 +147,7 @@ export function modelYaml(style: SourceStyle, a: Answers): string {
   const context = one(a, 'contextWindow');
   if (context) labels.contextWindow = context;
   for (const cap of many(a, 'capabilities')) labels[`capability/${cap}`] = 'true';
-  return [...head(style, 'Model', one(a, 'name'), labels), 'spec:', `  model: ${quoted(one(a, 'model'))}`, `  providerRef: ${quoted(one(a, 'provider'))}`, ''].join('\n');
+  return [...head(style, 'Model', one(a, 'name'), labels), 'spec:', `  model: ${quoted(one(a, 'model'))}`, `  serverRef: ${quoted(one(a, 'server'))}`, ''].join('\n');
 }
 
 /** A CrewSchedulingPolicy in the shape of the kmctl scaffold's: a quality bias per capability, and tool-calling Models for mulling and triage. */

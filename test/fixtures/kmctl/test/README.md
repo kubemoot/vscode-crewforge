@@ -70,7 +70,7 @@ same question: the answer now ends with that line.
   its tests; CrewForge runs them from the live crew.
 
 Model family: `qwen`.
-Model providers: `ollama`.
+Model servers: `ollama`.
 
 ## What it can read
 

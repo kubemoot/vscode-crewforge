@@ -14,7 +14,7 @@ and run its fitness scenarios, all from the editor.
 It works through your kubeconfig, the same way `kmctl` does: any cluster your `kubectl` can
 reach works, no crew needs a public address, and no extra credential is involved.
 
-![The Kubemoot view in VS Code: Deployed Crews lists the Help Desk crew (helpdesk in crew-helpdesk) with its Models open, including the shared ollama ModelProvider, and Crew Sources lists its chart in the workspace, deployed and in sync, with the same groups.](docs/screenshots/views.png)
+![The Kubemoot view in VS Code: Deployed Crews lists the Help Desk crew (helpdesk in crew-helpdesk) with its Models open, including the shared ollama ModelServer, and Crew Sources lists its chart in the workspace, deployed and in sync, with the same groups.](docs/screenshots/views.png)
 
 ## Install
 
@@ -38,7 +38,7 @@ setting, else `KUBECONFIG`, else `~/.kube/config`.
    agent reports as it works, then the crew's answer follows, with how long it took.
 3. Expand a crew to see every part of it: Agents, Prompts, Skills, Models, RAG Sources,
    MCP Servers, Tools, Policies, Notifications, Fitness, and Deployment. Objects the crew
-   shares with others, such as a cluster's ModelProvider, are marked *shared*. Click a
+   shares with others, such as a cluster's ModelServer, are marked *shared*. Click a
    crew, deployed or in your workspace, for its dashboard: **Overview**, **Source**,
    **Live**, and **Diff** tabs.
 4. Right-click a folder in the Explorer and choose **New Kubemoot Crew Here** to scaffold

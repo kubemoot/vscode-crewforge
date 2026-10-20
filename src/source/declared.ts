@@ -86,7 +86,7 @@ export async function declarationsOf(located: Located[], fitness: Located[], rea
 }
 
 /** Kinds that are cluster infrastructure: a source names them but Kubemoot or the cluster's owner installs them. */
-const INSTALLED_ELSEWHERE = new Set(['ModelProvider', 'MootArchetype', 'KubemootConfig']);
+const INSTALLED_ELSEWHERE = new Set(['ModelServer', 'MootArchetype', 'KubemootConfig']);
 
 /** The objects a source relates to its crew, found among what it renders; everything it renders is its own. */
 function sourceRelated(located: Located[], crew: Manifest | undefined, agents: Obj[], skills: Obj[]) {

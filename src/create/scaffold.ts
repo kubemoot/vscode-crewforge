@@ -14,8 +14,8 @@ export interface CreateCrewRequest {
 
 /**
  * The kmctl command that scaffolds a crew as a Helm chart. kmctl owns the crew
- * templates; CrewForge only asks for them. With no providers given, kmctl uses every
- * ModelProvider it finds through the kubeconfig.
+ * templates; CrewForge only asks for them. With no servers given, kmctl uses every
+ * ModelServer it finds through the kubeconfig.
  */
 export function createArgs(request: CreateCrewRequest, context?: string): string[] {
   const args = ['create', request.name, '--display-name', request.displayName, '--chart', '--no-input', '--members', String(request.members), '-o', request.parent];

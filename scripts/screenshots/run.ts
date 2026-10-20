@@ -47,7 +47,7 @@ function run(cmd: string, args: string[], cwd: string): string {
 /** A git workspace holding a crew chart scaffolded by kmctl, committed as it came. */
 function scaffold(workspace: string): string {
   fs.mkdirSync(workspace, { recursive: true });
-  run('kmctl', ['create', CREW, '--display-name', DISPLAY_NAME, '--chart', '--members', '2', '--model-family', 'qwen', '--providers', 'ollama', '--no-input', '-o', workspace], workspace);
+  run('kmctl', ['create', CREW, '--display-name', DISPLAY_NAME, '--chart', '--members', '2', '--model-family', 'qwen', '--servers', 'ollama', '--no-input', '-o', workspace], workspace);
   const git = (...args: string[]) => run('git', ['-c', 'user.name=Docs', '-c', 'user.email=docs@example.org', ...args], workspace);
   git('init', '-q', '-b', 'main');
   git('remote', 'add', 'origin', REPO_URL);
@@ -74,12 +74,12 @@ function deployedCrew(chart: string): FakeCluster {
   return cluster.add(...fitnessRuns(), ...sharedInfrastructure());
 }
 
-/** What the cluster shares with every crew: the ModelProvider the Models run on, and the consent-3 archetype. */
+/** What the cluster shares with every crew: the ModelServer the Models run on, and the consent-3 archetype. */
 function sharedInfrastructure(): Manifest[] {
-  const provider = obj('ModelProvider', 'ollama', 'kubemoot', { type: 'ollama', endpoint: 'http://ollama.kubemoot:11434' });
-  provider.status = { ready: true, phase: 'Ready' };
+  const server = obj('ModelServer', 'ollama', 'kubemoot', { type: 'ollama', endpoint: 'http://ollama.kubemoot:11434' });
+  server.status = { ready: true, phase: 'Ready' };
   const archetype: Manifest = { apiVersion: 'kubemoot.ai/v1alpha1', kind: 'MootArchetype', metadata: { name: 'consent-3' }, spec: { phases: [{ name: 'triage' }, { name: 'mulling' }, { name: 'synthesis' }] } };
-  return [provider, archetype];
+  return [server, archetype];
 }
 
 function markDeployed(crew: Manifest): void {
