@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { createCrewCommand, CREW_SIZES, DEPLOY_NEXT, showCreatedCrew } from '../src/create/createCrew';
+import { createCrewCommand, CREW_SIZES, DEPLOY_NEXT, showCreatedCrew, SIZE_QUESTION } from '../src/create/createCrew';
 import type { SourceNode } from '../src/views/sourceTree';
 import { atLeast, compareVersions, createArgs, KMCTL_MIN_BUILD, KMCTL_MIN_VERSION, kmctlProblem, parseVersion, scaffoldCrew } from '../src/create/scaffold';
 import type { Exec, ExecOptions } from '../src/source/render';
@@ -116,19 +116,19 @@ describe('kmctl version check', () => {
 });
 
 describe('createArgs', () => {
-  it('asks kmctl for a chart without prompts, with the family and context when given', () => {
+  it('asks kmctl for a chart without prompts, with the context when given, and names no model or model server', () => {
     expect(createArgs({ name: 'demo', displayName: 'Demo', parent: '/w', members: 2 })).toEqual(['create', 'demo', '--display-name', 'Demo', '--chart', '--no-input', '--members', '2', '-o', '/w']);
-    expect(createArgs({ name: 'demo', displayName: 'Demo', parent: '/w', members: 1, modelFamily: 'qwen' }, 'lab')).toEqual([
-      'create', 'demo', '--display-name', 'Demo', '--chart', '--no-input', '--members', '1', '-o', '/w', '--model-family', 'qwen', '--context', 'lab',
-    ]);
+    const args = createArgs({ name: 'demo', displayName: 'Demo', parent: '/w', members: 1 }, 'lab');
+    expect(args).toEqual(['create', 'demo', '--display-name', 'Demo', '--chart', '--no-input', '--members', '1', '-o', '/w', '--context', 'lab']);
+    expect(args.filter((a) => /model|server/.test(a))).toEqual([]);
   });
 });
 
 describe('scaffoldCrew', () => {
   it('runs kmctl with the kubeconfig and returns the chart folder and warnings', async () => {
-    answer = { code: 0, stdout: 'ok', stderr: 'warning: no Models were generated\n' };
+    answer = { code: 0, stdout: 'ok', stderr: "\nwarning: no model in the cluster's model catalog can call tools\n" };
     const out = await scaffoldCrew(exec, { name: 'demo', displayName: 'demo', parent: '/w', members: 1 }, { source: '/k/config', context: 'lab' });
-    expect(out).toEqual({ root: '/w/demo', warnings: 'warning: no Models were generated' });
+    expect(out).toEqual({ root: '/w/demo', warnings: "warning: no model in the cluster's model catalog can call tools" });
     expect(ran[0]).toMatchObject({ command: 'kmctl', options: { env: { KUBECONFIG: '/k/config' }, cwd: '/w' } });
     await scaffoldCrew(exec, { name: 'demo', displayName: 'demo', parent: '/w', members: 1 });
     expect(ran[1].options?.env).toBeUndefined();
@@ -149,22 +149,25 @@ describe('createCrewCommand', () => {
 
   beforeEach(() => (created = []));
 
-  it('asks for the folder, name, size, and family, scaffolds, and hands over the new chart', async () => {
+  it('asks for the folder, name, and size only, scaffolds, and hands over the new chart', async () => {
     recorded.workspaceFolders = [{ name: 'crews', uri: Uri.file('/w') }];
     recorded.inputs.push('Demo', 'demo');
-    recorded.quickPicks.push(first, (items: { label: string }[]) => items[1], first);
-    answer = { code: 0, stdout: '', stderr: 'warning: check models' };
+    recorded.quickPicks.push(first, (items: { label: string }[]) => items[1]);
+    answer = { code: 0, stdout: '', stderr: 'warning: check the catalog' };
     await run();
-    expect(ran[0].args).toEqual(['create', 'demo', '--display-name', 'Demo', '--chart', '--no-input', '--members', '2', '-o', '/w', '--model-family', 'qwen', '--context', 'lab']);
+    expect(ran[0].args).toEqual(['create', 'demo', '--display-name', 'Demo', '--chart', '--no-input', '--members', '2', '-o', '/w', '--context', 'lab']);
     expect(created).toEqual(['/w/demo']);
-    expect(recorded.warnings).toEqual(['warning: check models']);
+    expect(recorded.warnings).toEqual(['warning: check the catalog']);
+    expect(recorded.quickPickPlaceholders).toHaveLength(2);
+    expect(recorded.quickPickPlaceholders[1]).toBe(SIZE_QUESTION);
+    expect(SIZE_QUESTION).toContain("the cluster's model catalog");
   });
 
   it('offers the starter crew from 1 to 5 specialists, each size naming what it adds, and passes the size on', async () => {
     recorded.workspaceFolders = [{ name: 'crews', uri: Uri.file('/w') }];
     recorded.inputs.push('Demo', 'demo');
     let offered: { label: string; description?: string }[] = [];
-    recorded.quickPicks.push(first, (items: typeof offered) => ((offered = items), items[4]), first);
+    recorded.quickPicks.push(first, (items: typeof offered) => ((offered = items), items[4]));
     await run();
     expect(offered).toEqual(CREW_SIZES);
     expect(offered.map((i) => i.label)).toEqual(['1', '2', '3', '4', '5']);
@@ -174,7 +177,7 @@ describe('createCrewCommand', () => {
 
   it('creates in the Explorer folder of New Kubemoot Crew Here without asking for a folder', async () => {
     recorded.inputs.push('Demo', 'demo');
-    recorded.quickPicks.push(first, first);
+    recorded.quickPicks.push(first);
     await run('/w/crews/team');
     expect(ran[0].args).toContain('/w/crews/team');
     expect(created).toEqual(['/w/crews/team/demo']);
@@ -184,7 +187,7 @@ describe('createCrewCommand', () => {
     recorded.workspaceFolders = [{ name: 'a', uri: Uri.file('/a') }, { name: 'b', uri: Uri.file('/b') }];
     recorded.activeEditor = { document: { uri: Uri.file('/b/sub/notes.md'), languageId: 'markdown', getText: () => '' }, selection: undefined };
     let offered: { detail?: string; description?: string; label: string }[] = [];
-    recorded.quickPicks.push((items: typeof offered) => ((offered = items), items[0]), first, first);
+    recorded.quickPicks.push((items: typeof offered) => ((offered = items), items[0]), first);
     recorded.inputs.push('Demo', 'demo');
     await run();
     expect(offered.map((i) => i.detail)).toEqual(['/b/sub', '/a', '/b', undefined]);
@@ -192,7 +195,7 @@ describe('createCrewCommand', () => {
     expect(offered.at(-1)?.label).toContain('Browse');
     expect(created).toEqual(['/b/sub/demo']);
     recorded.openDialog = [Uri.file('/elsewhere')];
-    recorded.quickPicks.push((items: typeof offered) => items.at(-1), first, first);
+    recorded.quickPicks.push((items: typeof offered) => items.at(-1), first);
     recorded.inputs.push('Demo', 'demo');
     await run();
     expect(created.at(-1)).toBe('/elsewhere/demo');
@@ -214,9 +217,9 @@ describe('createCrewCommand', () => {
     expect(ran).toEqual([]);
   });
 
-  it('leaves the family out on none, and stops when anything is cancelled', async () => {
+  it('stops when anything is cancelled', async () => {
     recorded.workspaceFolders = [{ name: 'a', uri: Uri.file('/a') }];
-    recorded.quickPicks.push(first, first, (items: { label: string }[]) => items.find((i) => i.label === 'none'));
+    recorded.quickPicks.push(first, first);
     recorded.inputs.push('Demo', 'demo');
     await run();
     expect(ran[0].args).toEqual(['create', 'demo', '--display-name', 'Demo', '--chart', '--no-input', '--members', '1', '-o', '/a', '--context', 'lab']);
@@ -228,16 +231,14 @@ describe('createCrewCommand', () => {
     recorded.quickPicks.push(first, undefined);
     recorded.inputs.push('Demo', 'demo');
     await run();
-    recorded.quickPicks.push(first, first, undefined);
-    recorded.inputs.push('Demo', 'demo');
-    await run();
     expect(ran).toHaveLength(1);
+    expect(recorded.quickPicks).toEqual([]);
   });
 
   it('asks for the display name, then suggests the Kubernetes name from it, editable', async () => {
     recorded.workspaceFolders = [{ name: 'crews', uri: Uri.file('/w') }];
     recorded.inputs.push('  Homelab Health Guide ', 'health-guide');
-    recorded.quickPicks.push(first, first, first);
+    recorded.quickPicks.push(first, first);
     await run();
     expect(recorded.inputOffers).toEqual([undefined, 'homelab-health-guide']);
     expect(ran[0].args.slice(0, 4)).toEqual(['create', 'health-guide', '--display-name', 'Homelab Health Guide']);
@@ -289,7 +290,7 @@ describe('createCrewCommand', () => {
   it("shows a failed scaffold as a modal error with kmctl's message, and hands nothing over", async () => {
     recorded.workspaceFolders = [{ name: 'crews', uri: Uri.file('/w') }];
     recorded.inputs.push('Demo', 'demo');
-    recorded.quickPicks.push(first, first, first);
+    recorded.quickPicks.push(first, first);
     answer = { code: 1, stdout: '', stderr: 'Error: unknown flag: --chart\n' };
     await run();
     expect(recorded.modalErrors).toEqual(['CrewForge could not create Demo. kmctl create failed: Error: unknown flag: --chart']);
@@ -311,7 +312,7 @@ describe('showCreatedCrew', () => {
     expect(revealed).toEqual([nodes[2]]);
     expect(recorded.shownDocuments).toEqual(['/w/demo/README.md', '/w/demo/templates/crew.yaml']);
     expect(recorded.shownOptions[1]).toEqual({ viewColumn: -2, preview: false });
-    expect(recorded.info[0]).toContain('Next: deploy it to a namespace');
+    expect(recorded.info[0]).toContain("It ships no models; the cluster's model catalog supplies them. Next: deploy it to a namespace");
     await vi.waitFor(() => expect(recorded.executed).toEqual([{ id: 'crewforge.deployToNamespace', args: [nodes[2]] }]));
   });
 

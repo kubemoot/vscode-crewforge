@@ -10,6 +10,13 @@ export interface GroupInfo {
   icon: string;
   /** What the group holds and how an object comes to be in it, for the group's tooltip. */
   rule: string;
+  /** The group's line when it holds nothing, where that means more than "none". */
+  empty?: string;
+}
+
+/** A group's line when it holds nothing. */
+export function emptyLine(info: GroupInfo): string {
+  return info.empty ?? 'none';
 }
 
 export const GROUPS: Record<Group, GroupInfo> = {
@@ -19,7 +26,8 @@ export const GROUPS: Record<Group, GroupInfo> = {
   models: {
     label: 'Models',
     icon: 'chip',
-    rule: "Models in the crew's namespace, which the scheduler may bind its agents to by capability label, then the ModelServers they run on (the crew's namespace, then kubemoot).",
+    rule: "Models in the crew's namespace, which the scheduler binds its agents to instead of the cluster's model catalog, then the ModelServers they run on (the crew's namespace, then kubemoot). A crew with no Models of its own, as kmctl create scaffolds it, selects from the catalog: the ModelServers in the crew's namespace and kubemoot are listed, each with the models it offers.",
+    empty: "the cluster's model catalog",
   },
   rag: { label: 'RAG Sources', icon: 'book', rule: "RAGSources the agents or skills name (or were matched to by keyword) and the crew's own, then the EmbeddingModels they embed with." },
   mcp: {

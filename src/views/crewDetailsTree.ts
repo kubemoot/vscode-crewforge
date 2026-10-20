@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { agentLine, agentTooltip, lines, missingPromptTooltip, promptLine, promptTooltip, usersText } from '../crew/describe';
 import type { AgentInfo, CrewDetails, McpServerInfo, PromptModuleInfo, SkillInfo, ToolInfo } from '../crew/details';
-import { COUNTS, GROUP_ORDER, GROUPS, SHARED, sharedLine, type Group } from '../crew/groups';
+import { COUNTS, emptyLine, GROUP_ORDER, GROUPS, SHARED, sharedLine, type Group } from '../crew/groups';
 import { factsOf } from '../crew/kindFacts';
 import type { Related } from '../crew/related';
 import { parameters, toolOrigin, type ToolCatalog } from '../crew/toolCatalog';
@@ -75,11 +75,12 @@ function sectionSummary(section: Section, d: CrewDetails): string | undefined {
 }
 
 export function sectionItem(node: Extract<DetailNode, { kind: 'section' }>): vscode.TreeItem {
-  const { label, icon, rule } = GROUPS[node.section];
+  const info = GROUPS[node.section];
+  const { label, icon, rule } = info;
   const empty = COUNTS[node.section](node.details) === 0;
   const item = new vscode.TreeItem(label, empty ? vscode.TreeItemCollapsibleState.None : vscode.TreeItemCollapsibleState.Collapsed);
   item.id = `section:${node.crew.namespace}/${node.crew.name}:${node.section}`;
-  item.description = empty ? 'none' : sectionSummary(node.section, node.details);
+  item.description = empty ? emptyLine(info) : sectionSummary(node.section, node.details);
   item.tooltip = rule;
   item.iconPath = new vscode.ThemeIcon(icon);
   item.contextValue = `crewSection-${node.section}`;

@@ -33,7 +33,7 @@ describe('crew sections', () => {
       'Agents|1 of 2 ready',
       'Prompts|4, 1 ADL',
       'Skills|1',
-      'Models|none',
+      "Models|the cluster's model catalog",
       'RAG Sources|none',
       'MCP Servers|2',
       'Tools|2',
@@ -43,7 +43,7 @@ describe('crew sections', () => {
       'Deployment|',
     ]);
     expect(items[0]).toMatchObject({ contextValue: 'crewSection-agents', id: 'section:team-a/lab-ops:agents', collapsibleState: TreeItemCollapsibleState.Collapsed });
-    expect(items[3]).toMatchObject({ collapsibleState: TreeItemCollapsibleState.None, tooltip: expect.stringContaining('scheduler may bind') });
+    expect(items[3]).toMatchObject({ collapsibleState: TreeItemCollapsibleState.None, tooltip: expect.stringContaining("selects from the catalog") });
   });
 
   it('shows an empty group as none, not as an empty folder', () => {
@@ -53,6 +53,7 @@ describe('crew sections', () => {
     const skills = sectionItem(sections[2]);
     expect(skills.collapsibleState).toBe(TreeItemCollapsibleState.None);
     expect(skills.description).toBe('none');
+    expect(sectionItem(sections[3]).description).toBe("the cluster's model catalog");
     expect(membersOf(sections[0])).toEqual([]);
   });
 

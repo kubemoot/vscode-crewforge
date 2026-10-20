@@ -10,8 +10,8 @@ it reads is in the namespace you install it into, starting with its own pods.
 ## The crew
 
 - **coordinator** (`test-coordinator`) picks the specialists for each question and writes the answer.
-- **workloads** (`test-workloads`, tooler): Pods, Deployments, ReplicaSets, StatefulSets, and Jobs in the crew's namespace.
-- **events** (`test-events`, tooler): Warning events, container restarts, and recent failures in the crew's namespace.
+- **workloads** (`test-workloads`, tooler): Pods, Deployments, ReplicaSets, StatefulSets, and Jobs.
+- **events** (`test-events`, tooler): Warning events, container restarts, and recent failures.
 
 Scaffold with `--members 5` for the full crew of five specialists: workloads, events,
 networking, config, and a reviewer.
@@ -59,18 +59,27 @@ same question: the answer now ends with that line.
 
 - `templates/crew.yaml`: the Crew and its CrewSchedulingPolicy.
 - `templates/agents.yaml`: the coordinator and the specialists. Agents declare capabilities,
-  never a model; the policy binds Models to them.
+  never a model.
 - `templates/promptmodules.yaml`: every prompt, in ADL.
 - `templates/tools.yaml`: the Kubernetes MCP server, read-only, and the MCP gateway the agents reach it through.
 - `templates/rbac.yaml`: the read-only Role the tool server runs with. Set `access.clusterWide: true` in
   `values.yaml` to let it read every namespace.
-- `templates/models.yaml`: the Models the scheduler binds agents to.
 - `fitness/fitness.yaml`: the fitness suite, outside `templates/` so installing does not start a run.
 - `templates/fitness-scenarios.yaml`: a ConfigMap built from `fitness/`, so the deployed crew carries
   its tests; CrewForge runs them from the live crew.
 
-Model family: `qwen`.
-Model servers: `ollama`.
+## Where its models come from
+
+The crew ships no models and names no model server. Its CrewSchedulingPolicy, in
+`templates/crew.yaml`, states what it needs: every phase requires a model that can call
+tools; mulling then leans on `qualityBias` (larger models for reasoning) and triage favors the
+model measured fastest. The scheduler matches those rules against the cluster's model
+catalog, which the cluster owner keeps, so the same crew runs on any cluster that has at
+least one model that can call tools. See the catalog, and whether it has one:
+
+```bash
+kmctl model list
+```
 
 ## What it can read
 
@@ -79,8 +88,8 @@ namespace, and its prompts say so. Every answer names the namespace, and a quest
 other namespaces or the whole cluster gets a plain "this crew reads only ..." with the way
 to widen it. Set `access.clusterWide: true` in `values.yaml` and redeploy (the `helm upgrade` above) to
 widen both: a ClusterRole lets the tool server read every namespace, still read-only and
-without Secrets, and the prompts tell the crew to name the namespace of each resource it
-reports.
+without Secrets, and the prompts switch with it: the specialists read every namespace
+unless a question names one, and the crew names the namespace of each resource it reports.
 
 ## Read-only by design
 

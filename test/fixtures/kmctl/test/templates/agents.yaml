@@ -31,8 +31,8 @@ metadata:
     kubemoot.ai/role: tooler
 spec:
   type: chat
-  description: "Pods, Deployments, ReplicaSets, StatefulSets, and Jobs in the crew's namespace."
-  triageSummary: "Lists and inspects Pods, Deployments, ReplicaSets, StatefulSets, and Jobs in this namespace: phase, readiness, replicas, conditions, and logs."
+  description: "Pods, Deployments, ReplicaSets, StatefulSets, and Jobs."
+  triageSummary: "Lists and inspects Pods, Deployments, ReplicaSets, StatefulSets, and Jobs: phase, readiness, replicas, conditions, and logs."
   discussRole: tooler
   capabilities: [tool-calling, kubernetes]
   discussChannels: [kubernetes]
@@ -55,8 +55,8 @@ metadata:
     kubemoot.ai/role: tooler
 spec:
   type: chat
-  description: "Warning events, container restarts, and recent failures in the crew's namespace."
-  triageSummary: "Reads Warning events, container restart counts, and the reasons for recent failures (crashes, failed probes, failed pulls) in this namespace."
+  description: "Warning events, container restarts, and recent failures."
+  triageSummary: "Reads Warning events, container restart counts, and the reasons for recent failures (crashes, failed probes, failed pulls)."
   discussRole: tooler
   capabilities: [tool-calling, kubernetes]
   discussChannels: [kubernetes]

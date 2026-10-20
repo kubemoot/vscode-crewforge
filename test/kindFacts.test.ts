@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { chunkingText, contextLength, factsOf, gatewayPort, hostOf, indexes, modelCapabilities } from '../src/crew/kindFacts';
+import { catalogOf, chunkingText, contextLength, factsOf, gatewayPort, hostOf, indexes, modelCapabilities } from '../src/crew/kindFacts';
 import type { Obj, Related } from '../src/crew/related';
 import { obj } from './fakeCluster';
 
@@ -76,6 +76,17 @@ describe('MCP and model server facts', () => {
     const server = factsOf(related(withStatus(obj('ModelServer', 'ollama', 'kubemoot', { type: 'ollama', endpoint: 'http://o:11434', scheduling: { weight: 100, memoryMiB: 24000 } }), { ready: false, phase: 'Pending' })));
     expect(server).toMatchObject({ description: 'ollama · http://o:11434', ready: false });
     expect(server.lines).toEqual(['Type: ollama', 'Endpoint: http://o:11434', 'Weight: 100', 'Memory budget (MiB): 24000', 'Phase: Pending']);
+
+    const models = [
+      { name: 'qwen3:14b', present: true, size: 'medium', capabilities: ['tool-calling', 'reasoning'] },
+      { name: 'qwen3:32b', present: false, size: '', capabilities: [] },
+      { present: true },
+      'not an entry',
+    ];
+    const offering = factsOf(related(withStatus(obj('ModelServer', 'ollama-gpu', 'kubemoot', { type: 'ollama', endpoint: 'http://o:11434' }), { models })));
+    expect(offering.description).toBe('ollama · http://o:11434 · 2 models');
+    expect(offering.lines.slice(-3)).toEqual(['Model catalog:', '  qwen3:14b · medium · tool-calling, reasoning', '  qwen3:32b · size unknown · not on the server yet']);
+    expect(catalogOf(withStatus(obj('ModelServer', 'm', 'kubemoot'), { models: 'odd' }))).toEqual([]);
 
     const gateway = factsOf(related(withStatus(obj('MCPGateway', 'gw', NS, { port: 9090, qualityPolicyRef: 'q', catalogRefs: ['c'] }), { ready: true, mcpServers: ['a', 'b'] })));
     expect(gateway.description).toBe('kubemoot · 2 servers');

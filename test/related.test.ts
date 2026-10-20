@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  CATALOG_REASON,
   fitnessOf,
   liveOwn,
   mcpInfraOf,
@@ -74,6 +75,29 @@ describe('Models', () => {
       'ModelServer/local|own|a Model runs on it|found',
       'ModelServer/ollama|namespace kubemoot|a Model runs on it|found',
     ]);
+  });
+
+  it("lists the model servers of the crew's namespace, then the system namespace, when the namespace has no Models: the crew selects from the catalog", () => {
+    const items = modelsOf(
+      input([
+        obj('Model', 'elsewhere', 'team-b', { serverRef: 'x' }),
+        obj('ModelServer', 'vllm-gpu', 'kubemoot'),
+        obj('ModelServer', 'ollama-gpu', 'kubemoot'),
+        obj('ModelServer', 'local', NS, {}, RELEASE),
+        obj('ModelServer', 'stray', 'other-ns'),
+      ]),
+    );
+    expect(summary(items)).toEqual([
+      `ModelServer/local|own|${CATALOG_REASON}|found`,
+      `ModelServer/ollama-gpu|namespace kubemoot|${CATALOG_REASON}|found`,
+      `ModelServer/vllm-gpu|namespace kubemoot|${CATALOG_REASON}|found`,
+    ]);
+  });
+
+  it('lists each catalog model server once for a crew in the system namespace, and nothing when none was read', () => {
+    const servers = [obj('ModelServer', 'ollama-gpu', 'kubemoot')];
+    expect(summary(modelsOf(input(servers, { namespace: 'kubemoot' })))).toEqual([`ModelServer/ollama-gpu|namespace kubemoot|${CATALOG_REASON}|found`]);
+    expect(modelsOf(input([]))).toEqual([]);
   });
 
   it('keeps a model server no namespace has as missing and shared with the cluster, saying why', () => {

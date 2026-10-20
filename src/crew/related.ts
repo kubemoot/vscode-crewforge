@@ -101,13 +101,33 @@ const named = (names: string[], reason: string) => new Map(names.map((n) => [n, 
 /**
  * The Models the scheduler may bind the crew's agents to (every Model in the namespace,
  * since it lists them there), then the ModelServers they name, looked up in the crew's
- * namespace and then the system namespace, as the operator does.
+ * namespace and then the system namespace, as the operator does. A namespace with no
+ * Models leaves the crew to the cluster's model catalog, so its ModelServers are listed.
  */
 export function modelsOf(input: RelationInput): Related[] {
   const models = (input.pool.get('Model') ?? []).filter((m) => m.metadata.namespace === input.namespace);
+  if (models.length === 0) return catalogServersOf(input);
   const modelItems = models.map((m) => found(m, input, input.own(m) ? 'declared for this crew' : 'in the namespace, so the scheduler may bind it')).sort(byName);
   const serverNames = [...new Set(models.map((m) => text(m.spec?.serverRef)).filter((s): s is string => s !== undefined))].sort(byCodeUnits);
   return [...modelItems, ...serverNames.map((name) => serverOf(input, name))];
+}
+
+/** The reason a ModelServer is listed for a crew that ships no Models. */
+export const CATALOG_REASON = "its part of the cluster's model catalog is what the scheduler matches the crew's policy against";
+
+/**
+ * The ModelServers that were read, in the crew's namespace and then the system namespace:
+ * each publishes its part of the cluster's model catalog, which a crew with no Models of
+ * its own selects from.
+ */
+function catalogServersOf(input: RelationInput): Related[] {
+  const all = input.pool.get('ModelServer') ?? [];
+  return [...new Set([input.namespace, SYSTEM_NAMESPACE])].flatMap((ns) =>
+    all
+      .filter((s) => s.metadata.namespace === ns)
+      .map((s) => found(s, input, CATALOG_REASON))
+      .sort(byName),
+  );
 }
 
 function serverOf(input: RelationInput, name: string): Related {

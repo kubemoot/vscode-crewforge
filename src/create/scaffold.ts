@@ -9,17 +9,16 @@ export interface CreateCrewRequest {
   displayName: string;
   parent: string;
   members: number;
-  modelFamily?: string;
 }
 
 /**
  * The kmctl command that scaffolds a crew as a Helm chart. kmctl owns the crew
- * templates; CrewForge only asks for them. With no servers given, kmctl uses every
- * ModelServer it finds through the kubeconfig.
+ * templates; CrewForge only asks for them. The crew ships no models and names no model
+ * server: its scheduling policy states what it needs, and the scheduler matches that
+ * against the cluster's model catalog.
  */
 export function createArgs(request: CreateCrewRequest, context?: string): string[] {
   const args = ['create', request.name, '--display-name', request.displayName, '--chart', '--no-input', '--members', String(request.members), '-o', request.parent];
-  if (request.modelFamily) args.push('--model-family', request.modelFamily);
   if (context) args.push('--context', context);
   return args;
 }

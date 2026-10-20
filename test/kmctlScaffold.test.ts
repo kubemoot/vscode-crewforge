@@ -10,7 +10,7 @@ import { FakeCluster } from './fakeCluster';
 import { resetFake } from './vscodeFake';
 
 /**
- * A crew scaffolded by `kmctl create test --chart --members 2 --model-family qwen --servers ollama --no-input`,
+ * A crew scaffolded by `kmctl create test --chart --members 2 --no-input`,
  * and what `helm template test <chart> --namespace default` renders from it.
  */
 const SCAFFOLD = path.join(__dirname, 'fixtures', 'kmctl', 'test');
@@ -63,15 +63,9 @@ describe('an undeployed kmctl scaffold in Crew Sources', () => {
     expect((click.arguments![0] as { fsPath: string }).fsPath).toBe(path.join(SCAFFOLD, 'templates', 'agents.yaml'));
     expect((click.arguments![1] as { selection: { startLine: number } }).selection.startLine).toBe(48);
     expect(await provider.getChildren(children[2])).toHaveLength(7);
-    const models = (await provider.getChildren(children[4])).map((n) => provider.getTreeItem(n));
-    expect(models.map((i) => `${String(i.label)}|${String(i.description)}`)).toEqual([
-      'qwen-14b-ollama|Model · qwen3:14b · medium tier · 40960 context',
-      'qwen-32b-ollama|Model · qwen3:32b · high tier · 40960 context',
-      'qwen-8b-ollama|Model · qwen3:8b · low tier · 40960 context',
-      'ollama|ModelServer · shared, installed elsewhere',
-    ]);
-    expect(models[0].contextValue).toBe('declared-object');
-    expect(models[3].contextValue).toBe('declared');
+    // The crew ships no Models: the cluster's model catalog supplies them.
+    expect(await provider.getChildren(children[4])).toEqual([]);
+    expect(provider.getTreeItem(children[4]).description).toBe("the cluster's model catalog");
     expect(labels(provider, await provider.getChildren(children[8]))).toEqual(['test-scheduling', 'consent-3']);
     expect(provider.getTreeItem(children[5]).description).toBe('none');
     const servers = (await provider.getChildren(children[6])).map((n) => provider.getTreeItem(n));
@@ -81,6 +75,14 @@ describe('an undeployed kmctl scaffold in Crew Sources', () => {
     expect(labels(provider, await provider.getChildren(children[10]))).toEqual(['pods-in-namespace', 'coordinator-deployment', 'refuse-delete', 'warnings-and-restarts']);
     const crewItem = provider.getTreeItem(children[0]);
     expect((crewItem.command!.arguments![0] as { fsPath: string }).fsPath).toBe(path.join(SCAFFOLD, 'templates', 'crew.yaml'));
+  });
+
+  it('ships no Model and names no model server; its policy states what the crew needs', () => {
+    expect(RENDERED).not.toMatch(/^kind: Model$/m);
+    expect(RENDERED).not.toMatch(/serverRef|model-family/);
+    expect(fs.existsSync(path.join(SCAFFOLD, 'templates', 'models.yaml'))).toBe(false);
+    expect(RENDERED).toContain('capability/tool-calling: "true"');
+    expect(RENDERED).toContain('preferFaster: 50');
   });
 
   it('shows a failed render as an item that opens the file and line it names', async () => {
