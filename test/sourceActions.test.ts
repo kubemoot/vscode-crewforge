@@ -26,7 +26,7 @@ function copyScaffold(): string {
 }
 
 function objectsIn(root: string): Manifest[] {
-  const files = ['agents', 'crew', 'models', 'promptmodules', 'tools'].map((n) => path.join(root, 'templates', `${n}.yaml`));
+  const files = ['agents', 'crew', 'promptmodules', 'tools'].map((n) => path.join(root, 'templates', `${n}.yaml`));
   // A Helm control line ({{- if }}, {{- end }}) is not YAML; the objects read the same without them.
   const withoutHelm = (text: string) => text.replaceAll(/^\{\{-.*\}\}\n/gm, '');
   return [...files, path.join(root, 'fitness', 'fitness.yaml')].flatMap((f) => parseManifests(withoutHelm(fs.readFileSync(f, 'utf8'))));
@@ -136,7 +136,7 @@ describe('renameCrewFiles', () => {
     fs.mkdirSync(path.join(root, 'node_modules'));
     fs.writeFileSync(path.join(root, 'node_modules', 'x.yaml'), 'name: test\n');
     const changed = await renameCrewFiles(root, 'test', 'lab');
-    expect(changed.map((f) => path.relative(root, f)).sort()).toEqual(['Chart.yaml', 'fitness/fitness.yaml', 'templates/agents.yaml', 'templates/crew.yaml', 'templates/fitness-scenarios.yaml', 'templates/models.yaml', 'templates/promptmodules.yaml', 'templates/rbac.yaml', 'templates/tools.yaml']);
+    expect(changed.map((f) => path.relative(root, f)).sort()).toEqual(['Chart.yaml', 'fitness/fitness.yaml', 'templates/agents.yaml', 'templates/crew.yaml', 'templates/fitness-scenarios.yaml', 'templates/promptmodules.yaml', 'templates/rbac.yaml', 'templates/tools.yaml']);
     const objects = objectsIn(root);
     expect(crewOf(objects)?.metadata.name).toBe('lab');
     const agents = objects.filter((o) => o.kind === 'Agent');
@@ -179,7 +179,7 @@ describe('renameCrewFiles', () => {
     const changed: string[] = [];
     await expect(renameCrewFiles(root, 'test', 'lab', [path.join(work, 'missing')], changed)).rejects.toThrow();
     fs.chmodSync(locked, 0o644);
-    expect(changed.map((f) => path.relative(root, f))).toEqual(['Chart.yaml', 'fitness/fitness.yaml', 'templates/agents.yaml', 'templates/crew.yaml', 'templates/fitness-scenarios.yaml', 'templates/models.yaml']);
+    expect(changed.map((f) => path.relative(root, f))).toEqual(['Chart.yaml', 'fitness/fitness.yaml', 'templates/agents.yaml', 'templates/crew.yaml', 'templates/fitness-scenarios.yaml']);
   });
 });
 
@@ -359,7 +359,7 @@ describe('SourceActions.rename', () => {
     expect(fs.existsSync(moved)).toBe(true);
     expect(crewOf(objectsIn(moved))?.metadata.name).toBe('lab');
     expect(sources.reload).toHaveBeenCalledTimes(1);
-    expect(recorded.info).toEqual([`Renamed crew test to lab in 9 files and its folder to ${moved}. Redeploy to deploy it as lab.`]);
+    expect(recorded.info).toEqual([`Renamed crew test to lab in 8 files and its folder to ${moved}. Redeploy to deploy it as lab.`]);
   });
 
   it('keeps the folder when its name is not the crew name or the new name is taken', async () => {
@@ -369,7 +369,7 @@ describe('SourceActions.rename', () => {
     recorded.inputs.push(' lab ');
     await renameKubernetesName(actions, entryAt(root));
     expect(fs.existsSync(root)).toBe(true);
-    expect(recorded.info[0]).toBe('Renamed crew test to lab in 9 files. Redeploy to deploy it as lab.');
+    expect(recorded.info[0]).toBe('Renamed crew test to lab in 8 files. Redeploy to deploy it as lab.');
   });
 
   it('renames a bundle and the fitness folder beside it', async () => {
@@ -409,7 +409,7 @@ describe('SourceActions.rename', () => {
     recorded.inputs.push('lab');
     await renameKubernetesName(actions, entryAt(root));
     expect(fs.existsSync(root)).toBe(true);
-    expect(recorded.info[0]).toBe('Renamed crew test to lab in 9 files. Redeploy to deploy it as lab.');
+    expect(recorded.info[0]).toBe('Renamed crew test to lab in 8 files. Redeploy to deploy it as lab.');
   });
 
   it('says what it renamed when the folder cannot move, and reloads anyway', async () => {
@@ -418,7 +418,7 @@ describe('SourceActions.rename', () => {
     recorded.applyEditResult = false;
     recorded.inputs.push('lab');
     await renameKubernetesName(actions, entryAt(root));
-    expect(recorded.errors[0]).toBe(`CrewForge: renaming test stopped after changing 9 files: could not move ${root} to ${path.join(work, 'lab')}. git checkout restores them.`);
+    expect(recorded.errors[0]).toBe(`CrewForge: renaming test stopped after changing 8 files: could not move ${root} to ${path.join(work, 'lab')}. git checkout restores them.`);
     expect(sources.reload).toHaveBeenCalledTimes(1);
   });
 
@@ -546,7 +546,7 @@ describe('SourceActions.rename, the display name', () => {
     const crew = crewOf(objectsIn(moved))!;
     expect(crew.metadata.name).toBe('lab');
     expect(crew.metadata.annotations?.['kubemoot.ai/display-name']).toBe('lab');
-    expect(recorded.info[0]).toBe(`Renamed crew test to lab in 9 files and its folder to ${moved}. Redeploy to deploy it as lab.`);
+    expect(recorded.info[0]).toBe(`Renamed crew test to lab in 8 files and its folder to ${moved}. Redeploy to deploy it as lab.`);
     const kept = copyScaffold();
     const keptCrew = path.join(kept, 'templates', 'crew.yaml');
     fs.writeFileSync(keptCrew, fs.readFileSync(keptCrew, 'utf8').replace('display-name: "test"', 'display-name: "Test Crew"'));

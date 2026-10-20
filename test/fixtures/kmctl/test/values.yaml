@@ -4,6 +4,7 @@
 access:
   # false: the crew's Kubernetes MCP server can read only the release namespace
   # (a Role). true: it can read every namespace (a ClusterRole), still read-only
-  # and still without Secrets. The prompts keep the crew on its own namespace
-  # unless a question names another.
+  # and still without Secrets. The prompts follow it: false keeps every agent on
+  # the release namespace; true has the specialists read every namespace and name
+  # the namespace of each resource they report.
   clusterWide: false

@@ -165,6 +165,8 @@ export const recorded = {
   treeViews: [] as FakeTreeView[],
   settings: new Map<string, unknown>(),
   quickPicks: [] as unknown[],
+  /** The placeholder of each quick pick shown, in order. */
+  quickPickPlaceholders: [] as (string | undefined)[],
   saveDialog: undefined as Uri | undefined,
   openDialog: undefined as Uri[] | undefined,
   configListeners: [] as Listener<{ affectsConfiguration: (s: string) => boolean }>[],
@@ -231,6 +233,7 @@ export function resetFake(): void {
   recorded.treeViews = [];
   recorded.settings.clear();
   recorded.quickPicks = [];
+  recorded.quickPickPlaceholders = [];
   recorded.saveDialog = undefined;
   recorded.openDialog = undefined;
   recorded.configListeners = [];
@@ -407,7 +410,8 @@ export const window = {
     if (typeof options === 'object' && options?.modal) recorded.modalErrors.push(message);
     return Promise.resolve(typeof options === 'string' ? recorded.errorAnswers.shift() : undefined);
   },
-  showQuickPick(items: unknown[]) {
+  showQuickPick(items: unknown[], options?: { placeHolder?: string }) {
+    recorded.quickPickPlaceholders.push(options?.placeHolder);
     const choice = recorded.quickPicks.shift();
     return Promise.resolve(typeof choice === 'function' ? (choice as (i: unknown[]) => unknown)(items) : choice);
   },

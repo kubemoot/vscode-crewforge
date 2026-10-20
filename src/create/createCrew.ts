@@ -6,9 +6,6 @@ import type { SourceNode } from '../views/sourceTree';
 import { kmctlProblem, scaffoldCrew, type CreateCrewRequest } from './scaffold';
 import { crewNameProblem, deriveCrewName, displayNameProblem } from '../crew/displayName';
 
-/** The families kmctl's scaffold has model sizes for. */
-const MODEL_FAMILIES = ['qwen', 'gemma', 'llama', 'mistral'];
-
 /**
  * The sizes of kmctl's starter crew, a read-only guide to its own namespace. Each size adds
  * the next specialist, in kmctl's order: workloads, events, networking, config, reviewer.
@@ -22,7 +19,7 @@ export const CREW_SIZES: readonly { label: string; description: string }[] = [
 ];
 
 /**
- * Checks kmctl first, then asks for a display name and the technical name it suggests, a size, and a model family, and scaffolds
+ * Checks kmctl first, then asks for a display name and the technical name it suggests and a size, and scaffolds
  * the crew as a chart in `folder` (New Kubemoot Crew Here in the Explorer) or in a folder the
  * developer picks. A missing or old kmctl, or a failed scaffold, is a modal error, so it
  * is seen before or instead of a toast that fades. `afterCreate` gets the new chart's folder.
@@ -55,6 +52,10 @@ export interface CreatedDeps {
 
 export const DEPLOY_NEXT = 'Deploy to Namespace...';
 
+/** The size question, which also says where the crew's models come from, since the wizard asks for none. */
+export const SIZE_QUESTION =
+  "How many specialists beside the coordinator? Each size is a working crew that reads its own namespace; its models come from the cluster's model catalog.";
+
 /**
  * After scaffolding: selects the new crew in Crew Sources, opens its README with
  * `templates/crew.yaml` beside it, and offers the loop's next step, deploying it to a
@@ -69,7 +70,7 @@ export async function showCreatedCrew(root: string, deps: CreatedDeps): Promise<
     void vscode.window.showInformationMessage(`Created ${root}. It is outside this workspace's folders, so Crew Sources does not list it; add its folder to the workspace to deploy it from there.`);
     return;
   }
-  void vscode.window.showInformationMessage(`Created the crew ${path.basename(root)}. Next: deploy it to a namespace and ask it something.`, DEPLOY_NEXT).then((choice) => {
+  void vscode.window.showInformationMessage(`Created the crew ${path.basename(root)}. It ships no models; the cluster's model catalog supplies them. Next: deploy it to a namespace and ask it something.`, DEPLOY_NEXT).then((choice) => {
     if (choice === DEPLOY_NEXT) void vscode.commands.executeCommand('crewforge.deployToNamespace', node);
   });
 }
@@ -79,13 +80,9 @@ async function askRequest(folder?: string): Promise<CreateCrewRequest | undefine
   if (!parent) return;
   const names = await askNames(parent);
   if (!names) return;
-  const size = await vscode.window.showQuickPick(CREW_SIZES, { placeHolder: 'How many specialists beside the coordinator? Each size is a working crew that reads its own namespace.' });
+  const size = await vscode.window.showQuickPick(CREW_SIZES, { placeHolder: SIZE_QUESTION });
   if (!size) return;
-  const family = await vscode.window.showQuickPick([...MODEL_FAMILIES.map((f) => ({ label: f })), { label: 'none', description: 'add Models yourself' }], {
-    placeHolder: 'Which model family should its Models use?',
-  });
-  if (!family) return;
-  return { ...names, parent, members: Number(size.label), modelFamily: family.label === 'none' ? undefined : family.label };
+  return { ...names, parent, members: Number(size.label) };
 }
 
 /**

@@ -21,23 +21,30 @@ metadata:
 spec:
   crewRef: "test"
   archetypeRef: consent-3
-  # Per-capability quality bias in [0,1]: lower -> speed-lean, higher -> quality-lean.
-  # Agents never name a model; the scheduler matches Models by capability label.
+  # The crew names no model and no model server. These rules state what it needs,
+  # and the scheduler matches them against the cluster's model catalog, so the crew
+  # installs unchanged on any cluster with a model that can call tools. See the
+  # catalog with: kmctl model list
+  #
+  # qualityBias leans each agent between speed (0) and quality (1) by the
+  # capabilities it declares: the scheduler favors larger models (label
+  # kubemoot.ai/size) for a higher bias. It applies to a rule that states no
+  # preference of its own: mulling below.
   qualityBias:
     reasoning: "0.7"
     tool-calling: "0.3"
     default: "0.4"
   rules:
+    # Mulling, where the specialists do the work: any model that can call tools,
+    # ranked by qualityBias.
     - phase: mulling
       require:
         matchLabels:
           capability/tool-calling: "true"
+    # Triage, the quick check of whether a question is for this agent: any model
+    # that can call tools, favoring the one the cluster measured fastest.
     - phase: triage
       require:
         matchLabels:
           capability/tool-calling: "true"
-  # Preferred model family chosen at scaffold time: qwen.
-  # To pin it, label your Models (e.g. model/family: qwen) and add
-  # that label under require.matchLabels above.
-  # Servers selected at scaffold time: ollama.
-  # Server allow-listing is a tune-up; by default agents use any ready server.
+      preferFaster: 50

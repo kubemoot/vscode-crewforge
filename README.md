@@ -14,7 +14,7 @@ and run its fitness scenarios, all from the editor.
 It works through your kubeconfig, the same way `kmctl` does: any cluster your `kubectl` can
 reach works, no crew needs a public address, and no extra credential is involved.
 
-![The Kubemoot view in VS Code: Deployed Crews lists the Help Desk crew (helpdesk in crew-helpdesk) with its Models open, including the shared ollama ModelServer, and Crew Sources lists its chart in the workspace, deployed and in sync, with the same groups.](docs/screenshots/views.png)
+![The Kubemoot view in VS Code: Deployed Crews lists the Help Desk crew (helpdesk in crew-helpdesk) with its Models open, showing the shared ollama ModelServer whose model catalog the crew selects from, and Crew Sources lists its chart in the workspace, deployed and in sync, with the same groups.](docs/screenshots/views.png)
 
 ## Install
 
@@ -38,17 +38,22 @@ setting, else `KUBECONFIG`, else `~/.kube/config`.
    agent reports as it works, then the crew's answer follows, with how long it took.
 3. Expand a crew to see every part of it: Agents, Prompts, Skills, Models, RAG Sources,
    MCP Servers, Tools, Policies, Notifications, Fitness, and Deployment. Objects the crew
-   shares with others, such as a cluster's ModelServer, are marked *shared*. Click a
+   shares with others, such as a cluster's ModelServer, are marked *shared*. A crew that
+   ships no Models selects from the cluster's model catalog, so its Models group lists the
+   ModelServers that publish the catalog, each with the models it offers. Click a
    crew, deployed or in your workspace, for its dashboard: **Overview**, **Source**,
    **Live**, and **Diff** tabs.
 4. Right-click a folder in the Explorer and choose **New Kubemoot Crew Here** to scaffold
    kmctl's starter crew with `kmctl create --chart`: a small, working crew that reads its
-   own namespace, with 1 to 5 specialists. Name it in plain words; CrewForge suggests the
-   Kubernetes name from it, and **Rename...** later changes either.
+   own namespace, with 1 to 5 specialists. It ships no models and names no model server:
+   its scheduling policy states what it needs, a model that can call tools, and the
+   cluster's model catalog supplies the models. Name it in plain words; CrewForge suggests
+   the Kubernetes name from it, and **Rename...** later changes either.
 5. Edit it, or use **Add <Kind>...** on a group in Crew Sources to add an Agent, a
-   PromptModule, a Model, a RAG source, an MCP server, and more. The status bar says where
-   it stands against its deployment: not deployed, in sync, or changed. **Lint** checks
-   the chart against your cluster's schemas.
+   PromptModule, a RAG source, an MCP server, and more. A Model added to a crew replaces
+   the cluster's model catalog for that crew, which then uses only its own Models. The
+   status bar says where it stands against its deployment: not deployed, in sync, or
+   changed. **Lint** checks the chart against your cluster's schemas.
 6. Choose **Deploy to Namespace...** to run it with Helm, then **Ask**, **Run Fitness**,
    and **Redeploy** after each edit. A deployed crew carries its fitness scenarios: its
    Fitness group runs all of them, a batch you pick, or one.

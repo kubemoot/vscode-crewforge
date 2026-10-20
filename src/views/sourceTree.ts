@@ -6,7 +6,7 @@ import { summarize, type ResourceDrift } from '../source/drift';
 import { DRIFT_STATES } from '../source/driftStates';
 import { isRunning, runSummary, type FitnessRun } from '../fitness/fitness';
 import { fluxSummary, type FluxState } from '../gitops/flux';
-import { GROUPS, type GroupInfo } from '../crew/groups';
+import { emptyLine, GROUPS, type GroupInfo } from '../crew/groups';
 import type { DeclaredItem, DeclaredSection } from '../source/declared';
 import { locationOf } from '../source/render';
 import { sourceOf, sourceTitle, type SourceEntry, type SourceService } from '../source/service';
@@ -328,10 +328,11 @@ function sectionInfo(section: DeclaredSection): GroupInfo {
 }
 
 function declSectionItem(node: Extract<SourceNode, { kind: 'declSection' }>): vscode.TreeItem {
-  const { label, icon, rule } = sectionInfo(node.section);
+  const info = sectionInfo(node.section);
+  const { label, icon, rule } = info;
   const empty = node.items.length === 0;
   const item = new vscode.TreeItem(label, empty ? vscode.TreeItemCollapsibleState.None : vscode.TreeItemCollapsibleState.Collapsed);
-  item.description = empty ? 'none' : String(node.items.length);
+  item.description = empty ? emptyLine(info) : String(node.items.length);
   item.tooltip = rule;
   item.iconPath = new vscode.ThemeIcon(icon);
   item.id = `declSection:${node.entry.source.root}:${node.section}`;

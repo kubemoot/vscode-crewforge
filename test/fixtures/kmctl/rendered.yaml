@@ -79,13 +79,6 @@ roleRef:
   name: test-kubernetes-mcp
 
 ---
-# Source: test/templates/models.yaml
-# Model CRs for the crew. The scheduler binds agents to these just-in-time, so a
-# crew needs at least one Model in its namespace to run a discussion. Each Model
-# binds a model name to a ModelServer and is labeled by capability + latencyClass.
-# These are starting defaults for the chosen family; edit model names/VRAM to match.
-
----
 # Source: test/templates/agents.yaml
 apiVersion: kubemoot.ai/v1alpha1
 kind: Agent
@@ -122,8 +115,8 @@ metadata:
     kubemoot.ai/role: tooler
 spec:
   type: chat
-  description: "Pods, Deployments, ReplicaSets, StatefulSets, and Jobs in the crew's namespace."
-  triageSummary: "Lists and inspects Pods, Deployments, ReplicaSets, StatefulSets, and Jobs in this namespace: phase, readiness, replicas, conditions, and logs."
+  description: "Pods, Deployments, ReplicaSets, StatefulSets, and Jobs."
+  triageSummary: "Lists and inspects Pods, Deployments, ReplicaSets, StatefulSets, and Jobs: phase, readiness, replicas, conditions, and logs."
   discussRole: tooler
   capabilities: [tool-calling, kubernetes]
   discussChannels: [kubernetes]
@@ -148,8 +141,8 @@ metadata:
     kubemoot.ai/role: tooler
 spec:
   type: chat
-  description: "Warning events, container restarts, and recent failures in the crew's namespace."
-  triageSummary: "Reads Warning events, container restart counts, and the reasons for recent failures (crashes, failed probes, failed pulls) in this namespace."
+  description: "Warning events, container restarts, and recent failures."
+  triageSummary: "Reads Warning events, container restart counts, and the reasons for recent failures (crashes, failed probes, failed pulls)."
   discussRole: tooler
   capabilities: [tool-calling, kubernetes]
   discussChannels: [kubernetes]
@@ -190,26 +183,33 @@ metadata:
 spec:
   crewRef: "test"
   archetypeRef: consent-3
-  # Per-capability quality bias in [0,1]: lower -> speed-lean, higher -> quality-lean.
-  # Agents never name a model; the scheduler matches Models by capability label.
+  # The crew names no model and no model server. These rules state what it needs,
+  # and the scheduler matches them against the cluster's model catalog, so the crew
+  # installs unchanged on any cluster with a model that can call tools. See the
+  # catalog with: kmctl model list
+  #
+  # qualityBias leans each agent between speed (0) and quality (1) by the
+  # capabilities it declares: the scheduler favors larger models (label
+  # kubemoot.ai/size) for a higher bias. It applies to a rule that states no
+  # preference of its own: mulling below.
   qualityBias:
     reasoning: "0.7"
     tool-calling: "0.3"
     default: "0.4"
   rules:
+    # Mulling, where the specialists do the work: any model that can call tools,
+    # ranked by qualityBias.
     - phase: mulling
       require:
         matchLabels:
           capability/tool-calling: "true"
+    # Triage, the quick check of whether a question is for this agent: any model
+    # that can call tools, favoring the one the cluster measured fastest.
     - phase: triage
       require:
         matchLabels:
           capability/tool-calling: "true"
-  # Preferred model family chosen at scaffold time: qwen.
-  # To pin it, label your Models (e.g. model/family: qwen) and add
-  # that label under require.matchLabels above.
-  # Servers selected at scaffold time: ollama.
-  # Server allow-listing is a tune-up; by default agents use any ready server.
+      preferFaster: 50
 
 ---
 # Source: test/templates/tools.yaml
@@ -264,63 +264,6 @@ spec:
     limits:
       cpu: 500m
       memory: 256Mi
-
----
-# Source: test/templates/models.yaml
-apiVersion: kubemoot.ai/v1alpha1
-kind: Model
-metadata:
-  name: qwen-8b-ollama
-  labels:
-    kubemoot.ai/crew: test
-    family: "qwen"
-    params: "8b"
-    latencyClass: "low"
-    contextWindow: "40960"
-    capability/tool-calling: "true"
-    capability/reasoning: "true"
-spec:
-  model: "qwen3:8b"
-  serverRef: "ollama"
-  vramMib: 5120
-
----
-# Source: test/templates/models.yaml
-apiVersion: kubemoot.ai/v1alpha1
-kind: Model
-metadata:
-  name: qwen-14b-ollama
-  labels:
-    kubemoot.ai/crew: test
-    family: "qwen"
-    params: "14b"
-    latencyClass: "medium"
-    contextWindow: "40960"
-    capability/tool-calling: "true"
-    capability/reasoning: "true"
-spec:
-  model: "qwen3:14b"
-  serverRef: "ollama"
-  vramMib: 10240
-
----
-# Source: test/templates/models.yaml
-apiVersion: kubemoot.ai/v1alpha1
-kind: Model
-metadata:
-  name: qwen-32b-ollama
-  labels:
-    kubemoot.ai/crew: test
-    family: "qwen"
-    params: "32b"
-    latencyClass: "high"
-    contextWindow: "40960"
-    capability/tool-calling: "true"
-    capability/reasoning: "true"
-spec:
-  model: "qwen3:32b"
-  serverRef: "ollama"
-  vramMib: 20480
 
 ---
 # Source: test/templates/promptmodules.yaml

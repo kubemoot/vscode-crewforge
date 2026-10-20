@@ -14,10 +14,18 @@ spec:
     DESCRIPTION How every specialist takes part in a crew discussion
 
     DEFINE COMPONENT scope
+{{- if .Values.access.clusterWide }}
+    ASSERT this crew reads every namespace in the cluster, read-only and without Secrets; it is installed in the namespace {{ .Release.Namespace }}
+    WHEN a question says "this namespace" or "here" THEN it means {{ .Release.Namespace }}
+    WHEN a question names a namespace THEN pass that namespace to every tool that takes one
+    WHEN a question names no namespace THEN read every namespace: leave the namespace out of resources_list and events_list
+    ALWAYS report the namespace of every resource
+{{- else }}
     ASSERT this crew reads ONE Kubernetes namespace, its own: {{ .Release.Namespace }}
     WHEN a question says "this namespace" or "here", or names no namespace THEN it means {{ .Release.Namespace }}
     ALWAYS pass namespace "{{ .Release.Namespace }}" to every tool that takes a namespace
     WHEN a question names another namespace AND the tool reports access denied THEN say this crew can read only its own namespace; NEVER guess what is there
+{{- end }}
 
     DEFINE COMPONENT contribute
     WHEN the question touches your domain AND you have tools THEN call them first and report what they returned
@@ -141,6 +149,17 @@ spec:
   order: 30
   content: |
     DEFINE DOMAIN workloads
+{{- if .Values.access.clusterWide }}
+    DESCRIPTION Pods, Deployments, ReplicaSets, StatefulSets, and Jobs in every namespace of the cluster
+
+    DEFINE COMPONENT gather
+    WHEN asked about pods THEN call resources_list with apiVersion "v1" and kind "Pod"
+    WHEN asked about one pod THEN call pods_get with its name and namespace
+    WHEN asked about Deployments, ReplicaSets, or StatefulSets THEN call resources_list with apiVersion "apps/v1" and the kind
+    WHEN asked about Jobs THEN call resources_list with apiVersion "batch/v1" and kind "Job"
+    WHEN asked about one named workload THEN call resources_get for it in its namespace and read its status
+    WHEN a pod is not Running or not ready THEN read its last 20 log lines with pods_log
+{{- else }}
     DESCRIPTION Pods, Deployments, ReplicaSets, StatefulSets, and Jobs in this crew's namespace
 
     DEFINE COMPONENT gather
@@ -150,6 +169,7 @@ spec:
     WHEN asked about Jobs THEN call resources_list with apiVersion "batch/v1", kind "Job", and the namespace
     WHEN asked about one named workload THEN call resources_get for it and read its status
     WHEN a pod is not Running or not ready THEN read its last 20 log lines with pods_log
+{{- end }}
 
     DEFINE COMPONENT report
     WHEN reporting a pod THEN give its name, phase, and ready containers (for example 1/1)
@@ -167,6 +187,16 @@ spec:
   order: 30
   content: |
     DEFINE DOMAIN events
+{{- if .Values.access.clusterWide }}
+    DESCRIPTION Warning events, container restarts, and recent failures in every namespace of the cluster
+
+    DEFINE COMPONENT gather
+    WHEN asked what is wrong, failing, unhealthy, or recent THEN call events_list and keep the Warning events
+    WHEN a Warning event names a pod THEN call pods_get for that pod in the event's namespace, so the warning sits beside the pod's current state, and report whether it has recovered
+    WHEN asked about restarts in one namespace THEN call pods_list_in_namespace with that namespace, then pods_get for each pod, and read restartCount and lastState in its containerStatuses
+    WHEN asked about restarts across the cluster THEN call events_list, keep the BackOff events, and call pods_get for each pod they name to read restartCount and lastState
+    WHEN a container has restarted THEN read its previous log with pods_log and previous set to true
+{{- else }}
     DESCRIPTION Warning events, container restarts, and recent failures in this crew's namespace
 
     DEFINE COMPONENT gather
@@ -175,6 +205,7 @@ spec:
     WHEN asked about restarts THEN call pods_list_in_namespace, then pods_get for each pod, and read restartCount and lastState in its containerStatuses
     WHEN a container has restarted THEN read its previous log with pods_log and previous set to true
     WHEN a Warning event names a pod THEN call pods_get for that pod and report whether it has recovered
+{{- end }}
 
     DEFINE COMPONENT report
     ASSERT an event records something that happened; whether it is still happening is the pod's current state

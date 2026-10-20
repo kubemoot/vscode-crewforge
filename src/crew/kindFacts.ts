@@ -70,11 +70,32 @@ function model(o: Obj): KindFacts {
   };
 }
 
+/** One entry of a ModelServer's part of the model catalog, as a line: name, size, abilities, and whether the server has it. */
+function catalogEntry(entry: unknown): string | undefined {
+  const e = obj(entry);
+  const name = text(e.name);
+  if (!name) return undefined;
+  return line(name, text(e.size) ?? 'size unknown', strings(e.capabilities).join(', '), e.present === false && 'not on the server yet');
+}
+
+/** A ModelServer's part of the model catalog (status.models), one line per model. */
+export function catalogOf(o: Obj): string[] {
+  return list(o.status?.models).map(catalogEntry).filter(defined);
+}
+
 function server(o: Obj): KindFacts {
   const scheduling = obj(o.spec?.scheduling);
+  const catalog = catalogOf(o);
   return {
-    description: line(text(o.spec?.type), text(o.spec?.endpoint)),
-    lines: [fact('Type', o.spec?.type), fact('Endpoint', o.spec?.endpoint), fact('Weight', scheduling.weight), fact('Memory budget (MiB)', scheduling.memoryMiB), fact('Phase', o.status?.phase)].filter(defined),
+    description: line(text(o.spec?.type), text(o.spec?.endpoint), catalog.length > 0 && count(catalog.length, 'model')),
+    lines: [
+      fact('Type', o.spec?.type),
+      fact('Endpoint', o.spec?.endpoint),
+      fact('Weight', scheduling.weight),
+      fact('Memory budget (MiB)', scheduling.memoryMiB),
+      fact('Phase', o.status?.phase),
+      ...(catalog.length > 0 ? ['Model catalog:', ...catalog.map((c) => `  ${c}`)] : []),
+    ].filter(defined),
     icon: 'server',
     ready: readyOf(o),
   };
