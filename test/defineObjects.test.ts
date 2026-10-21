@@ -25,7 +25,7 @@ const ANSWERS: Record<string, Answers> = {
   Agent: { name: 'k8s-pods', role: 'tooler', capabilities: 'tool-calling, kubernetes', promptRefs: ['rules', 'style'], tools: 'pods_list, events_list' },
   PromptModule: { name: 'rules', form: 'ADL', order: '20' },
   Skill: { name: 'restart', description: 'Restart a crashing pod safely', order: '100' },
-  Model: { name: 'qwen-8b', model: 'qwen3:8b', server: 'ollama', capabilities: 'tool-calling, reasoning', latencyClass: 'low', contextWindow: '40960' },
+  Model: { name: 'qwen-8b', model: 'qwen3:8b', server: 'ollama', parameters: '8B', capabilities: 'tool-calling, reasoning', contextLength: '40960' },
   RAGSource: { name: 'team-docs', url: 'https://example.com/docs.git', branch: 'main', paths: 'docs/, adr/', embeddingModel: 'nomic', endpoint: 'pg:5432/vectors' },
   EmbeddingModel: { name: 'nomic', model: 'nomic-embed-text', server: 'ollama', dimensions: '768' },
   MCPServer: { name: 'search', from: 'image', where: 'ghcr.io/example/search:1.0' },
@@ -64,17 +64,39 @@ describe('the templates of Add <Kind>', () => {
     expect(tooler.spec).toMatchObject({ enabledTools: ['pods_list', 'events_list'], promptRefs: ['rules', 'style'], temperature: '0.3' });
   });
 
-  it('write prose or ADL prompts, an external MCP server, and a Model without a context window', () => {
+  it('write prose or ADL prompts, an external MCP server, and a Model without a context length', () => {
     expect(promptContent('rules', 'prose')).toHaveLength(1);
     expect(promptContent('rules', 'ADL')[0]).toBe('DEFINE DOMAIN rules');
     const prose = load(DEFINITIONS.PromptModule.yaml(BUNDLE, { name: 'p', form: 'prose', order: '5' })) as { spec: { content: string; order: number } };
     expect(prose.spec).toMatchObject({ order: 5, content: expect.stringMatching(/^Describe, in plain sentences/) });
     const external = load(DEFINITIONS.MCPServer.yaml(BUNDLE, { name: 'x', from: 'endpoint', where: 'https://mcp.example.com' })) as { spec: Record<string, unknown> };
     expect(external.spec).toEqual({ externalEndpoint: 'https://mcp.example.com', transport: 'http' });
-    const model = load(DEFINITIONS.Model.yaml(BUNDLE, { ...ANSWERS.Model, contextWindow: '' })) as { metadata: { labels: Record<string, string> } };
-    expect(model.metadata.labels.contextWindow).toBeUndefined();
+    const model = load(DEFINITIONS.Model.yaml(BUNDLE, { ...ANSWERS.Model, contextLength: '' })) as { metadata: { labels: Record<string, string> }; spec: Record<string, unknown> };
+    expect(model.spec.contextLength).toBeUndefined();
     expect(model.metadata.labels['capability/reasoning']).toBe('true');
     expect(collectionOf('team-docs')).toBe('team_docs');
+  });
+
+  it('write a crew-local Model with its size and abilities and no latencyClass, saying it replaces the catalog', () => {
+    const text = DEFINITIONS.Model.yaml(BUNDLE, ANSWERS.Model);
+    expect(text).toMatch(/^# A crew-local Model\. While the crew ships any Model of its own it uses only those/);
+    expect(text).not.toContain('latencyClass');
+    const model = load(text) as { metadata: { labels: Record<string, string> }; spec: Record<string, unknown> };
+    expect(model.spec).toEqual({ model: 'qwen3:8b', serverRef: 'ollama', parameters: '8B', capabilities: ['tool-calling', 'reasoning'], contextLength: 40960 });
+    expect(model.metadata.labels).toEqual({ 'kubemoot.ai/crew': 'lab', 'kubemoot.ai/size': 'small', 'capability/tool-calling': 'true', 'capability/reasoning': 'true' });
+    const bare = load(DEFINITIONS.Model.yaml(BUNDLE, { name: 'm', model: 'x', server: 's', parameters: '', capabilities: '', contextLength: '' })) as { metadata: { labels: Record<string, string> }; spec: Record<string, unknown> };
+    expect(bare.spec).toEqual({ model: 'x', serverRef: 's' });
+    expect(bare.metadata.labels).toEqual({ 'kubemoot.ai/crew': 'lab' });
+    expect(load(DEFINITIONS.Model.yaml(BUNDLE, { ...ANSWERS.Model, parameters: '70B' }))).toMatchObject({ metadata: { labels: { 'kubemoot.ai/size': 'large' } } });
+    expect(DEFINITIONS.Model.advanced?.detail).toMatch(/stops using the cluster's model catalog/);
+  });
+
+  it('write a scheduling policy that names no model and favors the faster model for triage', () => {
+    const policy = load(DEFINITIONS.CrewSchedulingPolicy.yaml(BUNDLE, ANSWERS.CrewSchedulingPolicy)) as { spec: { rules: Record<string, unknown>[] } };
+    expect(policy.spec.rules).toEqual([
+      { phase: 'mulling', require: { matchLabels: { 'capability/tool-calling': 'true' } } },
+      { phase: 'triage', require: { matchLabels: { 'capability/tool-calling': 'true' } }, preferFaster: 50 },
+    ]);
   });
 
   it('take the first of a list where one answer is wanted, and an empty list for a missing answer', () => {
@@ -97,17 +119,31 @@ function defaultOf(kind: string, key: string, context: DefineContext): string | 
 }
 
 describe('the Add <Kind> commands in the manifest', () => {
-  it('has a command, a group menu entry, and an inline entry for every kind CrewForge can add', () => {
+  it('has a command and a group menu entry for every kind CrewForge can add, one inline entry per group, and never inline for an advanced kind', () => {
     const pkg = JSON.parse(fixture('../../package.json')) as { contributes: { commands: { command: string }[]; menus: Record<string, { command: string; when?: string; group?: string }[]> } };
     const menu = pkg.contributes.menus['view/item/context'];
     for (const [kind, d] of Object.entries(DEFINITIONS)) {
       const id = `crewforge.add${kind}`;
       expect(pkg.contributes.commands.some((c) => c.command === id), id).toBe(true);
-      expect(menu.some((m) => m.command === id && m.when === `view == crewforge.sources && viewItem == declSection-${d.section}` && m.group === 'define@1'), id).toBe(true);
+      const when = `view == crewforge.sources && viewItem == declSection-${d.section}`;
+      expect(menu.some((m) => m.command === id && m.when === when && m.group === (d.advanced ? 'define@2' : 'define@1')), id).toBe(true);
+      if (d.advanced) expect(menu.some((m) => m.command === id && m.group === 'inline'), id).toBe(false);
     }
     for (const section of new Set(Object.values(DEFINITIONS).map((d) => d.section))) {
       expect(menu.filter((m) => m.group === 'inline' && m.when === `view == crewforge.sources && viewItem == declSection-${section}`), section).toHaveLength(1);
     }
+  });
+
+  it('puts Edit Scheduling Needs first on the Models group, inline, and on the Policies group', () => {
+    const pkg = JSON.parse(fixture('../../package.json')) as { contributes: { commands: { command: string; title: string }[]; menus: Record<string, { command: string; when?: string; group?: string }[]> } };
+    const menu = pkg.contributes.menus['view/item/context'].filter((m) => m.command === 'crewforge.editSchedulingNeeds');
+    expect(menu.map((m) => `${m.when}|${m.group}`)).toEqual([
+      'view == crewforge.sources && viewItem == declSection-models|define@1',
+      'view == crewforge.sources && viewItem == declSection-models|inline',
+      'view == crewforge.sources && viewItem == declSection-policies|define@2',
+    ]);
+    expect(pkg.contributes.commands.find((c) => c.command === 'crewforge.addModel')?.title).toBe('Add Crew-Local Model (Advanced)...');
+    expect(pkg.contributes.menus.commandPalette.find((m) => m.command === 'crewforge.editSchedulingNeeds')?.when).toBe('false');
   });
 });
 
@@ -285,6 +321,150 @@ describe('Add <Kind> and Remove from Source', () => {
     expect(await definitions().add('Skill', section(entryAt(path.join(root, 'missing-folder'))))).toBeUndefined();
     expect(recorded.errors[2]).toMatch(/cannot add Skill elsewhere: .*ENOENT/);
     expect(reloads).toBe(0);
+  });
+
+  it('asks before adding a crew-local Model, saying the crew stops using the catalog, and adds nothing when declined', async () => {
+    const models: SourceNode = { kind: 'declSection', entry: entryAt(root), section: 'models', items: [] };
+    recorded.warningAnswers.push(undefined);
+    expect(await definitions().add('Model', models)).toBeUndefined();
+    expect(recorded.warnings).toEqual(['Add a crew-local Model?']);
+    expect(recorded.inputOffers).toEqual([]);
+    recorded.warningAnswers.push('Add Crew-Local Model');
+    recorded.inputs.push('qwen-14b', 'qwen3:14b', 'ollama', '14B', 'tool-calling', '');
+    const file = await definitions().add('Model', models);
+    expect(file).toBe(path.join(root, 'templates', 'model-qwen-14b.yaml'));
+    const text = await fs.readFile(file!, 'utf8');
+    expect(text).toContain('    kubemoot.ai/size: "medium"');
+    expect(text).toContain('  parameters: "14B"');
+    expect(text).not.toContain('latencyClass');
+    expect(await definitions().add('Model', models, ANSWERS.Model)).toBe(path.join(root, 'templates', 'model-qwen-8b.yaml'));
+    expect(recorded.warnings).toHaveLength(2);
+    expect(await definitions().add('Model', models, { ...ANSWERS.Model, name: 'bad-size', parameters: 'big' })).toBeUndefined();
+    expect(recorded.errors.at(-1)).toMatch(/Parameters: The parameters are a number and a unit/);
+  });
+
+  describe('Edit Scheduling Needs', () => {
+    const policyFile = () => path.join(root, 'templates', 'crew.yaml');
+    const models = (): SourceNode => ({ kind: 'declSection', entry: entryAt(root), section: 'models', items: [] });
+    const withPolicy = async (text = fixture('kmctl/test/templates/crew.yaml')) => {
+      await fs.writeFile(policyFile(), text);
+      const line = text.split('\n').findIndex((l, i, all) => l.startsWith('apiVersion:') && all[i + 1] === 'kind: CrewSchedulingPolicy');
+      located.push({ manifest: obj('CrewSchedulingPolicy', 'lab-scheduling', 'default', { crewRef: 'lab', rules: [{ phase: 'mulling', require: { matchLabels: { 'capability/tool-calling': 'true' } } }, { phase: 'triage', preferFaster: 50 }] }), file: policyFile(), line });
+    };
+    const rulesIn = async () => (load((await fs.readFile(policyFile(), 'utf8')).split('---\n')[1]) as { spec: { rules: Record<string, unknown>[] } }).spec.rules;
+
+    it("asks for a phase, its abilities, size, and preferFaster, offering what the policy states, and writes them into the crew's policy", async () => {
+      await withPolicy();
+      let phases: { label: string; description?: string }[] = [];
+      let abilities: { label: string; picked?: boolean }[] = [];
+      let sizes: { label: string; description?: string }[] = [];
+      recorded.quickPicks.push(
+        (items: typeof phases) => {
+          phases = items;
+          return items[1];
+        },
+        (items: typeof abilities) => {
+          abilities = items;
+          return [items[0], items[1]];
+        },
+        (items: typeof sizes) => {
+          sizes = items;
+          return items[1];
+        },
+      );
+      recorded.inputs.push('30');
+      expect(await definitions().editNeeds(models())).toBe(policyFile());
+      expect(phases.map((p) => `${p.label}|${p.description}`)).toEqual(['mulling|requires tool-calling', 'triage|preferFaster 50', "Another phase...|a phase of the policy's archetype"]);
+      expect(abilities).toEqual([{ label: 'tool-calling', picked: false }, { label: 'reasoning', picked: false }, { label: 'vision', picked: false }]);
+      expect(sizes.map((s) => s.label)).toEqual(['No size preference', 'small', 'medium', 'large']);
+      expect(sizes[0].description).toMatch(/\(now\)$/);
+      expect(recorded.inputOffers).toEqual(['50']);
+      expect((await rulesIn())[1]).toEqual({ phase: 'triage', require: { matchLabels: { 'capability/tool-calling': 'true', 'capability/reasoning': 'true' } }, preferFaster: 30, prefer: [{ weight: 100, selector: { matchLabels: { 'kubemoot.ai/size': 'small' } } }] });
+      expect(recorded.executed.map((e) => e.id)).toEqual(['vscode.open', 'crewforge.lintCrew']);
+      expect(recorded.executed[0].args[1]).toMatchObject({ selection: { startLine: 45 } });
+      expect(reloads).toBe(1);
+      expect(revealed).toEqual([policyFile()]);
+    });
+
+    it('takes another phase typed in, and stops when any question is cancelled', async () => {
+      await withPolicy();
+      recorded.quickPicks.push((items: { value: string }[]) => items.at(-1), [], { value: 'large' });
+      recorded.inputs.push('synthesis', '0');
+      await definitions().editNeeds(models());
+      expect((await rulesIn()).at(-1)).toEqual({ phase: 'synthesis', prefer: [{ weight: 100, selector: { matchLabels: { 'kubemoot.ai/size': 'large' } } }] });
+      const before = await fs.readFile(policyFile(), 'utf8');
+      for (const cancelAt of [0, 1, 2, 3]) {
+        recorded.quickPicks.length = 0;
+        recorded.inputs.length = 0;
+        const answers: unknown[] = [{ value: 'mulling' }, [], { value: '' }];
+        recorded.quickPicks.push(...answers.slice(0, cancelAt), undefined);
+        if (cancelAt === 3) recorded.inputs.push(undefined);
+        expect(await definitions().editNeeds(models())).toBeUndefined();
+      }
+      recorded.quickPicks.push((items: { value: string }[]) => items.at(-1));
+      recorded.inputs.push(undefined);
+      expect(await definitions().editNeeds(models())).toBeUndefined();
+      expect(await fs.readFile(policyFile(), 'utf8')).toBe(before);
+    });
+
+    it('takes preset needs as a script would, and refuses ones that are not', async () => {
+      await withPolicy();
+      expect(await definitions().editNeeds(models(), { phase: 'mulling', capabilities: ['tool-calling', 'vision'], size: 'large', preferFaster: '0' })).toBe(policyFile());
+      expect((await rulesIn())[0]).toEqual({ phase: 'mulling', require: { matchLabels: { 'capability/tool-calling': 'true', 'capability/vision': 'true' } }, prefer: [{ weight: 100, selector: { matchLabels: { 'kubemoot.ai/size': 'large' } } }] });
+      expect(await definitions().editNeeds(models(), { phase: 'mulling', capabilities: '', size: 'huge', preferFaster: '0' })).toBeUndefined();
+      expect(recorded.errors.at(-1)).toBe('CrewForge: "huge" is not a size: small, medium, large, or empty.');
+      expect(recorded.quickPickPlaceholders).toEqual([]);
+    });
+
+    it('offers to add a CrewSchedulingPolicy to a crew without one, then edits it', async () => {
+      const deps = { reloads: 0 };
+      const offering = new SourceDefinitions({
+        service: { located: async () => located },
+        readText: (f) => fs.readFile(f, 'utf8'),
+        reload: async () => {
+          deps.reloads++;
+          const file = path.join(root, 'templates', 'crewschedulingpolicy-lab-scheduling.yaml');
+          const text = await fs.readFile(file, 'utf8').catch(() => '');
+          if (text && !located.some((l) => l.file === file)) located.push({ manifest: asRendered(text), file, line: text.split('\n').findIndex((l) => l.startsWith('apiVersion:')) });
+          return [];
+        },
+        reveal: async () => undefined,
+      });
+      recorded.infoAnswers.push(undefined);
+      expect(await offering.editNeeds(models())).toBeUndefined();
+      expect(recorded.info).toEqual(['lab has no CrewSchedulingPolicy to state its scheduling needs in. Add one first?']);
+      recorded.infoAnswers.push('Add CrewSchedulingPolicy');
+      recorded.inputs.push('lab-scheduling', 'consent-3', '0');
+      recorded.quickPicks.push({ value: 'triage' }, [{ label: 'tool-calling' }], { value: 'small' });
+      const file = await offering.editNeeds(models());
+      expect(file).toBe(path.join(root, 'templates', 'crewschedulingpolicy-lab-scheduling.yaml'));
+      const rules = (load((await fs.readFile(file!, 'utf8')).replace('{{ .Release.Namespace }}', 'x').replace(/^.*\{\{- include .*$\n/m, '')) as { spec: { rules: unknown[] } }).spec.rules;
+      expect(rules).toEqual([
+        { phase: 'mulling', require: { matchLabels: { 'capability/tool-calling': 'true' } } },
+        { phase: 'triage', require: { matchLabels: { 'capability/tool-calling': 'true' } }, prefer: [{ weight: 100, selector: { matchLabels: { 'kubemoot.ai/size': 'small' } } }] },
+      ]);
+      expect(deps.reloads).toBe(2);
+    });
+
+    it('refuses a crew without a policy given preset needs, a policy outside a file, an unsaved file, and rules a template writes', async () => {
+      const preset = { phase: 'triage', capabilities: '', size: '', preferFaster: '0' };
+      expect(await definitions().editNeeds(models(), preset)).toBeUndefined();
+      expect(recorded.errors.at(-1)).toBe('CrewForge: lab has no CrewSchedulingPolicy in this source.');
+      expect(recorded.info).toEqual([]);
+      located.push({ manifest: obj('CrewSchedulingPolicy', 'p', 'default', { crewRef: 'other' }), file: policyFile(), line: 0 }, { manifest: obj('CrewSchedulingPolicy', 'lab-scheduling', 'default', { crewRef: 'lab' }), line: 0 });
+      expect(await definitions().editNeeds(models(), preset)).toBeUndefined();
+      expect(recorded.errors.at(-1)).toBe('CrewForge: CrewSchedulingPolicy lab-scheduling is not in a file of this source.');
+      located = located.slice(0, 2);
+      await withPolicy('apiVersion: kubemoot.ai/v1alpha1\nkind: CrewSchedulingPolicy\nmetadata:\n  name: lab-scheduling\nspec:\n  rules:\n    {{- toYaml .Values.rules | nindent 4 }}\n');
+      expect(await definitions().editNeeds(models(), preset)).toBeUndefined();
+      expect(recorded.errors.at(-1)).toBe('CrewForge: cannot edit crew.yaml here: Helm actions wrap parts of its spec; change it in the chart by hand.');
+      recorded.textDocuments.push({ uri: Uri.file(policyFile()), getText: () => '', isDirty: true });
+      expect(await definitions().editNeeds(models(), preset)).toBeUndefined();
+      expect(recorded.errors.at(-1)).toMatch(/save or close .* before editing the scheduling needs/);
+      expect(await definitions().editNeeds(undefined)).toBeUndefined();
+      expect(await definitions().editNeeds({ ...models(), entry: { ...entryAt(root), crewName: undefined } } as SourceNode)).toBeUndefined();
+      expect(reloads).toBe(0);
+    });
   });
 
   const declared = (file: string, kind: string, name: string): SourceNode => ({ kind: 'declared', entry: entryAt(root), item: { label: name, tooltip: '', icon: 'x', file, line: 0, object: { kind, name } } });

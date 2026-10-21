@@ -1,4 +1,5 @@
 import { CREW_LABEL } from '../crew/related';
+import { CAPABILITY_PREFIX, SIZE_LABEL, sizeClassFor } from '../crew/sizes';
 import { splitList } from '../crew/values';
 
 /**
@@ -141,23 +142,44 @@ export function embeddingModelYaml(style: SourceStyle, a: Answers): string {
   return [...head(style, 'EmbeddingModel', one(a, 'name')), 'spec:', `  model: ${quoted(one(a, 'model'))}`, `  serverRef: ${one(a, 'server')}`, `  dimensions: ${Number(one(a, 'dimensions'))}`, ''].join('\n');
 }
 
-/** A Model labeled the way the scheduler selects Models: capability labels, a latency class, and a context window. */
+/**
+ * A crew-local Model: its size and abilities as spec fields (parameters, capabilities), and
+ * as the labels a crew's own Models are matched by (kubemoot.ai/size derived from the
+ * parameters, capability/<name>). No latencyClass: that label is retired.
+ */
 export function modelYaml(style: SourceStyle, a: Answers): string {
-  const labels: Record<string, string> = { latencyClass: one(a, 'latencyClass') };
-  const context = one(a, 'contextWindow');
-  if (context) labels.contextWindow = context;
-  for (const cap of many(a, 'capabilities')) labels[`capability/${cap}`] = 'true';
-  return [...head(style, 'Model', one(a, 'name'), labels), 'spec:', `  model: ${quoted(one(a, 'model'))}`, `  serverRef: ${quoted(one(a, 'server'))}`, ''].join('\n');
+  const parameters = one(a, 'parameters');
+  const capabilities = many(a, 'capabilities');
+  const context = one(a, 'contextLength');
+  const size = sizeClassFor(parameters);
+  const labels: Record<string, string> = size ? { [SIZE_LABEL]: size } : {};
+  for (const cap of capabilities) labels[`${CAPABILITY_PREFIX}${cap}`] = 'true';
+  return [
+    '# A crew-local Model. While the crew ships any Model of its own it uses only those, on',
+    "# the servers they name, instead of the cluster's model catalog. Its scheduling rules",
+    '# match the labels below.',
+    ...head(style, 'Model', one(a, 'name'), labels),
+    'spec:',
+    `  model: ${quoted(one(a, 'model'))}`,
+    `  serverRef: ${quoted(one(a, 'server'))}`,
+    ...(parameters ? [`  parameters: ${quoted(parameters)}`] : []),
+    ...(capabilities.length ? [`  capabilities: ${flow(capabilities)}`] : []),
+    ...(context ? [`  contextLength: ${Number(context)}`] : []),
+    '',
+  ].join('\n');
 }
 
-/** A CrewSchedulingPolicy in the shape of the kmctl scaffold's: a quality bias per capability, and tool-calling Models for mulling and triage. */
+/** A CrewSchedulingPolicy in the shape of the kmctl scaffold's: a quality bias per capability, and models that can call tools for mulling and triage, from the cluster's catalog. */
 export function schedulingPolicyYaml(style: SourceStyle, a: Answers): string {
   return [
     ...head(style, 'CrewSchedulingPolicy', one(a, 'name')),
     'spec:',
     `  crewRef: ${quoted(style.crew)}`,
     `  archetypeRef: ${one(a, 'archetype')}`,
+    "  # The crew names no model. These rules state what it needs, and the scheduler matches",
+    "  # them against the cluster's model catalog.",
     '  # Per-capability quality bias in [0,1]: lower -> speed-lean, higher -> quality-lean.',
+    '  # It applies to a rule that states no preference of its own: mulling below.',
     '  qualityBias:',
     '    reasoning: "0.7"',
     '    tool-calling: "0.3"',
@@ -171,6 +193,7 @@ export function schedulingPolicyYaml(style: SourceStyle, a: Answers): string {
     '      require:',
     '        matchLabels:',
     '          capability/tool-calling: "true"',
+    '      preferFaster: 50',
     '',
   ].join('\n');
 }

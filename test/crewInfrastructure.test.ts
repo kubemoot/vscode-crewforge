@@ -40,8 +40,8 @@ describe('a live crew with its infrastructure', () => {
   it('shows its Models and the model server they run on, the shared ones marked with their owner', async () => {
     const d = await details();
     expect(shown(leaves(d, 'models'))).toEqual([
-      'big|Model · shared · qwen3:32b · high tier · 32768 context',
-      'qwen-8b|Model · qwen3:8b · low tier · 40960 context',
+      'big|Model · shared · qwen3:32b · latencyClass high (retired) · 32768 context',
+      'qwen-8b|Model · qwen3:8b · small · 40960 context',
       'ollama|ModelServer · shared · ollama · http://ollama:11434',
     ]);
     const [big, mine, server] = leaves(d, 'models').map(memberItem);

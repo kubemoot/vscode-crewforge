@@ -26,7 +26,7 @@ export const GROUPS: Record<Group, GroupInfo> = {
   models: {
     label: 'Models',
     icon: 'chip',
-    rule: "Models in the crew's namespace, which the scheduler binds its agents to instead of the cluster's model catalog, then the ModelServers they run on (the crew's namespace, then kubemoot). A crew with no Models of its own, as kmctl create scaffolds it, selects from the catalog: the ModelServers in the crew's namespace and kubemoot are listed, each with the models it offers.",
+    rule: "Models in the crew's namespace, which the scheduler binds its agents to instead of the cluster's model catalog, then the ModelServers they run on (the crew's namespace, then kubemoot). A crew with no Models of its own, as kmctl create scaffolds it, selects from the catalog by the needs its CrewSchedulingPolicy states (Edit Scheduling Needs in Crew Sources): the ModelServers in the crew's namespace and kubemoot are listed, each with the models it offers.",
     empty: "the cluster's model catalog",
   },
   rag: { label: 'RAG Sources', icon: 'book', rule: "RAGSources the agents or skills name (or were matched to by keyword) and the crew's own, then the EmbeddingModels they embed with." },

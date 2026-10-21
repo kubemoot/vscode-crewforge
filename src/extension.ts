@@ -17,6 +17,7 @@ import { agentSourceMap } from './source/declared';
 import { readAvailability } from './discussion/availability';
 import { LIVE_SCHEME, LiveDocuments, showToolDetails } from './views/liveDocuments';
 import { SourceDefinitions } from './source/defineCommands';
+import type { NeedsPreset } from './source/needsQuestions';
 import { DEFINITIONS } from './source/defineKinds';
 import type { Answers } from './source/templates';
 import { execProgram, listScripts, readText, readYamlFiles } from './source/nodeDeps';
@@ -307,6 +308,11 @@ export function activate(context: vscode.ExtensionContext): CrewForgeApi {
           await definitions.add(kind, node, answers);
         }),
       ),
+    ),
+    vscode.commands.registerCommand('crewforge.editSchedulingNeeds', (node?: SourceNode, preset?: NeedsPreset) =>
+      guard(async () => {
+        await definitions.editNeeds(node, preset);
+      }),
     ),
     vscode.commands.registerCommand('crewforge.removeFromSource', (node?: SourceNode) => guard(() => definitions.remove(node))),
     vscode.commands.registerCommand('crewforge.refreshCrews', () => tree.refresh()),
