@@ -1,30 +1,13 @@
 import { namesOf, specOf } from '../crew/values';
 import type { Manifest } from './manifests';
 import { kubemootObjects } from './positions';
+import { documentsOf, type Span } from './yamlLines';
 
 /** How removing an object changes its file: the whole file to the trash, a new text without its document, or a refusal that says why. */
 export type RemovalPlan = { trash: true } | { trash: false; text: string } | { refuse: string };
 
 const OPENS = /\{\{-?\s*(?:if|range|with|define|block)\b/g;
 const ENDS = /\{\{-?\s*end\b/g;
-
-/** A document of a multi-document file: its lines, from start (inclusive) to end (exclusive). */
-interface Segment {
-  start: number;
-  end: number;
-}
-
-function segmentsOf(lines: string[]): Segment[] {
-  const segments: Segment[] = [];
-  let start = 0;
-  lines.forEach((l, i) => {
-    if (!l.startsWith('---')) return;
-    segments.push({ start, end: i });
-    start = i + 1;
-  });
-  segments.push({ start, end: lines.length });
-  return segments;
-}
 
 /** Whether a document says anything: a line that is not blank, a comment, or a template comment. */
 const hasContent = (lines: string[]): boolean => lines.some((l) => l.trim() !== '' && !l.trim().startsWith('#') && !/^\{\{-?\s*\/\*.*\*\/\s*-?\}\}$/.test(l.trim()));
@@ -40,8 +23,8 @@ const balanced = (text: string): boolean => (text.match(OPENS) ?? []).length ===
  */
 export function removalPlan(text: string, kind: string, name: string): RemovalPlan {
   const lines = text.split('\n');
-  const segments = segmentsOf(lines);
-  const body = (s: Segment) => lines.slice(s.start, s.end);
+  const segments = documentsOf(lines);
+  const body = (s: Span) => lines.slice(s.start, s.end);
   const index = segments.findIndex((s) => kubemootObjects(body(s).join('\n')).some((p) => p.kind === kind && p.name === name));
   if (index < 0) return { refuse: missingReason(text, kind, name) };
   const target = segments[index];

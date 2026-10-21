@@ -195,6 +195,23 @@ describe('CrewForge views and commands in a real VS Code', () => {
     assert.deepEqual(errors.map((d) => d.message), []);
   });
 
+  it("Edit Scheduling Needs writes a phase's needs into the crew's CrewSchedulingPolicy and opens it at the rule", async () => {
+    const group = async (section: string) => {
+      const found = (await api.sources.getChildren(await sourceNode(api, 'demo/crew'))).find((n) => n.kind === 'declSection' && n.section === section);
+      assert.ok(found, `the source has a ${section} group`);
+      return found;
+    };
+    await vscode.commands.executeCommand('crewforge.addCrewSchedulingPolicy', await group('policies'), { name: 'demo-scheduling', archetype: 'consent-3' });
+    await editorShowing('file', ['kind: CrewSchedulingPolicy', 'name: demo-scheduling']);
+    await until('the policy in Crew Sources', async () => {
+      const items = await api.sources.getChildren(await group('policies'));
+      return items.find((n) => n.kind === 'declared' && n.item.label === 'demo-scheduling');
+    });
+    await vscode.commands.executeCommand('crewforge.editSchedulingNeeds', await group('models'), { phase: 'triage', capabilities: 'tool-calling', size: 'small', preferFaster: '30' });
+    const text = await editorShowing('file', ['kubemoot.ai/size: small', 'preferFaster: 30']);
+    assert.equal(vscode.window.activeTextEditor?.document.lineAt(vscode.window.activeTextEditor.selection.active.line).text, '    - phase: triage', text);
+  });
+
   it('View in CrewForge selects the Crew of a manifest in Crew Sources and opens its dashboard', async () => {
     const file = vscode.Uri.file(path.join(workspace, 'demo', 'crew', '02-crew.yaml'));
     await vscode.commands.executeCommand('crewforge.viewInCrewForge', file);

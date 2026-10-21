@@ -245,7 +245,7 @@ describe('declarationsOf', () => {
       at(obj('Crew', 'lab', ns), 0),
       at(obj('Agent', 'k8s', ns, { enabledTools: ['pods_list'], ragSources: [{ name: 'docs' }] }), 5),
       at(obj('Agent', 'nodes', ns, { enabledTools: ['pods_list', 'nodes_top'] }), 9),
-      at(obj('Model', 'qwen', ns, { model: 'qwen3:8b', serverRef: 'ollama' }, { latencyClass: 'low' }), 14),
+      at(obj('Model', 'qwen', ns, { model: 'qwen3:8b', serverRef: 'ollama', parameters: '8B' }), 14),
       at(obj('RAGSource', 'docs', ns, { source: { type: 'git', git: { url: 'https://x' } }, embeddingModelRef: 'gone' }), 20),
       at(obj('MCPGateway', 'gw', ns, { qualityPolicyRef: 'q' }), 30),
       at(obj('MCPQualityPolicy', 'q', ns), 34),
@@ -254,7 +254,7 @@ describe('declarationsOf', () => {
     ];
     const { sections } = await declarationsOf(located, [], readText);
     const shown = Object.fromEntries(sections.map((s) => [s.section, s.items.map((i) => `${i.label}|${i.description}|${i.line}|${i.object ? 'object' : '-'}`)]));
-    expect(shown.models).toEqual(['qwen|Model · qwen3:8b · low tier|14|object', 'ollama|ModelServer · shared, installed elsewhere|0|-']);
+    expect(shown.models).toEqual(['qwen|Model · qwen3:8b · small|14|object', 'ollama|ModelServer · shared, installed elsewhere|0|-']);
     expect(shown.rag).toEqual(['docs|RAGSource · git: https://x · not indexed yet|20|object', 'gone|EmbeddingModel · not in this source|0|-']);
     expect(shown.mcp).toEqual(['gw|MCPGateway · kubemoot|30|object', 'q|MCPQualityPolicy · 0 allowed · 0 blocked · AI review on|34|object']);
     expect(shown.tools).toEqual(['nodes_top|nodes|9|-', 'pods_list|k8s, nodes|5|-']);

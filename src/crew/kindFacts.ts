@@ -1,4 +1,5 @@
 import { byCodeUnits } from '../text';
+import { abilityOfLabel, LEGACY_LATENCY_LABEL, SIZE_LABEL, sizeClassFor } from './sizes';
 import { objectOf, strings, text } from './values';
 import type { Obj, Related } from './related';
 
@@ -35,13 +36,12 @@ function readyOf(o: Obj): boolean | undefined {
   return condition ? condition.status === 'True' : undefined;
 }
 
-/** The capability labels of a Model, as the scheduler's selectors read them. */
+/** The abilities of a Model: its capability labels, as the scheduler's selectors read them, and its spec.capabilities. */
 export function modelCapabilities(o: Obj): string[] {
-  const prefix = 'capability/';
-  return Object.entries(o.metadata.labels ?? {})
-    .filter(([k, v]) => k.startsWith(prefix) && v === 'true')
-    .map(([k]) => k.slice(prefix.length))
-    .sort(byCodeUnits);
+  const labeled = Object.entries(o.metadata.labels ?? {})
+    .map(([k, v]) => abilityOfLabel(k, v))
+    .filter((a): a is string => a !== undefined);
+  return [...new Set([...labeled, ...strings(o.spec?.capabilities)])].sort(byCodeUnits);
 }
 
 /** A Model's context length: its spec override, else what the server reported, else its contextWindow label. */
@@ -50,16 +50,33 @@ export function contextLength(o: Obj): string | undefined {
   return value === undefined ? undefined : String(value);
 }
 
+/** A crew-local Model's size class: its kubemoot.ai/size label, else derived from spec.parameters. */
+export function modelSize(o: Obj): string | undefined {
+  const label = o.metadata.labels?.[SIZE_LABEL];
+  const parameters = text(o.spec?.parameters);
+  if (label) return label;
+  return parameters === undefined ? undefined : sizeClassFor(parameters);
+}
+
+/** How a Model's size reads in its one-line description: its class, else its retired latencyClass marked so. */
+function sizeWord(size: string | undefined, legacy: string | undefined): string | undefined {
+  if (size) return size;
+  return legacy && `latencyClass ${legacy} (retired)`;
+}
+
 function model(o: Obj): KindFacts {
-  const tier = o.metadata.labels?.latencyClass;
+  const legacy = o.metadata.labels?.[LEGACY_LATENCY_LABEL];
+  const size = modelSize(o);
   const caps = modelCapabilities(o);
   const ctx = contextLength(o);
   return {
-    description: line(text(o.spec?.model), tier && `${tier} tier`, ctx && `${ctx} context`),
+    description: line(text(o.spec?.model), sizeWord(size, legacy), ctx && `${ctx} context`),
     lines: [
       fact('Model', o.spec?.model),
       fact('Server', o.spec?.serverRef),
-      fact('Capability tier (latencyClass)', tier),
+      fact('Parameters', o.spec?.parameters),
+      fact('Size', size),
+      fact('latencyClass (retired; use size)', legacy),
       fact('Capabilities', caps.join(', ') || 'none labeled'),
       fact('Context length', ctx),
       fact('VRAM (MiB)', o.spec?.vramMib),

@@ -175,7 +175,7 @@ export function seedCrew(cluster: FakeCluster, namespace = 'team-a'): FakeCluste
  */
 export function seedInfrastructure(cluster: FakeCluster, namespace = 'team-a'): FakeCluster {
   const release = { 'app.kubernetes.io/instance': 'lab' };
-  const own = obj('Model', 'qwen-8b', namespace, { model: 'qwen3:8b', serverRef: 'ollama', vramMib: 5120 }, { ...release, latencyClass: 'low', contextWindow: '40960', 'capability/tool-calling': 'true' });
+  const own = obj('Model', 'qwen-8b', namespace, { model: 'qwen3:8b', serverRef: 'ollama', vramMib: 5120, parameters: '8B', capabilities: ['tool-calling'] }, { ...release, 'kubemoot.ai/size': 'small', contextWindow: '40960', 'capability/tool-calling': 'true' });
   own.status = { ready: true, state: 'Available' };
   const other = obj('Model', 'big', namespace, { model: 'qwen3:32b', serverRef: 'ollama', contextLength: 32768 }, { 'kubemoot.ai/crew': 'other', latencyClass: 'high' });
   const server = obj('ModelServer', 'ollama', 'kubemoot', { type: 'ollama', endpoint: 'http://ollama:11434', scheduling: { weight: 100 } });

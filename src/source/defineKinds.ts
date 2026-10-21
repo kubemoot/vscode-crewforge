@@ -1,3 +1,4 @@
+import { ABILITIES, SIZES, sizeClassFor } from '../crew/sizes';
 import { nameProblem } from '../k8s/paths';
 import { byCodeUnits } from '../text';
 import { specOf, splitList, strings } from '../crew/values';
@@ -46,6 +47,8 @@ export interface KindDefinition {
   yaml: (style: SourceStyle, answers: Answers) => string;
   /** Why the kind cannot be added to this source now, such as a second scheduling policy. */
   refuse?: (c: DefineContext) => string | undefined;
+  /** For a kind added only as an advanced action: the warning confirmed before its questions, and the button that goes on. */
+  advanced?: { title: string; detail: string; action: string };
 }
 
 const ofKind = (c: DefineContext, kind: string) => c.objects.filter((m) => m.kind === kind);
@@ -202,21 +205,30 @@ const MODEL: KindDefinition = {
     nameQuestion('Model'),
     { key: 'model', type: 'text', title: 'Model', prompt: 'The model the server serves, such as qwen3:8b.', check: plainText('a model name') },
     { key: 'server', type: 'text', title: 'ModelServer', prompt: 'The ModelServer it runs on.', value: (c) => firstField(c, 'Model', (s) => s.serverRef) ?? 'ollama', check: (v) => nameProblem('ModelServer', v) },
-    { key: 'capabilities', type: 'text', title: 'Capabilities', prompt: 'The capabilities it offers, comma-separated; the scheduler matches them to the agents\'.', value: () => 'tool-calling', check: tokenList('capability') },
     {
-      key: 'latencyClass',
-      type: 'pick',
-      title: 'Capability tier',
-      items: () => [
-        { label: 'low', description: 'fast; for speed-leaning capabilities', value: 'low' },
-        { label: 'medium', description: 'between the two', value: 'medium' },
-        { label: 'high', description: 'slow and thorough; for quality-leaning capabilities', value: 'high' },
-      ],
+      key: 'parameters',
+      type: 'text',
+      title: 'Parameters',
+      prompt: `The model's total parameter count, such as 8B or 0.5B; its size class follows from it (${SIZES.map((s) => s.size + ': ' + s.covers).join('; ')}). Empty when unknown.`,
+      value: () => '',
+      check: parametersCheck,
     },
-    { key: 'contextWindow', type: 'text', title: 'Context length', prompt: 'The context window in tokens; empty to leave it unset.', value: () => '', check: wholeNumber('The context length', 10_000_000, true) },
+    { key: 'capabilities', type: 'text', title: 'Capabilities', prompt: `The abilities the model has, comma-separated, from ${ABILITIES.join(', ')}; the crew's scheduling rules match them. Empty for none.`, value: () => 'tool-calling', check: tokenList('ability', true) },
+    { key: 'contextLength', type: 'text', title: 'Context length', prompt: 'The context window in tokens; empty to leave it unset.', value: () => '', check: wholeNumber('The context length', 10_000_000, true) },
   ],
   yaml: modelYaml,
+  advanced: {
+    title: 'Add a crew-local Model?',
+    detail:
+      "A crew with Models of its own stops using the cluster's model catalog: it uses only its own Models, on the servers they name, so it no longer installs unchanged on another cluster. To say what the crew needs instead, use Edit Scheduling Needs.",
+    action: 'Add Crew-Local Model',
+  },
 };
+
+/** A parameter count as Model.spec.parameters takes it, or nothing. */
+export function parametersCheck(v: string): string | undefined {
+  return v.trim() === '' || sizeClassFor(v) ? undefined : 'The parameters are a number and a unit, K, M, B, or T, such as 8B or 0.5B.';
+}
 
 const SCHEDULING_POLICY: KindDefinition = {
   kind: 'CrewSchedulingPolicy',

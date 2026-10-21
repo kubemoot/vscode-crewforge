@@ -50,10 +50,17 @@ setting, else `KUBECONFIG`, else `~/.kube/config`.
    cluster's model catalog supplies the models. Name it in plain words; CrewForge suggests
    the Kubernetes name from it, and **Rename...** later changes either.
 5. Edit it, or use **Add <Kind>...** on a group in Crew Sources to add an Agent, a
-   PromptModule, a RAG source, an MCP server, and more. A Model added to a crew replaces
-   the cluster's model catalog for that crew, which then uses only its own Models. The
-   status bar says where it stands against its deployment: not deployed, in sync, or
-   changed. **Lint** checks the chart against your cluster's schemas.
+   PromptModule, a RAG source, an MCP server, and more. **Edit Scheduling Needs...** on
+   the Models group states what the crew needs for a phase, such as triage or mulling, in
+   its CrewSchedulingPolicy: the abilities a model must have (tool-calling, reasoning,
+   vision), the size it prefers (small, medium, or large, by parameter count), and how
+   much it favors the model the cluster measured faster (`preferFaster`). It names no
+   model; the cluster's model catalog supplies them. **Add Crew-Local Model
+   (Advanced)...** is there for a crew that must bring its own: it writes the Model's
+   parameters and abilities, and warns first that a crew with Models of its own stops
+   using the catalog. The status bar says where the crew stands against its deployment:
+   not deployed, in sync, or changed. **Lint** checks the chart against your cluster's
+   schemas.
 6. Choose **Deploy to Namespace...** to run it with Helm, then **Ask**, **Run Fitness**,
    and **Redeploy** after each edit. A deployed crew carries its fitness scenarios: its
    Fitness group runs all of them, a batch you pick, or one.

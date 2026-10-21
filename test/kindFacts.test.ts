@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { catalogOf, chunkingText, contextLength, factsOf, gatewayPort, hostOf, indexes, modelCapabilities } from '../src/crew/kindFacts';
+import { catalogOf, chunkingText, contextLength, factsOf, gatewayPort, hostOf, indexes, modelCapabilities, modelSize } from '../src/crew/kindFacts';
 import type { Obj, Related } from '../src/crew/related';
 import { obj } from './fakeCluster';
 
@@ -8,12 +8,26 @@ const related = (o: Obj, over: Partial<Related> = {}): Related => ({ kind: o.kin
 const withStatus = (o: Obj, status: Record<string, unknown>): Obj => ({ ...o, status });
 
 describe('Model facts', () => {
-  it('give the model name, capability tier, and context length, with every capability label on hover', () => {
-    const model = withStatus(obj('Model', 'qwen-8b', NS, { model: 'qwen3:8b', serverRef: 'ollama', vramMib: 5120 }, { latencyClass: 'low', contextWindow: '40960', 'capability/tool-calling': 'true', 'capability/reasoning': 'true', 'capability/off': 'false' }), { ready: true, state: 'Available' });
+  it('give a crew-local Model its size from the size label or its parameters, and its abilities from labels and spec', () => {
+    const model = withStatus(
+      obj('Model', 'qwen-8b', NS, { model: 'qwen3:8b', serverRef: 'ollama', vramMib: 5120, parameters: '8B', capabilities: ['vision', 'tool-calling'] }, { contextWindow: '40960', 'capability/tool-calling': 'true', 'capability/reasoning': 'true', 'capability/off': 'false' }),
+      { ready: true, state: 'Available' },
+    );
     const facts = factsOf(related(model));
-    expect(facts.description).toBe('qwen3:8b · low tier · 40960 context');
-    expect(facts.lines).toEqual(['Model: qwen3:8b', 'Server: ollama', 'Capability tier (latencyClass): low', 'Capabilities: reasoning, tool-calling', 'Context length: 40960', 'VRAM (MiB): 5120', 'State: Available']);
+    expect(facts.description).toBe('qwen3:8b · small · 40960 context');
+    expect(facts.lines).toEqual(['Model: qwen3:8b', 'Server: ollama', 'Parameters: 8B', 'Size: small', 'Capabilities: reasoning, tool-calling, vision', 'Context length: 40960', 'VRAM (MiB): 5120', 'State: Available']);
     expect(facts).toMatchObject({ icon: 'chip', ready: true });
+    expect(modelSize(obj('Model', 'm', NS, { parameters: '32B' }, { 'kubemoot.ai/size': 'medium' }))).toBe('medium');
+    expect(modelSize(obj('Model', 'm', NS, { parameters: '32B' }))).toBe('large');
+    expect(modelSize(obj('Model', 'm', NS, { parameters: 'lots' }))).toBeUndefined();
+  });
+
+  it('mark the retired latencyClass of an older Model, and show it only when the Model has no size', () => {
+    const legacy = factsOf(related(obj('Model', 'old', NS, { model: 'qwen3:32b' }, { latencyClass: 'high' })));
+    expect(legacy.description).toBe('qwen3:32b · latencyClass high (retired)');
+    expect(legacy.lines).toContain('latencyClass (retired; use size): high');
+    const both = factsOf(related(obj('Model', 'both', NS, { model: 'qwen3:8b', parameters: '8B' }, { latencyClass: 'low' })));
+    expect(both.description).toBe('qwen3:8b · small');
   });
 
   it('take the context length from the spec, then what the server reported, then the label', () => {

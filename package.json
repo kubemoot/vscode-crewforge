@@ -338,8 +338,14 @@
         "icon": "$(add)"
       },
       {
+        "command": "crewforge.editSchedulingNeeds",
+        "title": "Edit Scheduling Needs...",
+        "category": "CrewForge",
+        "icon": "$(settings)"
+      },
+      {
         "command": "crewforge.addModel",
-        "title": "Add Model...",
+        "title": "Add Crew-Local Model (Advanced)...",
         "category": "CrewForge",
         "icon": "$(add)"
       },
@@ -746,14 +752,24 @@
           "group": "inline"
         },
         {
-          "command": "crewforge.addModel",
+          "command": "crewforge.editSchedulingNeeds",
           "when": "view == crewforge.sources && viewItem == declSection-models",
           "group": "define@1"
         },
         {
-          "command": "crewforge.addModel",
+          "command": "crewforge.editSchedulingNeeds",
           "when": "view == crewforge.sources && viewItem == declSection-models",
           "group": "inline"
+        },
+        {
+          "command": "crewforge.addModel",
+          "when": "view == crewforge.sources && viewItem == declSection-models",
+          "group": "define@2"
+        },
+        {
+          "command": "crewforge.editSchedulingNeeds",
+          "when": "view == crewforge.sources && viewItem == declSection-policies",
+          "group": "define@2"
         },
         {
           "command": "crewforge.addRAGSource",
@@ -989,6 +1005,10 @@
         },
         {
           "command": "crewforge.addModel",
+          "when": "false"
+        },
+        {
+          "command": "crewforge.editSchedulingNeeds",
           "when": "false"
         },
         {

@@ -1,12 +1,15 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
-import type { SourceNode } from '../views/sourceTree';
-import { DEFINITIONS, fileName, type DefineContext, type Question } from './defineKinds';
+import { specOf } from '../crew/values';
+import { openAt, type SourceNode } from '../views/sourceTree';
+import { DEFINITIONS, fileName, type DefineContext, type KindDefinition, type Question } from './defineKinds';
 import { refuseIfDirty } from './fsEdit';
 import type { Located } from './locate';
-import { crewOf, isKubemoot, parseManifests } from './manifests';
+import { crewOf, isKubemoot, parseManifests, type Manifest } from './manifests';
+import { askNeeds, presetNeeds, type NeedsAnswer, type NeedsPreset } from './needsQuestions';
 import { referrersOf, removalPlan } from './removeObject';
+import { setPhaseNeeds } from './schedulingNeeds';
 import type { SourceEntry, SourceService } from './service';
 import { labelsHelperIn, type Answers, type SourceStyle } from './templates';
 
@@ -74,7 +77,7 @@ export class SourceDefinitions {
       void vscode.window.showErrorMessage(`CrewForge: ${refusal}`);
       return undefined;
     }
-    const answers = preset ? checked(definition.questions, preset, context) : await ask(definition.questions, context);
+    const answers = await answersFor(definition, context, preset);
     if (!answers) return undefined;
     const file = path.join(folderFor(entry), fileName(kind, String(answers.name)));
     const text = definition.yaml(await styleOf(entry, entry.crewName, located, this.deps.readText), answers);
@@ -88,6 +91,42 @@ export class SourceDefinitions {
     await vscode.commands.executeCommand('vscode.open', vscode.Uri.file(file));
     await this.afterChange(entry, file);
     return file;
+  }
+
+  /**
+   * Edit Scheduling Needs: states what the crew needs for one phase (required abilities,
+   * a preferred size, preferFaster) in its CrewSchedulingPolicy, from which the cluster's
+   * model catalog supplies the models. A crew without a policy is offered Add
+   * CrewSchedulingPolicy first. `preset` answers instead of asking, as a script or a test does.
+   */
+  async editNeeds(node?: SourceNode, preset?: NeedsPreset, offerPolicy = true): Promise<string | undefined> {
+    const entry = entryOf(node);
+    if (!entry?.crewName) return undefined;
+    const policy = (await locatedOf(this.deps, entry)).find((l) => l.manifest.kind === 'CrewSchedulingPolicy' && specOf(l.manifest).crewRef === entry.crewName);
+    if (!policy) return offerPolicy && !preset ? this.addPolicyFirst(node, entry.crewName) : needsError(`${entry.crewName} has no CrewSchedulingPolicy in this source.`);
+    if (!policy.file) return needsError(`CrewSchedulingPolicy ${policy.manifest.metadata.name} is not in a file of this source.`);
+    if (refuseIfDirty([policy.file], 'editing the scheduling needs')) return undefined;
+    const answer = await needsAnswer(policy.manifest, preset);
+    return answer && this.writeNeeds(entry, { ...policy, file: policy.file }, answer);
+  }
+
+  /** Writes one phase's needs into the policy's file, opens it at the rule, and lints the source. */
+  private async writeNeeds(entry: SourceEntry, policy: Located & { file: string }, answer: NeedsAnswer): Promise<string | undefined> {
+    const edit = setPhaseNeeds(await fs.readFile(policy.file, 'utf8'), policy.line, answer.phase, answer.needs);
+    if ('refuse' in edit) return needsError(`cannot edit ${path.basename(policy.file)} here: ${edit.refuse}.`);
+    await fs.writeFile(policy.file, edit.text, 'utf8');
+    const open = openAt(policy.file, edit.line);
+    await vscode.commands.executeCommand(open.command, ...(open.arguments ?? []));
+    await this.afterChange(entry, policy.file);
+    return policy.file;
+  }
+
+  /** Offers to add the crew's CrewSchedulingPolicy, then edits its needs. */
+  private async addPolicyFirst(node: SourceNode | undefined, crew: string): Promise<string | undefined> {
+    const add = 'Add CrewSchedulingPolicy';
+    const choice = await vscode.window.showInformationMessage(`${crew} has no CrewSchedulingPolicy to state its scheduling needs in. Add one first?`, add);
+    if (choice !== add || !(await this.add('CrewSchedulingPolicy', node))) return undefined;
+    return this.editNeeds(node, undefined, false);
   }
 
   /** Removes a declared object after a confirmation: its file to the trash, or its document out of a file that holds others. */
@@ -127,6 +166,31 @@ export function removeDetail(file: string, trash: boolean, referrers: string[]):
   const where = trash ? `${file} moves to the trash.` : `Its document is removed from ${file}; the file keeps the others.`;
   const still = referrers.length ? ` ${referrers.join(', ')} still name it; change them too.` : '';
   return `${where}${still} Nothing in the cluster changes until the crew is deployed again; the operator cleans up after it.`;
+}
+
+/** Says why the scheduling needs were not edited; undefined, for the command to return. */
+function needsError(message: string): undefined {
+  void vscode.window.showErrorMessage(`CrewForge: ${message}`);
+  return undefined;
+}
+
+/** The needs to write: the preset checked (saying why one is refused), or asked for. */
+async function needsAnswer(policy: Manifest, preset?: NeedsPreset): Promise<NeedsAnswer | undefined> {
+  if (!preset) return askNeeds(policy);
+  const answer = presetNeeds(preset);
+  return 'problem' in answer ? needsError(answer.problem) : answer;
+}
+
+/** A kind's answers: the preset checked, or the questions asked after an advanced kind's warning is accepted. */
+async function answersFor(definition: KindDefinition, context: DefineContext, preset?: Answers): Promise<Answers | undefined> {
+  if (preset) return checked(definition.questions, preset, context);
+  if (definition.advanced && !(await confirmAdvanced(definition.advanced))) return undefined;
+  return ask(definition.questions, context);
+}
+
+/** Whether the person goes on with an advanced action after reading its warning. */
+async function confirmAdvanced(advanced: NonNullable<KindDefinition['advanced']>): Promise<boolean> {
+  return (await vscode.window.showWarningMessage(advanced.title, { modal: true, detail: advanced.detail }, advanced.action)) === advanced.action;
 }
 
 /** Preset answers when every text answer passes its question's check; else undefined, after saying which failed. */
