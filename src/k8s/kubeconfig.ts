@@ -1,3 +1,4 @@
+import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { KubeConfig } from '@kubernetes/client-node';
@@ -44,7 +45,24 @@ function expandHome(p: string, home: string): string {
   return p === '~' || p.startsWith('~/') || p.startsWith('~\\') ? path.join(home, p.slice(1)) : p;
 }
 
+const LOOKED = 'the "crewforge.kubeconfig" setting, the KUBECONFIG environment variable, then ~/.kube/config';
+
+/** Fails in plain words when `file` is a folder or is missing, instead of leaking EISDIR or ENOENT. */
+function assertReadableFile(file: string): void {
+  let stat: fs.Stats;
+  try {
+    stat = fs.statSync(file);
+  } catch (err) {
+    if ((err as { code?: string }).code !== 'ENOENT') return;
+    throw new Error(`There is no kubeconfig file at ${file}. CrewForge looks in ${LOOKED}. Pick the file with "CrewForge: Select Kubeconfig File".`, { cause: err });
+  }
+  if (stat.isDirectory()) {
+    throw new Error(`${file} is a folder, not a kubeconfig file. Pick the file itself with "CrewForge: Select Kubeconfig File". (CrewForge looks in ${LOOKED}.)`);
+  }
+}
+
 function loadFile(file: string): KubeConfig {
+  assertReadableFile(file);
   const kc = new KubeConfig();
   kc.loadFromFile(file);
   return kc;

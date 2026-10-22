@@ -25,7 +25,10 @@ You need VS Code 1.95 or later and a kubeconfig with access to a cluster that ru
 Kubemoot operator. Developing a crew also needs `helm` (deploy and lint), `kubectl`
 (bundles of plain manifests), and a current [`kmctl`](https://github.com/kubemoot/kmctl/releases)
 release (create). CrewForge reads the kubeconfig from the `crewforge.kubeconfig`
-setting, else `KUBECONFIG`, else `~/.kube/config`.
+setting, else `KUBECONFIG`, else `~/.kube/config`. VS Code started from the Dock or
+Start menu does not see a `KUBECONFIG` exported in a terminal, so point CrewForge at the
+file with **CrewForge: Select Kubeconfig File**. If the path is a folder or missing,
+CrewForge says so and names the command.
 
 ## A 60-second tour
 
