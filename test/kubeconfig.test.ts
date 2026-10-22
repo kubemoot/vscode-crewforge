@@ -80,7 +80,24 @@ describe('loadKubeconfig', () => {
     expect(() => loadKubeconfig(file, '', {})).toThrow(/Select Kubernetes Context/);
   });
 
-  it('fails when the file does not exist', () => {
-    expect(() => loadKubeconfig(path.join(tmp(), 'missing'), '', {})).toThrow();
+  it('says a missing file is missing, naming the path and where it looks', () => {
+    const missing = path.join(tmp(), 'missing');
+    expect(() => loadKubeconfig(missing, '', {})).toThrow(new RegExp(`no kubeconfig file at .*missing.*setting.*KUBECONFIG.*~/.kube/config.*Select Kubeconfig File`));
+  });
+
+  it('says a folder is a folder, not EISDIR', () => {
+    const dir = tmp();
+    const load = () => loadKubeconfig(dir, '', {});
+    expect(load).toThrow(`${dir} is a folder, not a kubeconfig file`);
+    expect(load).toThrow('Select Kubeconfig File');
+    expect(load).not.toThrow(/EISDIR|Illegal operation/);
+  });
+
+  it('names the one bad entry in a KUBECONFIG list', () => {
+    const dir = tmp();
+    const good = kubeconfig(dir, 'good', ['alpha'], 'alpha');
+    const folder = path.join(dir, 'a-folder');
+    fs.mkdirSync(folder);
+    expect(() => loadKubeconfig('', '', { KUBECONFIG: [good, folder].join(path.delimiter) })).toThrow(`${folder} is a folder`);
   });
 });
