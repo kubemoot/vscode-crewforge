@@ -1,9 +1,15 @@
 name: Release
 
+# A Kubemoot Publish Release sends the kubemoot-published event when it succeeds; this
+# repository then builds a forced candidate (as the crews do), so the next Publish
+# Release here has a candidate built against the Kubemoot finals just published.
+
 on:
   push:
     branches: [main]
   workflow_dispatch:
+  repository_dispatch:
+    types: [kubemoot-published]
 
 permissions:
   contents: read
@@ -30,6 +36,7 @@ jobs:
         uses: kubemoot/release-actions/release-candidate-version@7accfbc33966d895bab2fc17a2a6c7f2520aaf76 # v0.11.1
         with:
           tag_prefix: "v"
+          force: ${{ github.event_name == 'repository_dispatch' }}
 
       - name: Create and push the candidate tag
         if: steps.version.outputs.release_created == 'true'
