@@ -27,7 +27,7 @@ jobs:
 
       - name: Calculate the release candidate version
         id: version
-        uses: kubemoot/release-actions/release-candidate-version@7accfbc33966d895bab2fc17a2a6c7f2520aaf76 # v0.11.1
+        uses: kubemoot/release-actions/release-candidate-version@46be10555367466d5add34c0f37dc2ae86c40af6 # v0.12.0
         with:
           tag_prefix: "v"
 
