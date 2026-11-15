@@ -12,10 +12,13 @@ on:
   repository_dispatch:
     types: [kubemoot-published]
 
-# One candidate build at a time: a dispatch and a push close together would otherwise both
-# compute the next rc.N from the same tags and race to push the tag.
+# Pushes build one candidate at a time, so two pushes close together do not compute the same
+# rc.N. The Kubemoot dispatch has its own group: in the shared group, a pending dispatch is
+# replaced by the next push run and the event is lost without a trace. A dispatch that
+# computes the same version as a push finds the tag already pushed and skips ("tag already
+# exists" below), so the two cannot publish two candidates for one version.
 concurrency:
-  group: release-candidate
+  group: ${{ github.event_name == 'repository_dispatch' && 'release-candidate-dispatch' || 'release-candidate' }}
   cancel-in-progress: false
 
 permissions:
