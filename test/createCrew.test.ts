@@ -20,7 +20,7 @@ beforeEach(() => {
   resetFake();
   ran = [];
   answer = { code: 0, stdout: 'Scaffolded', stderr: '' };
-  version = { code: 0, stdout: '0.15.0\n', stderr: '' };
+  version = { code: 0, stdout: '0.19.0\n', stderr: '' };
   help = { code: 0, stdout: 'Flags:\n      --display-name string   The name people read\n', stderr: '' };
 });
 
@@ -40,14 +40,14 @@ describe('kmctl version check', () => {
     expect(parseVersion('0.12.0+')).toBeUndefined();
   });
 
-  it('needs the first kmctl build with --display-name: 0.15.0-rc.4, named to the user as 0.15.0', async () => {
-    expect(parseVersion(KMCTL_MIN_VERSION)).toEqual({ release: [0, 15, 0], prerelease: [] });
-    expect(parseVersion(KMCTL_MIN_BUILD)).toEqual({ release: [0, 15, 0], prerelease: ['rc', 4] });
-    for (const old of ['0.14.1', '0.15.0-rc.0', 'v0.15.0-rc.3', '0.15.0-alpha', '0.15.0-rc']) {
+  it('needs the first kmctl build of the catalog scaffold: 0.19.0-rc.1, named to the user as 0.19.0', async () => {
+    expect(parseVersion(KMCTL_MIN_VERSION)).toEqual({ release: [0, 19, 0], prerelease: [] });
+    expect(parseVersion(KMCTL_MIN_BUILD)).toEqual({ release: [0, 19, 0], prerelease: ['rc', 1] });
+    for (const old of ['0.14.1', '0.15.0', '0.18.0', 'v0.18.1-rc.2', '0.19.0-rc.0', '0.19.0-alpha', '0.19.0-rc']) {
       version = { code: 0, stdout: `${old}\n`, stderr: '' };
-      expect(await kmctlProblem(exec), old).toContain(`needs kmctl 0.15.0 or later (for the starter crew); found kmctl ${old.trim()}`);
+      expect(await kmctlProblem(exec), old).toContain(`needs kmctl 0.19.0 or later (for the starter crew); found kmctl ${old.trim()}`);
     }
-    for (const ok of ['0.15.0-rc.4-3-gabc', '0.15.0-rc.4', 'v0.15.0-rc.5', '0.15.0-rc.10', 'v0.15.0', '0.15.1-rc.0', '0.16.0-rc.0']) {
+    for (const ok of ['0.19.0-rc.1-3-gabc', '0.19.0-rc.1', 'v0.19.0-rc.5', '0.19.0-rc.13', 'v0.19.0', '0.19.1-rc.0', '0.20.0-rc.0']) {
       version = { code: 0, stdout: `${ok}\n`, stderr: '' };
       expect(await kmctlProblem(exec), ok).toBeUndefined();
     }
@@ -81,7 +81,7 @@ describe('kmctl version check', () => {
 
   it('accepts a new enough or development kmctl', async () => {
     expect(await kmctlProblem(exec)).toBeUndefined();
-    version = { code: 0, stdout: '0.15.2\n', stderr: '' };
+    version = { code: 0, stdout: '0.19.2\n', stderr: '' };
     expect(await kmctlProblem(exec)).toBeUndefined();
     version = { code: 0, stdout: 'dev\n', stderr: '' };
     expect(await kmctlProblem(exec)).toBeUndefined();
@@ -93,8 +93,8 @@ describe('kmctl version check', () => {
     expect(await kmctlProblem(exec)).toBe(
       'Creating a crew needs a kmctl whose create command takes --display-name, which stores the name people read; found kmctl dev. Install a current release from https://github.com/kubemoot/kmctl/releases',
     );
-    version = { code: 0, stdout: '0.15.0\n', stderr: '' };
-    expect(await kmctlProblem(exec)).toContain('found kmctl 0.15.0');
+    version = { code: 0, stdout: '0.19.0\n', stderr: '' };
+    expect(await kmctlProblem(exec)).toContain('found kmctl 0.19.0');
     help = { code: 1, stdout: '', stderr: 'unknown command' };
     expect(await kmctlProblem(exec)).toContain('takes --display-name');
     help = { code: 0, stdout: '  --display-name string\n', stderr: '' };
@@ -104,10 +104,10 @@ describe('kmctl version check', () => {
   it('names the version found, the one needed, and where to get it', async () => {
     version = { code: 0, stdout: '0.13.0\n', stderr: '' };
     expect(await kmctlProblem(exec)).toBe(
-      'Creating a crew needs kmctl 0.15.0 or later (for the starter crew); found kmctl 0.13.0. Install a current release from https://github.com/kubemoot/kmctl/releases',
+      'Creating a crew needs kmctl 0.19.0 or later (for the starter crew); found kmctl 0.13.0. Install a current release from https://github.com/kubemoot/kmctl/releases',
     );
     version = { code: 127, stdout: '', stderr: 'not found' };
-    expect(await kmctlProblem(exec)).toMatch(/needs kmctl 0\.15\.0 or later on your PATH, and none was found\. Install it from https:\/\/github\.com\/kubemoot\/kmctl\/releases/);
+    expect(await kmctlProblem(exec)).toMatch(/needs kmctl 0\.19\.0 or later on your PATH, and none was found\. Install it from https:\/\/github\.com\/kubemoot\/kmctl\/releases/);
     version = { code: 1, stdout: '', stderr: 'unknown flag: --short' };
     expect(await kmctlProblem(exec)).toMatch(/`kmctl version` failed: unknown flag: --short/);
     version = { code: 2, stdout: 'odd', stderr: '' };
@@ -136,7 +136,7 @@ describe('scaffoldCrew', () => {
 
   it('says how to get kmctl when it is missing, and passes its errors on', async () => {
     answer = { code: 127, stdout: '', stderr: 'kmctl was not found on PATH' };
-    await expect(scaffoldCrew(exec, { name: 'demo', displayName: 'demo', parent: '/w', members: 1 })).rejects.toThrow('needs kmctl 0.15.0 or later on your PATH, and none was found');
+    await expect(scaffoldCrew(exec, { name: 'demo', displayName: 'demo', parent: '/w', members: 1 })).rejects.toThrow('needs kmctl 0.19.0 or later on your PATH, and none was found');
     answer = { code: 1, stdout: '', stderr: 'directory "/w/demo" already exists\n' };
     await expect(scaffoldCrew(exec, { name: 'demo', displayName: 'demo', parent: '/w', members: 1 })).rejects.toThrow('kmctl create failed: directory "/w/demo" already exists');
   });
@@ -283,7 +283,7 @@ describe('createCrewCommand', () => {
     recorded.workspaceFolders = [{ name: 'crews', uri: Uri.file('/w') }];
     version = { code: 127, stdout: '', stderr: 'kmctl was not found on PATH' };
     await run();
-    expect(recorded.modalErrors).toEqual(['Creating a crew needs kmctl 0.15.0 or later on your PATH, and none was found. Install it from https://github.com/kubemoot/kmctl/releases']);
+    expect(recorded.modalErrors).toEqual(['Creating a crew needs kmctl 0.19.0 or later on your PATH, and none was found. Install it from https://github.com/kubemoot/kmctl/releases']);
     expect(ran).toEqual([]);
   });
 
