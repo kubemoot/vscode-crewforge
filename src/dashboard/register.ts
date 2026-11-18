@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { dashboardBase, namespaceFilter, type Connection } from '../connection';
+import { dashboardBase, namespaceScope, type Connection } from '../connection';
 import { checkName } from '../k8s/paths';
 import { ConnectionStatus, showConnectionInfo } from '../connectionInfo';
 import type { CrewDetails } from '../crew/details';
@@ -339,9 +339,10 @@ class CrewsOverview implements PageModel {
     const connection = await this.dashboards.status.update();
     if (connection.unreachable) return renderOverview({ connection, rows: [] });
     const { connect, kinds } = this.dashboards.overviewParts;
-    const { client, context } = connect();
+    const live = connect();
+    const { client, context } = live;
     try {
-      this.crews = await listCrews(client, namespaceFilter());
+      this.crews = await listCrews(client, namespaceScope(live));
     } catch (err) {
       return renderOverview({ connection, rows: [], error: errorText(err) });
     }

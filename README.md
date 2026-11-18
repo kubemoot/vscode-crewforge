@@ -33,8 +33,10 @@ CrewForge says so and names the command.
 ## A 60-second tour
 
 1. Click the Kubemoot mark (the round table) in the activity bar. **Deployed Crews** lists
-   the crews your kubeconfig can read, one row each with its namespace; **Group by
-   Namespace** in its title bar nests them instead. **Crew Sources** lists the crew charts
+   the crews in your kubeconfig context's namespace (every namespace you can read when the
+   context sets none or holds no crews; set `crewforge.namespaces`, or `*` there for all),
+   one row each with its namespace; **Group by Namespace** in its title bar nests them
+   instead. **Crew Sources** lists the crew charts
    and bundles in your workspace. Each crew shows by its display name, such as "Help
    Desk", with its Kubernetes name beside it.
 2. Choose **Ask** on a deployed crew. A chat opens; type a question and press Enter. Each
