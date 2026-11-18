@@ -1129,7 +1129,7 @@
             "type": "string"
           },
           "default": [],
-          "description": "Show crews only in these namespaces. Empty shows every namespace you can read."
+          "markdownDescription": "Show crews only in these namespaces. Empty uses the namespace of the kubeconfig's current context, and shows every namespace you can read when the context sets none or holds no crews. Add `*` to show every namespace you can read; a long list is slow through a tunnel."
         },
         "crewforge.streamTimeoutSeconds": {
           "type": "number",

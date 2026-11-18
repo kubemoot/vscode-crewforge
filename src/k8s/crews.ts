@@ -88,24 +88,53 @@ export interface CrewListing {
   failed: { namespace: string; error: unknown }[];
 }
 
-/**
- * Lists Crews like listCrews, but a namespace that cannot be read is reported beside the
- * Crews of the others. When none can be read, that first failure is thrown.
- */
-export async function listCrewsEach(client: KubeTransport, namespaces: string[]): Promise<CrewListing> {
-  if (namespaces.length === 0) return { crews: await listCrews(client, namespaces), failed: [] };
-  const results = await Promise.allSettled(namespaces.map(async (ns) => parseCrewList(await client.request('GET', namespacedCrewsPath(ns)))));
-  const failed = results.flatMap((r, i) => (r.status === 'rejected' ? [{ namespace: namespaces[i], error: r.reason as unknown }] : []));
-  if (failed.length === namespaces.length) throw failed[0].error;
-  return { crews: results.flatMap((r) => (r.status === 'fulfilled' ? r.value : [])), failed };
+/** Which namespaces to list Crews in; `implicit` marks a default (the kubeconfig's namespace) that may be widened when it holds none. */
+export interface NamespaceScope {
+  namespaces: string[];
+  implicit?: boolean;
+}
+
+/** Namespaces to list, or a scope that also says whether they are a default. */
+export type Scope = string[] | NamespaceScope;
+
+const scopeOf = (scope: Scope): NamespaceScope => (Array.isArray(scope) ? { namespaces: scope } : scope);
+
+/** Every Crew the credentials can list, across namespaces: one call. */
+async function listEverywhere(client: KubeTransport): Promise<CrewSummary[]> {
+  return parseCrewList(await client.request('GET', CREWS_PATH));
 }
 
 /**
- * Lists Crews. With a namespace filter it asks each namespace, which works for accounts
- * that may read only their own namespaces; without one it lists across the cluster.
+ * Lists Crews like listCrews, but a namespace that cannot be read is reported beside the
+ * Crews of the others. When none can be read, that first failure is thrown. An implicit
+ * scope that holds no Crews widens to the whole cluster, when that can be read.
  */
-export async function listCrews(client: KubeTransport, namespaces: string[]): Promise<CrewSummary[]> {
-  if (namespaces.length === 0) return parseCrewList(await client.request('GET', CREWS_PATH));
+export async function listCrewsEach(client: KubeTransport, given: Scope): Promise<CrewListing> {
+  const scope = scopeOf(given);
+  const { namespaces } = scope;
+  if (namespaces.length === 0) return { crews: await listEverywhere(client), failed: [] };
+  const results = await Promise.allSettled(namespaces.map(async (ns) => parseCrewList(await client.request('GET', namespacedCrewsPath(ns)))));
+  const failed = results.flatMap((r, i) => (r.status === 'rejected' ? [{ namespace: namespaces[i], error: r.reason as unknown }] : []));
+  const crews = results.flatMap((r) => (r.status === 'fulfilled' ? r.value : []));
+  if (scope.implicit && crews.length === 0) {
+    const widened = await listEverywhere(client).catch(() => undefined);
+    if (widened) return { crews: widened, failed: [] };
+  }
+  if (failed.length === namespaces.length) throw failed[0].error;
+  return { crews, failed };
+}
+
+/**
+ * Lists Crews. With a namespace scope it asks each namespace, which works for accounts
+ * that may read only their own namespaces, and fails if any cannot be read; without one
+ * it lists across the cluster. An implicit scope that holds no Crews widens to the cluster.
+ */
+export async function listCrews(client: KubeTransport, given: Scope): Promise<CrewSummary[]> {
+  const scope = scopeOf(given);
+  const { namespaces } = scope;
+  if (namespaces.length === 0) return listEverywhere(client);
   const lists = await Promise.all(namespaces.map(async (ns) => parseCrewList(await client.request('GET', namespacedCrewsPath(ns)))));
-  return lists.flat();
+  const crews = lists.flat();
+  if (scope.implicit && crews.length === 0) return (await listEverywhere(client).catch(() => undefined)) ?? crews;
+  return crews;
 }

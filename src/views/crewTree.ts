@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { connect, namespaceFilter, type Connection } from '../connection';
+import { connect, namespaceScope, type Connection } from '../connection';
 import { loadCrewDetails, type CrewDetails } from '../crew/details';
 import type { Group } from '../crew/groups';
 import { readToolCatalog, type ToolCatalog } from '../crew/toolCatalog';
@@ -167,7 +167,7 @@ export class CrewTreeProvider implements vscode.TreeDataProvider<CrewNode> {
     try {
       this.connection = this.connectTo();
       this.kinds = undefined;
-      ({ crews: this.crews, failed } = await listCrewsEach(this.connection.client, namespaceFilter()));
+      ({ crews: this.crews, failed } = await listCrewsEach(this.connection.client, namespaceScope(this.connection)));
     } catch (err) {
       this.crews = [];
       return errorItems(err);

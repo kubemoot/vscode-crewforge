@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { connect, namespaceFilter, type Connection } from '../connection';
+import { connect, namespaceScope, type Connection } from '../connection';
 import { listCrews } from '../k8s/crews';
 import { deploymentDescription, historyLines, type Deployment } from '../source/deployments';
 import { summarize, type ResourceDrift } from '../source/drift';
@@ -237,7 +237,7 @@ export class SourceTreeProvider implements vscode.TreeDataProvider<SourceNode> {
     try {
       this.connection = this.connectTo();
       const connection = this.connection;
-      const deployments = this.service.deployments(entry, await listCrews(connection.client, namespaceFilter()));
+      const deployments = this.service.deployments(entry, await listCrews(connection.client, namespaceScope(connection)));
       const nodes = await Promise.all(deployments.map((deployment) => this.withDrift(entry, deployment, connection)));
       this.loaded.set(entry.source.root, nodes as DeploymentNode[]);
       this.loadedChanged.fire();
