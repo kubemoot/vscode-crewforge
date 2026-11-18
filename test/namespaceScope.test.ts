@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { namespaceScope } from '../src/connection';
-import { agentCounts } from '../src/dashboard/overview';
+import { agentCounts, renderOverview } from '../src/dashboard/overview';
 import { listCrews, listCrewsEach } from '../src/k8s/crews';
 import type { KubeClient } from '../src/k8s/request';
 import { discoverKinds } from '../src/source/live';
@@ -52,6 +52,8 @@ describe('the namespaces that crews are shown from', () => {
   it('reads every namespace when the setting says *, even with a context namespace', () => {
     recorded.settings.set(SETTING, ['*']);
     expect(namespaceScope({ namespace: 'team-9' })).toEqual({ namespaces: [] });
+    recorded.settings.set(SETTING, ['team-1', '*']);
+    expect(namespaceScope({ namespace: 'team-9' })).toEqual({ namespaces: [] });
   });
 
   it('asks only the context namespace, and no other namespace', async () => {
@@ -66,7 +68,26 @@ describe('the namespaces that crews are shown from', () => {
     const scope = namespaceScope({ namespace: 'default' });
     expect((await listCrews(cluster as never, scope)).length).toBe(WORKSHOP);
     expect(cluster.calls.map((c) => c.path)).toEqual(['/apis/kubemoot.ai/v1alpha1/namespaces/default/crews', '/apis/kubemoot.ai/v1alpha1/crews']);
-    expect((await listCrewsEach(cluster as never, scope)).crews).toHaveLength(WORKSHOP);
+    expect(await listCrewsEach(cluster as never, scope)).toMatchObject({ failed: [], scope: 'all namespaces (default had no crews)' });
+  });
+
+  it('widens the same way in listCrews and listCrewsEach when the implicit namespace is forbidden', async () => {
+    const cluster = workshop();
+    cluster.failures.set('/apis/kubemoot.ai/v1alpha1/namespaces/team-4/crews', new Error('forbidden'));
+    const scope = namespaceScope({ namespace: 'team-4' });
+    expect(await listCrews(cluster as never, scope)).toHaveLength(WORKSHOP);
+    expect(await listCrewsEach(cluster as never, scope)).toMatchObject({ failed: [], scope: 'all namespaces (team-4 could not be read)' });
+  });
+
+  it('throws from listCrews only when every namespace failed, and reports the scope read', async () => {
+    const cluster = workshop();
+    const boom = new Error('forbidden');
+    cluster.failures.set('/apis/kubemoot.ai/v1alpha1/namespaces/team-2/crews', boom);
+    expect((await listCrews(cluster as never, ['team-1', 'team-2'])).map((c) => c.name)).toEqual(['crew-1']);
+    await expect(listCrews(cluster as never, ['team-2'])).rejects.toBe(boom);
+    expect((await listCrewsEach(cluster as never, namespaceScope({ namespace: 'team-4' }))).scope).toBe('namespace team-4');
+    expect((await listCrewsEach(cluster as never, ['team-1', 'team-3'])).scope).toBe('namespaces team-1, team-3');
+    expect((await listCrewsEach(cluster as never, [])).scope).toBe('all namespaces');
   });
 
   it('does not widen an explicit setting that holds no crews', async () => {
@@ -93,8 +114,28 @@ describe('calls made opening the views on a thirty-namespace cluster', () => {
       recorded.settings.delete(SETTING);
       return open(workshop(), 'team-4');
     })();
-    console.log(`calls opening the tree and the overview: every namespace ${before.calls}, context namespace ${after.calls}`);
     expect(before).toEqual({ crews: WORKSHOP, calls: 1 + 1 + 1 + WORKSHOP });
     expect(after).toEqual({ crews: 1, calls: 1 + 1 + 1 + 1 });
+  });
+});
+
+describe('showing the scope in use', () => {
+  it('tells the Deployed Crews view which namespaces it read, and clears it on an error', async () => {
+    const cluster = workshop();
+    const seen: (string | undefined)[] = [];
+    const tree = new CrewTreeProvider(() => ({ source: '/k', context: 'lab', client: cluster as unknown as KubeClient, namespace: 'default' }));
+    tree.onScope = (scope) => seen.push(scope);
+    await tree.getChildren();
+    cluster.failures.set('/apis/kubemoot.ai/v1alpha1/namespaces/default/crews', new Error('down'));
+    cluster.failures.set('/apis/kubemoot.ai/v1alpha1/crews', new Error('down'));
+    tree.refresh();
+    await tree.getChildren();
+    expect(seen).toEqual(['all namespaces (default had no crews)', undefined]);
+  });
+
+  it('puts a line on the Crews Overview, and none when the scope is unknown', () => {
+    const connection = { label: 'lab', lines: [] } as never;
+    expect(renderOverview({ connection, rows: [], scope: 'namespace team-4' })).toContain('Showing crews from namespace team-4.');
+    expect(renderOverview({ connection, rows: [] })).not.toContain('Showing crews from');
   });
 });

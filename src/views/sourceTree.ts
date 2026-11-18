@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { connect, namespaceScope, type Connection } from '../connection';
-import { listCrews } from '../k8s/crews';
+import { listCrewsEach } from '../k8s/crews';
 import { deploymentDescription, historyLines, type Deployment } from '../source/deployments';
 import { summarize, type ResourceDrift } from '../source/drift';
 import { DRIFT_STATES } from '../source/driftStates';
@@ -56,6 +56,8 @@ export class SourceTreeProvider implements vscode.TreeDataProvider<SourceNode> {
   fitnessBusy: (namespace: string, crew: string) => boolean = () => false;
   /** Shows a line above the view's items, such as "Still reading from lab...", or clears it; set to the view's message. */
   onMessage: (text: string | undefined) => void = () => undefined;
+  /** Tells the view which namespaces its deployments were read from. */
+  onScope: (scope: string | undefined) => void = () => undefined;
   /** Says on the view when a read from the cluster takes a while. */
   readonly reading = new ReadingNotice(
     (text) => this.onMessage(text),
@@ -237,7 +239,9 @@ export class SourceTreeProvider implements vscode.TreeDataProvider<SourceNode> {
     try {
       this.connection = this.connectTo();
       const connection = this.connection;
-      const deployments = this.service.deployments(entry, await listCrews(connection.client, namespaceScope(connection)));
+      const listing = await listCrewsEach(connection.client, namespaceScope(connection));
+      this.onScope(listing.scope);
+      const deployments = this.service.deployments(entry, listing.crews);
       const nodes = await Promise.all(deployments.map((deployment) => this.withDrift(entry, deployment, connection)));
       this.loaded.set(entry.source.root, nodes as DeploymentNode[]);
       this.loadedChanged.fire();
