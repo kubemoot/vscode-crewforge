@@ -23,15 +23,15 @@ export function createArgs(request: CreateCrewRequest, context?: string): string
   return args;
 }
 
-/** The kmctl release whose `create` takes `--display-name` and scaffolds the starter crew, as named to the user. */
-export const KMCTL_MIN_VERSION = '0.15.0';
+/** The kmctl release whose `create` takes `--display-name` and scaffolds crews that select models from the cluster's catalog, as named to the user. */
+export const KMCTL_MIN_VERSION = '0.19.0';
 
 /**
- * The first kmctl build whose `create` takes `--display-name`: release candidate
- * 0.15.0-rc.4. By semver precedence 0.15.0-rc.0 < 0.15.0-rc.4 < 0.15.0, so earlier
- * candidates are refused, while rc.4, later candidates, and every release pass.
+ * The first kmctl build of that release: candidate 0.19.0-rc.1. By semver precedence
+ * 0.19.0-rc.0 < 0.19.0-rc.1 < 0.19.0, so 0.18.x and earlier are refused, while the
+ * candidates of 0.19.0 from rc.1 on, and every later release, pass.
  */
-export const KMCTL_MIN_BUILD = '0.15.0-rc.4';
+export const KMCTL_MIN_BUILD = '0.19.0-rc.1';
 
 export const KMCTL_RELEASES = 'https://github.com/kubemoot/kmctl/releases';
 
