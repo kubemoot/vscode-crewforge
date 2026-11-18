@@ -11,7 +11,7 @@ import { ControlsReader, RunControls, type FitnessActivity } from '../fitness/co
 import { isRunning, listIterations, listRuns, type FitnessRun } from '../fitness/fitness';
 import { readDeployedScenarios } from '../fitness/deployed';
 import type { KubeTransport } from '../k8s/request';
-import { listCrews, type CrewSummary } from '../k8s/crews';
+import { listCrews, listCrewsEach, type CrewSummary } from '../k8s/crews';
 import { redeployTarget, type LoopMemory } from '../loop/state';
 import { ChatPanel } from '../panels/chatPanel';
 import type { Deployment } from '../source/deployments';
@@ -341,14 +341,15 @@ class CrewsOverview implements PageModel {
     const { connect, kinds } = this.dashboards.overviewParts;
     const live = connect();
     const { client, context } = live;
+    let scope: string;
     try {
-      this.crews = await listCrews(client, namespaceScope(live));
+      ({ crews: this.crews, scope } = await listCrewsEach(client, namespaceScope(live)));
     } catch (err) {
       return renderOverview({ connection, rows: [], error: errorText(err) });
     }
     const counts = await agentCounts(client, await kinds(client).catch(() => new Map()), this.crews.map((c) => c.namespace));
     const rows = await Promise.all(this.crews.map((crew) => this.dashboards.overviewRow(crew, counts, context)));
-    return renderOverview({ connection, rows });
+    return renderOverview({ connection, rows, scope });
   }
 
   refreshMs(): number {

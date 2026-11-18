@@ -34,7 +34,7 @@ CrewForge says so and names the command.
 
 1. Click the Kubemoot mark (the round table) in the activity bar. **Deployed Crews** lists
    the crews in your kubeconfig context's namespace (every namespace you can read when the
-   context sets none or holds no crews; set `crewforge.namespaces`, or `*` there for all),
+   context sets none or holds no crews; set `crewforge.namespaces`, or `*` there for all, alone or among other entries),
    one row each with its namespace; **Group by Namespace** in its title bar nests them
    instead. **Crew Sources** lists the crew charts
    and bundles in your workspace. Each crew shows by its display name, such as "Help

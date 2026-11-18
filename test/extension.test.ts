@@ -102,6 +102,12 @@ describe('what CrewForge hands other code', () => {
 });
 
 describe('commands', () => {
+  it('shows the namespaces the Deployed Crews view read as its description', async () => {
+    const provider = recorded.treeViews[0].options.treeDataProvider as { getChildren: () => Promise<unknown> };
+    await provider.getChildren();
+    expect(recorded.treeViews[0].description).toBe('all namespaces');
+  });
+
   it('askCrew opens a chat for the crew clicked in the view', async () => {
     await run('crewforge.askCrew', { kind: 'crew', crew: { name: 'lab-ops', namespace: 'team-a', ready: true, phase: 'Ready' } });
     expect(recorded.panels.map((p) => p.title)).toEqual(['Ask lab-ops']);

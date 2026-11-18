@@ -43,6 +43,8 @@ export class CrewTreeProvider implements vscode.TreeDataProvider<CrewNode> {
   fitnessBusy: (namespace: string, crew: string) => boolean = () => false;
   /** Shows a line above the view's items, such as "Still reading from lab...", or clears it; set to the view's message. */
   onMessage: (text: string | undefined) => void = () => undefined;
+  /** Tells the view which namespaces its crews were read from. */
+  onScope: (scope: string | undefined) => void = () => undefined;
   /** Says on the view when a read from the cluster takes a while. */
   readonly reading = new ReadingNotice(
     (text) => this.onMessage(text),
@@ -167,9 +169,12 @@ export class CrewTreeProvider implements vscode.TreeDataProvider<CrewNode> {
     try {
       this.connection = this.connectTo();
       this.kinds = undefined;
-      ({ crews: this.crews, failed } = await listCrewsEach(this.connection.client, namespaceScope(this.connection)));
+      let scope: string;
+      ({ crews: this.crews, failed, scope } = await listCrewsEach(this.connection.client, namespaceScope(this.connection)));
+      this.onScope(scope);
     } catch (err) {
       this.crews = [];
+      this.onScope(undefined);
       return errorItems(err);
     }
     const connection = this.connectionItem();

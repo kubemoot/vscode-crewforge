@@ -27,6 +27,8 @@ export interface OverviewView {
   connection: ConnectionInfo;
   rows: OverviewRow[];
   error?: string;
+  /** Which namespaces the crews were read from, such as "namespace team-4". */
+  scope?: string;
 }
 
 /** Ready and total agents per crew, by `namespace/crew`, one Agent list per namespace; undefined for a namespace that cannot be read. */
@@ -68,7 +70,8 @@ export function renderOverview(v: OverviewView): string {
   const rows = v.rows.map(rowCells);
   const head = ['Crew', 'Namespace', 'Phase', 'Agents ready', 'Chart', 'Channel', 'Last deploy', 'Answering now', 'Recent problems', 'Local source'];
   const deployed = section(`Deployed crews (${v.rows.length})`, table(head, rows, 'No deployed crews in the namespaces this kubeconfig can see.'));
-  return `<h1>Crews Overview</h1>${connection}${top}${error}${deployed}`;
+  const scope = v.scope ? note(`Showing crews from ${v.scope}.`) : '';
+  return `<h1>Crews Overview</h1>${connection}${top}${scope}${error}${deployed}`;
 }
 
 function rowCells(r: OverviewRow): string[] {
