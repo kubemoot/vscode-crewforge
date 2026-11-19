@@ -28,6 +28,14 @@
 # with publish_marketplaces checks it too. With pre_release, the
 # .vsix is packaged as a pre-release, the GitHub Release's copy included. The CLI
 # versions are the @vscode/vsce and ovsx devDependencies in package-lock.json.
+#
+# With registries_only, nothing is released: the workflow publishes the .vsix of a
+# GitHub Release that already exists to the registries (for a version released with
+# publish_marketplaces off). rc_tag names the final tag (vX.Y.Z) or the candidate whose
+# final exists (vX.Y.Z-rc.N maps to vX.Y.Z); "latest" and a version without a release
+# are refused. The locate job checks that the release is not a draft and carries exactly
+# one .vsix whose package.json version matches, then the same publish job runs. A dry run
+# checks the release and the credentials and publishes nothing.
 name: Publish Release
 
 on:
@@ -48,6 +56,11 @@ on:
         required: true
         default: false
         type: boolean
+      registries_only:
+        description: 'Publish an existing GitHub Release''s .vsix to the registries without releasing anything (rc_tag: the final vX.Y.Z or its candidate)'
+        required: true
+        default: false
+        type: boolean
       pre_release:
         description: 'Publish to the registries as a pre-release version'
         required: true
@@ -62,21 +75,22 @@ permissions:
   contents: read
 
 jobs:
-  prepare:
-    # The same runners as every release in the ecosystem, and only from main.
+  # Both paths pass through here: the registry credentials are checked before anything
+  # is tagged, and a registries_only run finds the existing release to publish.
+  locate:
     if: github.ref == 'refs/heads/main'
-    runs-on: homelab-runners
+    runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
     outputs:
-      commit: ${{ steps.plan.outputs.commit }}
-      final_tag: ${{ steps.plan.outputs.final_tag }}
+      commit: ${{ steps.release.outputs.commit }}
+      final_tag: ${{ steps.release.outputs.final_tag }}
       marketplace_auth: ${{ steps.registries.outputs.marketplace }}
       openvsx_auth: ${{ steps.registries.outputs.openvsx }}
     steps:
       - name: Check the registry credentials
         id: registries
-        if: ${{ inputs.publish_marketplaces }}
+        if: ${{ inputs.publish_marketplaces || inputs.registries_only }}
         env:
           HAS_ENTRA: ${{ secrets.AZURE_CLIENT_ID != '' && secrets.AZURE_TENANT_ID != '' }}
           HAS_VSCE_PAT: ${{ secrets.VSCE_PAT != '' }}
@@ -99,6 +113,60 @@ jobs:
           fi
           exit "${missing}"
 
+      # registries_only: the final tag's release must exist, be published, and carry one
+      # .vsix of that version; nothing is built, tagged or signed.
+      - name: Find the existing release
+        id: release
+        if: ${{ inputs.registries_only }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RC_TAG: ${{ inputs.rc_tag }}
+          WORK_DIR: ${{ runner.temp }}/located
+        run: |
+          if ! [[ "${RC_TAG}" =~ ^(v[0-9]+\.[0-9]+\.[0-9]+)(-rc\.[0-9]+)?$ ]]; then
+            echo "::error::registries_only needs rc_tag as vX.Y.Z or vX.Y.Z-rc.N, not '${RC_TAG}'."
+            exit 1
+          fi
+          tag="${BASH_REMATCH[1]}"
+          if ! info=$(gh release view "${tag}" --repo "${GITHUB_REPOSITORY}" --json isDraft,assets); then
+            echo "::error::${tag} has no GitHub Release. registries_only publishes a version that is already released; run Publish Release without it first."
+            exit 1
+          fi
+          if [ "$(jq -r .isDraft <<<"${info}")" = true ]; then
+            echo "::error::The ${tag} release is a draft."
+            exit 1
+          fi
+          count=$(jq '[.assets[] | select(.name | endswith(".vsix"))] | length' <<<"${info}")
+          if [ "${count}" != 1 ]; then
+            echo "::error::The ${tag} release carries ${count} .vsix assets; it must carry exactly one."
+            exit 1
+          fi
+          mkdir -p "${WORK_DIR}"
+          gh release download "${tag}" --repo "${GITHUB_REPOSITORY}" --pattern '*.vsix' --dir "${WORK_DIR}"
+          vsix=$(ls "${WORK_DIR}"/*.vsix)
+          version=$(unzip -p "${vsix}" extension/package.json | jq -r .version)
+          if [ "${version}" != "${tag#v}" ]; then
+            echo "::error::The .vsix on the ${tag} release holds version ${version}, not ${tag#v}."
+            exit 1
+          fi
+          commit=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${tag}" --jq .sha)
+          {
+            echo "final_tag=${tag}"
+            echo "commit=${commit}"
+          } >> "$GITHUB_OUTPUT"
+          echo "Publishing ${tag} (${commit}) from its existing GitHub Release." >> "$GITHUB_STEP_SUMMARY"
+
+  prepare:
+    # The same runners as every release in the ecosystem, and only from main.
+    needs: locate
+    if: github.ref == 'refs/heads/main' && !inputs.registries_only
+    runs-on: homelab-runners
+    permissions:
+      contents: write
+    outputs:
+      commit: ${{ steps.plan.outputs.commit }}
+      final_tag: ${{ steps.plan.outputs.final_tag }}
+    steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -284,9 +352,18 @@ jobs:
           done < release-files/releases.tsv
 
   publish:
-    needs: [prepare, release]
-    if: ${{ !inputs.dry_run && inputs.publish_marketplaces }}
+    needs: [locate, prepare, release]
+    # A release run publishes after its release job; a registries_only run skips those
+    # jobs, so only locate must have passed.
+    if: >-
+      ${{ !cancelled() && !inputs.dry_run && needs.locate.result == 'success'
+      && (inputs.registries_only
+      || (inputs.publish_marketplaces && needs.release.result == 'success')) }}
     runs-on: ubuntu-latest
+    env:
+      # Where the release came from: locate for an existing one, prepare for a new one.
+      RELEASE_TAG: ${{ needs.locate.outputs.final_tag || needs.prepare.outputs.final_tag }}
+      RELEASE_COMMIT: ${{ needs.locate.outputs.commit || needs.prepare.outputs.commit }}
     # The Entra managed identity trusts this environment's OIDC subject
     # (repo:kubemoot/vscode-crewforge:environment:marketplace), nothing broader; the
     # environment's protection rules (CONTRIBUTING.md) also gate this job.
@@ -298,7 +375,7 @@ jobs:
       - name: Check out the release commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ needs.prepare.outputs.commit }}
+          ref: ${{ env.RELEASE_COMMIT }}
           persist-credentials: false
 
       - name: Set up Node
@@ -315,14 +392,14 @@ jobs:
       - name: Download the .vsix from the GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ needs.prepare.outputs.final_tag }}
+          TAG: ${{ env.RELEASE_TAG }}
           OUT_DIR: ${{ runner.temp }}/vsix
         run: |
           gh release download "${TAG}" --repo "${GITHUB_REPOSITORY}" \
             --pattern "crewforge-${TAG#v}.vsix" --dir "${OUT_DIR}"
 
       - name: Sign in to Microsoft Entra
-        if: needs.prepare.outputs.marketplace_auth == 'entra'
+        if: needs.locate.outputs.marketplace_auth == 'entra'
         uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
@@ -332,7 +409,7 @@ jobs:
       # The Marketplace adds the identity to the publisher by this profile ID (it is not
       # a secret), so the first Entra run shows the ID to add before its publish fails.
       - name: Show the identity's Marketplace member ID
-        if: needs.prepare.outputs.marketplace_auth == 'entra'
+        if: needs.locate.outputs.marketplace_auth == 'entra'
         run: |
           az rest -u https://app.vssps.visualstudio.com/_apis/profile/profiles/me \
             --resource 499b84ac-1321-427f-aa17-267ca6975798 --query id -o tsv
@@ -342,10 +419,10 @@ jobs:
       # pre-release mark from the .vsix itself.
       - name: Publish to the VS Code Marketplace
         env:
-          AUTH: ${{ needs.prepare.outputs.marketplace_auth }}
-          VSCE_PAT: ${{ needs.prepare.outputs.marketplace_auth == 'pat' && secrets.VSCE_PAT || '' }}
+          AUTH: ${{ needs.locate.outputs.marketplace_auth }}
+          VSCE_PAT: ${{ needs.locate.outputs.marketplace_auth == 'pat' && secrets.VSCE_PAT || '' }}
           PRE_RELEASE: ${{ inputs.pre_release }}
-          TAG: ${{ needs.prepare.outputs.final_tag }}
+          TAG: ${{ env.RELEASE_TAG }}
           OUT_DIR: ${{ runner.temp }}/vsix
         run: |
           flags=(--skip-duplicate)
@@ -358,9 +435,9 @@ jobs:
       # version, before the trusted publisher can be registered).
       - name: Publish to Open VSX
         env:
-          AUTH: ${{ needs.prepare.outputs.openvsx_auth }}
-          OVSX_PAT: ${{ needs.prepare.outputs.openvsx_auth == 'pat' && secrets.OVSX_PAT || '' }}
-          TAG: ${{ needs.prepare.outputs.final_tag }}
+          AUTH: ${{ needs.locate.outputs.openvsx_auth }}
+          OVSX_PAT: ${{ needs.locate.outputs.openvsx_auth == 'pat' && secrets.OVSX_PAT || '' }}
+          TAG: ${{ env.RELEASE_TAG }}
           OUT_DIR: ${{ runner.temp }}/vsix
         run: |
           flags=(--skip-duplicate)
