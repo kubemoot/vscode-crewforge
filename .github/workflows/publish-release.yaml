@@ -171,10 +171,8 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # RELEASE_TOKEN (contents and workflows write) lets the final tag land on the
-          # candidate's commit when workflow files changed on main after it; the default
-          # token is refused there. Falls back to the default token.
-          token: ${{ secrets.RELEASE_TOKEN || github.token }}
+          # No credential is stored; the release token is minted at the step that pushes.
+          persist-credentials: false
           fetch-depth: 0
 
       - name: Set up the release helpers
@@ -231,13 +229,34 @@ jobs:
           mv crewforge-*.vsix "${OUT_DIR}/"
           git checkout --quiet -- package.json package-lock.json CHANGELOG.md
 
+      - name: Mint a release token
+        id: app-token
+        if: ${{ !inputs.dry_run }}
+        uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3.4.0
+        with:
+          app-id: ${{ vars.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          repositories: vscode-crewforge
+          permission-contents: write
+          permission-workflows: write
+
       - name: Tag the final version
         if: ${{ !inputs.dry_run }}
         env:
+          GH_APP_TOKEN: ${{ steps.app-token.outputs.token }}
           RC_TAG: ${{ inputs.rc_tag }}
           DRY_RUN: 'false'
           OUT_DIR: ${{ runner.temp }}/release-files
         run: |
+          if [ "${DRY_RUN:-false}" != true ]; then
+            if [ -z "${GH_APP_TOKEN:-}" ]; then
+              echo "::error::no release token: the mint step did not run" >&2
+              exit 1
+            fi
+            auth="$(printf 'x-access-token:%s' "${GH_APP_TOKEN}" | base64 -w0)"
+            echo "::add-mask::${auth}"
+            export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0="http.https://github.com/.extraheader" GIT_CONFIG_VALUE_0="AUTHORIZATION: basic ${auth}"
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           # shellcheck source=/dev/null
