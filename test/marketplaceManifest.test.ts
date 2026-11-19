@@ -103,7 +103,7 @@ describe('the Marketplace and Open VSX listing fields', () => {
 interface Step { name?: string; if?: string; uses?: string; run?: string; env?: Record<string, string>; with?: Record<string, unknown> }
 interface Job { if?: string; needs?: string[]; permissions?: Record<string, string>; environment?: string; steps: Step[] }
 interface Workflow {
-  on: { workflow_dispatch: { inputs: Record<string, { default: unknown; type: string }> } };
+  on: { workflow_dispatch: { inputs: Record<string, { default: unknown; type: string; description?: string }> } };
   jobs: Record<string, Job>;
 }
 
@@ -111,12 +111,22 @@ describe('publishing to the registries in Publish Release', () => {
   const text = read('.github/workflows/publish-release.yaml');
   const workflow = load(text) as Workflow;
   const inputs = workflow.on.workflow_dispatch.inputs;
-  const { prepare, publish } = workflow.jobs;
+  const { locate, prepare, publish } = workflow.jobs;
   const step = (job: Job, name: string) => {
     const index = job.steps.findIndex((s) => s.name === name);
     expect(index, name).toBeGreaterThanOrEqual(0);
     return { index, step: job.steps[index] };
   };
+
+  /** Whether the publish job runs for these inputs, evaluating its `if:` with the other jobs' results given. */
+  const publishRuns = (flags: { dry_run: boolean; publish_marketplaces: boolean; registries_only: boolean }, results: Record<string, string>) => {
+    const expression = (publish.if ?? '').replace(/^\$\{\{|\}\}\s*$/g, '')
+      .replace(/!cancelled\(\)/g, 'true')
+      .replace(/needs\.(\w+)\.result/g, (_, job: string) => JSON.stringify(results[job] ?? 'skipped'))
+      .replace(/inputs\.(\w+)/g, (_, name: keyof typeof flags) => String(flags[name]));
+    return new Function(`return (${expression});`)() as boolean;
+  };
+  const every = [true, false].flatMap((dry_run) => [true, false].flatMap((publish_marketplaces) => [true, false].map((registries_only) => ({ dry_run, publish_marketplaces, registries_only }))));
 
   it('is off unless asked for, and a dry run stays the default', () => {
     expect(inputs.publish_marketplaces).toMatchObject({ default: false, type: 'boolean' });
@@ -124,20 +134,82 @@ describe('publishing to the registries in Publish Release', () => {
     expect(inputs.dry_run).toMatchObject({ default: true, type: 'boolean' });
   });
 
-  it('never runs on a dry run or without the explicit input', () => {
+  it('never runs on a dry run or without an explicit opt-in', () => {
     expect(publish.if).toContain('!inputs.dry_run');
-    expect(publish.if).toContain('inputs.publish_marketplaces');
-    expect(publish.if).not.toContain('||');
+    for (const flags of every) {
+      const released = { locate: 'success', release: 'success' };
+      const expected = !flags.dry_run && (flags.publish_marketplaces || flags.registries_only);
+      expect(publishRuns(flags, released), JSON.stringify(flags)).toBe(expected);
+    }
   });
 
-  it('checks every credential before the final tag exists', () => {
-    const check = step(prepare, 'Check the registry credentials');
+  it('on the release path waits for the GitHub Release, and nothing publishes when locate or the release fails', () => {
+    const release = { dry_run: false, publish_marketplaces: true, registries_only: false };
+    expect(publishRuns(release, { locate: 'success', release: 'failure' })).toBe(false);
+    expect(publishRuns(release, { locate: 'success', release: 'skipped' })).toBe(false);
+    expect(publishRuns(release, { locate: 'failure', release: 'success' })).toBe(false);
+    expect(publishRuns({ ...release, publish_marketplaces: false, registries_only: true }, { locate: 'failure' })).toBe(false);
+  });
+
+  it('checks every credential before the final tag exists, and before publishing on both paths', () => {
+    const check = step(locate, 'Check the registry credentials');
     expect(check.index).toBe(0);
-    expect(check.index).toBeLessThan(step(prepare, 'Tag the final version').index);
+    expect(prepare.needs).toBe('locate');
+    expect(publish.needs).toEqual(expect.arrayContaining(['locate']));
+    expect(prepare.steps.some((s) => s.name === 'Check the registry credentials')).toBe(false);
     expect(check.step.if).toContain('inputs.publish_marketplaces');
+    expect(check.step.if).toContain('inputs.registries_only');
     const env = Object.values(check.step.env ?? {}).join(' ');
     for (const secret of ['AZURE_CLIENT_ID', 'AZURE_TENANT_ID', 'VSCE_PAT', 'OVSX_PAT']) expect(env).toContain(`secrets.${secret}`);
     expect(check.step.run).toContain('exit "${missing}"');
+    expect(step(prepare, 'Tag the final version').index).toBeGreaterThan(0);
+    expect(step(locate, 'Find the existing release').index).toBeGreaterThan(check.index);
+  });
+
+  it('registries_only is off by default and skips planning, tagging, signing and the release', () => {
+    expect(inputs.registries_only).toMatchObject({ default: false, type: 'boolean' });
+    expect(inputs.rc_tag.description).toContain('registries_only');
+    expect(prepare.if).toContain('!inputs.registries_only');
+    expect(locate.if).not.toContain('registries_only');
+    expect(workflow.jobs.sign.needs).toBe('prepare');
+    expect(workflow.jobs.release.needs).toEqual(['prepare', 'sign']);
+  });
+
+  it('registries_only refuses a version that is not released, a draft, and a wrong or extra .vsix', () => {
+    const find = step(locate, 'Find the existing release').step;
+    expect(find.if).toBe('${{ inputs.registries_only }}');
+    const run = find.run ?? '';
+    expect(run).toContain('gh release view "${tag}"');
+    expect(run).toContain('has no GitHub Release');
+    expect(run).toContain('isDraft');
+    expect(run).toContain('crewforge-${tag#v}.vsix');
+    expect(run).toContain('extension/package.json');
+    expect(run).not.toMatch(/gh release (create|upload|edit)|git tag|git push/);
+  });
+
+  it('registries_only maps a candidate to its final tag and refuses "latest"', () => {
+    const run = step(locate, 'Find the existing release').step.run ?? '';
+    const pattern = /\[\[ "\$\{RC_TAG\}" =~ (\S+) \]\]/.exec(run)?.[1];
+    expect(pattern).toBeDefined();
+    const regex = new RegExp(pattern ?? '');
+    expect(regex.exec('v0.19.0')?.[1]).toBe('v0.19.0');
+    expect(regex.exec('v0.19.0-rc.2')?.[1]).toBe('v0.19.0');
+    for (const bad of ['latest', 'v0.19', '0.19.0', 'v0.19.0-rc', 'v0.19.0-beta.1']) expect(regex.test(bad), bad).toBe(false);
+    expect(run).toContain('final_tag=${tag}');
+  });
+
+  it('a registries_only dry run checks the release and credentials and publishes nothing', () => {
+    expect(locate.steps.find((s) => s.name === 'Find the existing release')?.if).not.toContain('dry_run');
+    const dry = { dry_run: true, publish_marketplaces: false, registries_only: true };
+    expect(publishRuns(dry, { locate: 'success' })).toBe(false);
+    expect(publishRuns({ ...dry, dry_run: false }, { locate: 'success' })).toBe(true);
+  });
+
+  it('checks the downloaded .vsix holds the tag version before any registry gets it', () => {
+    const check = step(publish, 'Check the downloaded .vsix version');
+    expect(check.index).toBeGreaterThan(step(publish, 'Download the .vsix from the GitHub Release').index);
+    expect(check.index).toBeLessThan(step(publish, 'Publish to the VS Code Marketplace').index);
+    expect(check.step.run).toContain('extension/package.json');
   });
 
   it('packages a pre-release when asked, so the GitHub Release and the registries carry the same file', () => {
@@ -148,7 +220,7 @@ describe('publishing to the registries in Publish Release', () => {
   });
 
   it('runs after the GitHub Release and publishes the .vsix that release carries', () => {
-    expect(publish.needs).toEqual(expect.arrayContaining(['prepare', 'release']));
+    expect(publish.needs).toEqual(expect.arrayContaining(['locate', 'prepare', 'release']));
     expect(step(publish, 'Download the .vsix from the GitHub Release').step.run).toContain('gh release download "${TAG}"');
   });
 
@@ -156,7 +228,7 @@ describe('publishing to the registries in Publish Release', () => {
     expect(publish.permissions).toEqual({ contents: 'read', 'id-token': 'write' });
     expect(publish.environment).toBe('marketplace');
     const checkout = step(publish, 'Check out the release commit').step;
-    expect(checkout.with).toMatchObject({ ref: '${{ needs.prepare.outputs.commit }}', 'persist-credentials': false });
+    expect(checkout.with).toMatchObject({ ref: '${{ env.RELEASE_COMMIT }}', 'persist-credentials': false });
   });
 
   it('hands each registry secret only to the step that uses it', () => {

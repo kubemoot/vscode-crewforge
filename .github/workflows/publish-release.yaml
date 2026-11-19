@@ -42,7 +42,7 @@ on:
   workflow_dispatch:
     inputs:
       rc_tag:
-        description: '"latest", or a vX.Y.Z-rc.N tag on main'
+        description: '"latest", or a vX.Y.Z-rc.N tag on main; with registries_only, the released vX.Y.Z (or its candidate)'
         required: true
         default: latest
         type: string
@@ -137,13 +137,14 @@ jobs:
             exit 1
           fi
           count=$(jq '[.assets[] | select(.name | endswith(".vsix"))] | length' <<<"${info}")
-          if [ "${count}" != 1 ]; then
-            echo "::error::The ${tag} release carries ${count} .vsix assets; it must carry exactly one."
+          named=$(jq --arg n "crewforge-${tag#v}.vsix" '[.assets[] | select(.name == $n)] | length' <<<"${info}")
+          if [ "${count}" != 1 ] || [ "${named}" != 1 ]; then
+            echo "::error::The ${tag} release must carry exactly one .vsix, named crewforge-${tag#v}.vsix (found ${count}, ${named} by that name)."
             exit 1
           fi
           mkdir -p "${WORK_DIR}"
-          gh release download "${tag}" --repo "${GITHUB_REPOSITORY}" --pattern '*.vsix' --dir "${WORK_DIR}"
-          vsix=$(ls "${WORK_DIR}"/*.vsix)
+          gh release download "${tag}" --repo "${GITHUB_REPOSITORY}" --pattern "crewforge-${tag#v}.vsix" --dir "${WORK_DIR}"
+          vsix="${WORK_DIR}/crewforge-${tag#v}.vsix"
           version=$(unzip -p "${vsix}" extension/package.json | jq -r .version)
           if [ "${version}" != "${tag#v}" ]; then
             echo "::error::The .vsix on the ${tag} release holds version ${version}, not ${tag#v}."
@@ -397,6 +398,18 @@ jobs:
         run: |
           gh release download "${TAG}" --repo "${GITHUB_REPOSITORY}" \
             --pattern "crewforge-${TAG#v}.vsix" --dir "${OUT_DIR}"
+
+      # The file the registries get must hold the version of the tag it came from.
+      - name: Check the downloaded .vsix version
+        env:
+          TAG: ${{ env.RELEASE_TAG }}
+          OUT_DIR: ${{ runner.temp }}/vsix
+        run: |
+          version=$(unzip -p "${OUT_DIR}/crewforge-${TAG#v}.vsix" extension/package.json | jq -r .version)
+          if [ "${version}" != "${TAG#v}" ]; then
+            echo "::error::The downloaded .vsix holds version ${version}, not ${TAG#v}."
+            exit 1
+          fi
 
       - name: Sign in to Microsoft Entra
         if: needs.locate.outputs.marketplace_auth == 'entra'
