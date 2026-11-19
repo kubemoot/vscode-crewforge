@@ -79,6 +79,24 @@ tags anything and stops if one is missing; a dry run with `publish_marketplaces`
 them without publishing. `--skip-duplicate` makes a re-run of the publish job safe after
 one registry already took the version.
 
+### Publishing a version that is already released
+
+A version released with `publish_marketplaces` off is not on the registries, and
+Publish Release refuses to plan a version that is already released. The
+`registries_only` input publishes that release's `.vsix` to both registries without
+releasing, tagging, or signing anything. `rc_tag` names the final tag (`v0.19.0`) or a
+candidate whose final exists (`v0.19.0-rc.2` maps to `v0.19.0`); `latest` and a version
+without a GitHub Release are refused. The `locate` job checks that the release is not a
+draft and carries exactly one `.vsix` whose `package.json` version matches the tag, then
+the same `publish` job runs (environment `marketplace`, same credentials,
+`--skip-duplicate`, same `pre_release` handling). Run the dry run first; it checks the
+release and the credentials and publishes nothing:
+
+```bash
+gh workflow run publish-release.yaml -R kubemoot/vscode-crewforge -f rc_tag=v0.19.0 -f registries_only=true -f dry_run=true
+gh workflow run publish-release.yaml -R kubemoot/vscode-crewforge -f rc_tag=v0.19.0 -f registries_only=true -f dry_run=false
+```
+
 One-time setup, done once by a maintainer from their own browser and terminal. A token
 is never pasted into a chat, an issue, or a file.
 
