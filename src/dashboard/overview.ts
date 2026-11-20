@@ -2,6 +2,7 @@ import { connectionLines, type ConnectionInfo } from '../connectionInfo';
 import { CREW_LABEL, toAgent } from '../crew/details';
 import { titleOf } from '../crew/displayName';
 import type { CrewSummary } from '../k8s/crews';
+import { canAnswer } from '../k8s/crewState';
 import type { KubeTransport } from '../k8s/request';
 import { listKind, type KubemootKind } from '../source/live';
 import { provenanceOf } from '../source/provenance';
@@ -83,7 +84,7 @@ function rowCells(r: OverviewRow): string[] {
   return [
     `<button type="button" class="link" data-action="open" data-arg="${escape(id)}" title="Open the dashboard of ${escape(crew.name)}">${escape(title)}</button>${technical}`,
     escape(crew.namespace),
-    badge(crew.phase, readyTone(crew.ready)),
+    badge(crew.phase, readyTone(canAnswer(crew).ok)),
     escape(agents),
     escape(r.chartVersion ?? ''),
     escape(r.channel),

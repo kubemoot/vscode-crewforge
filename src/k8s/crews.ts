@@ -29,6 +29,18 @@ export interface CrewSummary {
   created?: string;
   description?: string;
   conditions?: CrewCondition[];
+  /** metadata.generation, and the generation status.observedGeneration says the status describes; absent on operators without it. */
+  generation?: number;
+  observedGeneration?: number;
+  /** The operator's last retention cleanup, from status.retention. */
+  retention?: CrewRetentionStatus;
+}
+
+/** status.retention: the crew's last cleanup run. */
+export interface CrewRetentionStatus {
+  lastRunTime?: string;
+  removed?: { conversations?: number; memory?: number; other?: number };
+  error?: string;
 }
 
 /** One status condition, as metav1.Condition carries it. */
@@ -40,7 +52,7 @@ export interface CrewCondition {
 }
 
 interface CrewObject {
-  metadata?: { name?: string; namespace?: string; labels?: Record<string, string>; annotations?: Record<string, string>; creationTimestamp?: string };
+  metadata?: { name?: string; namespace?: string; labels?: Record<string, string>; annotations?: Record<string, string>; creationTimestamp?: string; generation?: number };
   spec?: { description?: string };
   status?: {
     conditions?: CrewCondition[];
@@ -50,6 +62,8 @@ interface CrewObject {
     agentCount?: number;
     coordinatorRef?: string;
     revisions?: CrewRevision[];
+    observedGeneration?: number;
+    retention?: CrewRetentionStatus;
   };
 }
 
@@ -75,6 +89,9 @@ function toSummary(c: CrewObject): CrewSummary {
     ...marks(c),
     revisions: status.revisions,
     conditions: status.conditions,
+    generation: c.metadata?.generation,
+    observedGeneration: status.observedGeneration,
+    retention: status.retention,
   };
 }
 

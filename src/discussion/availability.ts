@@ -1,5 +1,6 @@
 import { CREW_LABEL, toAgent, type AgentInfo } from '../crew/details';
-import { listCrews, type CrewSummary } from '../k8s/crews';
+import { listCrews } from '../k8s/crews';
+import { canAnswer } from '../k8s/crewState';
 import { KubeError, type KubeTransport } from '../k8s/request';
 import { listKind, type KubemootKind } from '../source/live';
 import { failedReason, type CrewReadiness } from '../loop/ready';
@@ -7,7 +8,7 @@ import { unreachableReason } from '../views/errors';
 
 /**
  * Whether a crew can take a question now, and if not, why, in a few words for the chat
- * input: not ready, in an error state, or out of reach.
+ * input: not ready, waiting for an accelerator, in an error state, or out of reach.
  */
 export type CrewAvailability = { state: 'ready' } | { state: 'not-ready' | 'error' | 'unreachable'; reason: string };
 
@@ -16,15 +17,16 @@ export function availabilityOf(r: CrewReadiness & { gateway?: boolean }): CrewAv
   if (!r.crew) return { state: 'not-ready', reason: 'The crew is not deployed here any more' };
   const error = failedReason(r.crew, r.agents);
   if (error) return { state: 'error', reason: `The crew is in an error state: ${error}` };
-  const notReady = notReadyReason(r.crew, r.agents);
+  const answer = canAnswer(r.crew);
+  if (!answer.ok) return { state: 'not-ready', reason: answer.kind === 'capacity' ? answer.reason : `The crew is not ready: ${answer.reason}` };
+  const notReady = agentsReason(r.agents);
   if (notReady) return { state: 'not-ready', reason: `The crew is not ready: ${notReady}` };
   if (r.gateway === false) return { state: 'unreachable', reason: "Can't reach the crew's discussion gateway" };
   return { state: 'ready' };
 }
 
-/** Why a crew that has not failed cannot answer yet; `agents` is undefined when they could not be read. */
-function notReadyReason(crew: CrewSummary, agents?: AgentInfo[]): string | undefined {
-  if (!crew.ready) return crew.message ?? `phase ${crew.phase}`;
+/** Why a crew that can answer has no agent to do it; `agents` is undefined when they could not be read. */
+function agentsReason(agents?: AgentInfo[]): string | undefined {
   if (agents?.length === 0) return 'it has no agents yet';
   return agents && !agents.some((a) => a.ready) ? 'no agent is ready yet' : undefined;
 }

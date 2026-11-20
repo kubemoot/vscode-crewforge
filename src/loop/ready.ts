@@ -1,5 +1,6 @@
 import type { AgentInfo } from '../crew/details';
 import type { CrewSummary } from '../k8s/crews';
+import { notReconciled } from '../k8s/crewState';
 import { ANNOTATIONS } from '../source/deployments';
 
 /** A deployed crew as the cluster reports it now: its Crew and its Agents. */
@@ -41,7 +42,7 @@ export function readiness(r: CrewReadiness): ReadyVerdict {
   const failed = failedReason(crew, agents);
   if (failed) return { state: 'failed', message: failed };
   if (!observed(crew)) return { state: 'waiting', message: 'Waiting for the operator to see this deploy' };
-  if (!r.agents) return crew.ready ? { state: 'ready', message: 'Crew ready' } : { state: 'waiting', message: `Crew ${crew.phase}` };
+  if (!r.agents) return !notReconciled(crew) ? { state: 'ready', message: 'Crew ready' } : { state: 'waiting', message: `Crew ${crew.phase}` };
   return agentsVerdict(crew, agents);
 }
 
@@ -49,8 +50,9 @@ export function readiness(r: CrewReadiness): ReadyVerdict {
 function agentsVerdict(crew: CrewSummary, agents: AgentInfo[]): ReadyVerdict {
   const ready = agents.filter((a) => a.ready).length;
   const expected = Math.max(crew.agents ?? 0, agents.length, 1);
-  const line = `Crew ${crew.ready ? 'ready' : crew.phase}; ${ready} of ${expected} agents ready`;
-  if (crew.ready && ready === expected) return { state: 'ready', message: line };
+  const reconciled = !notReconciled(crew);
+  const line = `Crew ${reconciled ? 'ready' : crew.phase}; ${ready} of ${expected} agents ready`;
+  if (reconciled && ready === expected) return { state: 'ready', message: line };
   const pending = agents.find((a) => !a.ready);
   return { state: 'waiting', message: pending ? `${line} (${pending.name}: ${pending.phase ?? 'starting'})` : line };
 }

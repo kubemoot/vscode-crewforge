@@ -47,7 +47,13 @@ CrewForge says so and names the command.
    ships no Models selects from the cluster's model catalog, so its Models group lists the
    ModelServers that publish the catalog, each with the models it offers. Click a
    crew, deployed or in your workspace, for its dashboard: **Overview**, **Source**,
-   **Live**, and **Diff** tabs.
+   **Live**, and **Diff** tabs. A crew's state reads the way Kubemoot reports it: `Ready` means
+   the crew is reconciled as declared, while a reconciled crew whose models are away shows
+   `WaitingForCapacity` and a warning, with the model catalog's reason ("waiting for an
+   accelerator: ...") in its tooltip, its dashboard, and the chat input. A crew answers only
+   when it is reconciled, in phase `Ready`, and its `CapacityAvailable` condition is True
+   (on a Kubemoot without that condition, when it is reconciled and `Ready`). The dashboard's
+   Live status also shows the last retention cleanup and any invalid retention.
 4. Right-click a folder in the Explorer and choose **New Kubemoot Crew Here** to scaffold
    kmctl's starter crew with `kmctl create --chart`: a small, working crew that reads its
    own namespace, with 1 to 5 specialists. It ships no models and names no model server:

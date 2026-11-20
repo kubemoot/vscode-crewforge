@@ -1,3 +1,5 @@
+import { canAnswer, capacityLine, retentionLines } from '../k8s/crewState';
+import type { CrewSummary } from '../k8s/crews';
 import { GROUPS } from '../crew/groups';
 import { chartVersionBanner } from '../source/normalize';
 import { tabBar, type CrewTab } from './crewTabs';
@@ -11,7 +13,7 @@ export function renderCrewPage(v: CrewVitals, tab: CrewTab = 'overview', body?: 
 }
 
 function header(v: CrewVitals): string {
-  const state = v.deployment ? badge(v.deployment.crew.phase, readyTone(v.deployment.crew.ready)) : badge('not deployed');
+  const state = v.deployment ? badge(v.deployment.crew.phase, readyTone(canAnswer(v.deployment.crew).ok)) : badge('not deployed');
   const place = v.deployment ? `${v.deployment.namespace} in ${v.context}` : `not deployed in ${v.context}`;
   const where = v.title === v.name ? place : `${v.name} · ${place}`;
   const description = v.description ? `<p>${escape(v.description)}</p>` : '';
@@ -140,12 +142,21 @@ function statusSection(v: CrewVitals): string {
   const conditions = (crew.conditions ?? []).map((c) => [escape(c.type), badge(c.status, c.status === 'True' ? 'good' : 'warn'), escape(c.reason ?? ''), escape(c.message ?? '')]);
   const head = facts([
     ['Phase', crew.phase],
-    ['Ready', crew.ready ? 'yes' : 'no'],
+    ['Reconciled', crew.ready ? 'yes' : 'no'],
+    ['Can answer', answerText(crew)],
+    ['Capacity', capacityLine(crew)?.replace('Capacity: ', '')],
+    ['Generation observed', crew.observedGeneration === undefined ? undefined : `${crew.observedGeneration} of ${crew.generation ?? crew.observedGeneration}`],
+    ...retentionLines(crew).map((l): [string, string] => [l.slice(0, l.indexOf(':')), l.slice(l.indexOf(':') + 2)]),
     ['Agents the operator counts', crew.agents],
     ['Coordinator', crew.coordinator],
     ['Message', crew.message],
   ]);
   return section('Live status', head + table(['Condition', 'Status', 'Reason', 'Message'], conditions, 'No conditions reported.'));
+}
+
+function answerText(crew: CrewSummary): string {
+  const answer = canAnswer(crew);
+  return answer.ok ? 'yes' : `no, ${answer.reason}`;
 }
 
 function conversationsSection(v: CrewVitals): string {
