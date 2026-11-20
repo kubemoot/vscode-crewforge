@@ -30,10 +30,23 @@ describe('availabilityOf', () => {
     expect(availabilityOf({ crew: crew({ phase: 'Error' }) })).toEqual({ state: 'error', reason: 'The crew is in an error state: Crew demo is Error' });
     expect(availabilityOf({ crew: crew(), agents: [agent('a', false, 'Failed')] })).toEqual({ state: 'error', reason: 'The crew is in an error state: Agent a is Failed' });
     expect(availabilityOf({ crew: crew(), agents: [] })).toEqual({ state: 'not-ready', reason: 'The crew is not ready: it has no agents yet' });
-    expect(availabilityOf({ crew: crew({ ready: false, phase: 'Pending' }) })).toEqual({ state: 'not-ready', reason: 'The crew is not ready: phase Pending' });
-    expect(availabilityOf({ crew: crew({ ready: false, phase: 'Pending', message: 'waiting for models' }) })).toEqual({ state: 'not-ready', reason: 'The crew is not ready: waiting for models' });
+    expect(availabilityOf({ crew: crew({ ready: false, phase: 'Pending' }) })).toEqual({ state: 'not-ready', reason: 'The crew is not ready: waiting for the crew to reconcile' });
+    expect(availabilityOf({ crew: crew({ ready: false, phase: 'Pending', message: 'waiting for models' }) })).toEqual({ state: 'not-ready', reason: 'The crew is not ready: waiting for the crew to reconcile: waiting for models' });
     expect(availabilityOf({ crew: crew(), agents: [agent('a', false), agent('b', false, undefined as never)] })).toEqual({ state: 'not-ready', reason: 'The crew is not ready: no agent is ready yet' });
     expect(availabilityOf({ crew: crew(), gateway: false })).toEqual({ state: 'unreachable', reason: "Can't reach the crew's discussion gateway" });
+  });
+});
+
+describe('availabilityOf and capacity', () => {
+  const waiting = { phase: 'WaitingForCapacity', ready: true, conditions: [{ type: 'CapacityAvailable', status: 'False', reason: 'NoModelAvailable', message: 'no model fits the 24Gi card' }] };
+
+  it('does not read a crew waiting for capacity as available, and says what it waits for', () => {
+    expect(availabilityOf({ crew: crew(waiting), agents: [agent('a', true)] })).toEqual({ state: 'not-ready', reason: 'waiting for an accelerator: no model fits the 24Gi card' });
+  });
+
+  it('is ready when CapacityAvailable is True, and not when the status is for an older generation', () => {
+    expect(availabilityOf({ crew: crew({ conditions: [{ type: 'CapacityAvailable', status: 'True' }] }) })).toEqual({ state: 'ready' });
+    expect(availabilityOf({ crew: crew({ generation: 4, observedGeneration: 3 }) })).toEqual({ state: 'not-ready', reason: 'The crew is not ready: waiting for the operator to reconcile the latest change' });
   });
 });
 
@@ -117,9 +130,9 @@ describe('ChatPanel availability', () => {
   };
 
   it('posts the availability it reads on open, and a failed read as unreachable', async () => {
-    answers.push({ state: 'not-ready', reason: 'The crew is not ready: phase Pending' });
+    answers.push({ state: 'not-ready', reason: 'The crew is not ready: waiting for the crew to reconcile' });
     ChatPanel.show(Uri.file('/ext') as never, connection, crew(), store, undefined, links);
-    await vi.waitFor(() => expect(states().at(-1)?.availability).toEqual({ state: 'not-ready', reason: 'The crew is not ready: phase Pending' }));
+    await vi.waitFor(() => expect(states().at(-1)?.availability).toEqual({ state: 'not-ready', reason: 'The crew is not ready: waiting for the crew to reconcile' }));
     recorded.panels[0].dispose();
     answers.push(new Error('boom'));
     ChatPanel.show(Uri.file('/ext') as never, connection, crew(), store, undefined, links);

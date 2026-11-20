@@ -1,4 +1,5 @@
 import type { CrewCondition, CrewSummary } from '../k8s/crews';
+import { capacityLine, retentionLines } from '../k8s/crewState';
 import { titleOf } from '../crew/displayName';
 import { provenanceOf } from '../source/provenance';
 
@@ -62,7 +63,11 @@ export function crewTooltip(crew: CrewSummary, archetype?: string): string {
   lines.push(`Namespace: ${crew.namespace}`);
   if (crew.created) lines.push(`Created: ${crew.created}`);
   if (archetype) lines.push(`Archetype: ${archetype}`);
-  return [...lines.filter(Boolean), ...mapLines('Labels', crew.labels), ...conditionLines(crew.conditions)].join('\n');
+  return [...lines.filter(Boolean), ...capacityLines(crew), ...mapLines('Labels', crew.labels), ...conditionLines(crew.conditions)].join('\n');
+}
+
+function capacityLines(crew: CrewSummary): string[] {
+  return [capacityLine(crew), ...retentionLines(crew)].filter((l): l is string => l !== undefined);
 }
 
 function mapLines(title: string, map: Record<string, string> = {}): string[] {

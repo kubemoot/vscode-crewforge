@@ -4,6 +4,7 @@ import * as vscode from 'vscode';
 import { connect, type Connection } from './connection';
 import { loadKubeconfig } from './k8s/kubeconfig';
 import type { CrewSummary } from './k8s/crews';
+import { canAnswer } from './k8s/crewState';
 import { crewPath } from './k8s/paths';
 import { ChatPanel, type ChatLinks } from './panels/chatPanel';
 import { selectionPrompt } from './panels/selectionPrompt';
@@ -452,7 +453,7 @@ export class Commands {
 
   private async pickCrew(): Promise<CrewSummary | undefined> {
     const choice = await vscode.window.showQuickPick(
-      this.tree.known.map((crew) => ({ label: crew.name, description: `${crew.namespace} · ${crew.phase}`, crew })),
+      this.tree.known.map((crew) => ({ label: crew.name, description: crewPickState(crew), crew })),
       { placeHolder: this.tree.known.length ? 'Ask which crew?' : 'No crews loaded; refresh the Deployed Crews view first' },
     );
     return choice?.crew;
@@ -479,6 +480,13 @@ async function listWorkspaceFiles(): Promise<{ charts: string[]; yamls: string[]
 
 async function showCrewBundleYaml(documents: LiveDocuments, node?: CrewNode): Promise<void> {
   if (node?.kind === 'crew') return documents.show({ kind: 'bundle', namespace: node.crew.namespace, crew: node.crew.name });
+}
+
+/** A crew's namespace and phase for the picker, with what a crew that cannot answer is waiting for. */
+function crewPickState(crew: CrewSummary): string {
+  const answer = canAnswer(crew);
+  const waiting = !answer.ok && answer.kind === 'capacity' ? ` · ${answer.reason}` : '';
+  return `${crew.namespace} · ${crew.phase}${waiting}`;
 }
 
 /** A crew known only from a saved conversation, before the Deployed Crews view has loaded it. */

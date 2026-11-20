@@ -6,6 +6,7 @@ import { readToolCatalog, type ToolCatalog } from '../crew/toolCatalog';
 import { scenariosDiffer } from '../fitness/deployed';
 import { titleOf } from '../crew/displayName';
 import { listCrewsEach, type CrewListing, type CrewSummary } from '../k8s/crews';
+import { canAnswer } from '../k8s/crewState';
 import { channelOf } from '../source/deployments';
 import { discoverKinds, type KubemootKind } from '../source/live';
 import { memberItem, membersOf, readyIcon, sectionItem, sectionsOf, type DetailNode } from './crewDetailsTree';
@@ -240,7 +241,7 @@ function crewItem(crew: CrewSummary, row: CrewRow): vscode.TreeItem {
   item.description = `${crewDescription(crew, row.flat)}${sourceText(row.sourceOpen)}`;
   item.tooltip = crewTooltip(crew, row.archetype);
   item.contextValue = `${crewContext(crew)}${row.busy ? '-running' : ''}`;
-  const { icon, color } = readyIcon(crew.ready);
+  const { icon, color } = readyIcon(canAnswer(crew).ok);
   item.iconPath = new vscode.ThemeIcon(icon, color ? new vscode.ThemeColor(color) : undefined);
   item.command = { command: 'crewforge.openCrewDashboard', title: 'Open Dashboard', arguments: [{ kind: 'crew', crew }] };
   return item;
