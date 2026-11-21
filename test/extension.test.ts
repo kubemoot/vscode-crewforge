@@ -488,6 +488,9 @@ describe('Commands', () => {
     await store.save(saved);
     await commands.reaskLast(crew);
     expect(api.posts.map((p) => JSON.parse(p.body).message)).toContain('Which nodes have a GPU?');
+    // The question reached the gateway over a port-forward, carrying the kubeconfig's token.
+    expect(api.gatewayRequests.length).toBeGreaterThan(0);
+    expect(api.gatewayRequests.every((r) => r.authorization === 'Bearer t')).toBe(true);
     await commands.reaskLast(crew);
     expect(recorded.panels.filter((p) => p.title === 'Ask lab-ops')).toHaveLength(2);
   });

@@ -1,15 +1,16 @@
 import { checkName } from '../k8s/paths';
 
 /**
- * API server paths to a crew's discussion gateway. The gateway is the Service
- * `<crew>-discussion` on port 80 in the crew's namespace; going through the API server's
- * service proxy means a kubeconfig is all a client needs.
+ * Paths on a crew's discussion gateway, the Service `<crew>-discussion` on port 80 in the
+ * crew's namespace. They are relative to the gateway's own root: CrewForge reaches it over
+ * a port-forward to its pod (see `gateway.ts`), not through the API server's service proxy,
+ * which strips the `Authorization` header the gateway needs to know who is asking.
  */
 
 function gatewayBase(namespace: string, crew: string): string {
-  const ns = checkName('namespace', namespace);
+  checkName('namespace', namespace);
   const name = checkName('crew', crew);
-  return `/api/v1/namespaces/${ns}/services/${name}-discussion:80/proxy/api/v1/discussions/${name}`;
+  return `/api/v1/discussions/${name}`;
 }
 
 /** POST here with `{message, conversationId}` to start a turn. */

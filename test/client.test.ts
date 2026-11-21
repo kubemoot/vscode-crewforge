@@ -14,7 +14,7 @@ describe('ask', () => {
     expect(await ask(t, 'team-1', 'lab-ops', 'Which nodes?', '')).toEqual({ conversationId: 'abc', requestedAt: '2026-09-30T19:36:36.05Z' });
     expect(t.calls[0]).toEqual({
       method: 'POST',
-      path: '/api/v1/namespaces/team-1/services/lab-ops-discussion:80/proxy/api/v1/discussions/lab-ops',
+      path: '/api/v1/discussions/lab-ops',
       body: { message: 'Which nodes?', conversationId: '' },
     });
   });

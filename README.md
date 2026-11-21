@@ -82,6 +82,23 @@ be reached, CrewForge says so in plain words and offers **Select Kubernetes Cont
 CrewForge writes only Kubemoot resources and Helm releases of them. It never deletes a
 namespace or any other kind of object; the operator owns cleanup.
 
+### Asking a crew that knows who is asking
+
+**Ask** reaches the crew's discussion gateway over a port-forward to its pod, the way `kubectl
+port-forward` does, and sends your kubeconfig's bearer token with each request. (The API server's
+service proxy would strip it.) A crew that sets `spec.discussion.access` uses the token to know
+who you are and keeps each conversation for the caller that started it; a crew that sets nothing
+stays open and ignores the token. CrewForge never shows or logs the token. The port-forward needs
+`get` on services, `list` on pods, and `create` on `pods/portforward` in the crew's namespace.
+
+A kubeconfig that signs in with a client certificate (Talos, kind, k3s) has no bearer token. When
+the crew requires one, set `crewforge.tokenServiceAccount` to `NAMESPACE/NAME` of a ServiceAccount
+you may `create` on `serviceaccounts/token`. CrewForge then mints a ten-minute token for it, and
+the crew sees that ServiceAccount as the caller; the Kubernetes audit log records who minted it.
+Add `crewforge.tokenAudiences` when the crew lists `tokenAudiences`. A refusal says which of these
+is missing: the crew requires a token (401), your identity may not use the crew (403), or the
+conversation is not yours (404).
+
 ## Documentation
 
 The full documentation is on kubemoot.org:
