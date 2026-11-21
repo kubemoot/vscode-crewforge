@@ -1,0 +1,19 @@
+{
+ "namespace": "crew-demo",
+ "crew": "demo",
+ "memories": 3,
+ "leftOut": [
+  {
+   "key": "crew-demo.demo.#1a2b3c4d",
+   "reason": "its topic or key holds a credential; not exported as memory"
+  },
+  {
+   "key": "crew-demo.demo.secrets.api",
+   "reason": "its value holds a credential (bearer token); not exported as memory"
+  },
+  {
+   "key": "crew-demo.demo.secrets.other",
+   "reason": "its value holds a credential (bearer token); not exported as memory"
+  }
+ ]
+}

@@ -76,6 +76,23 @@ CrewForge says so and names the command.
    and **Redeploy** after each edit. A deployed crew carries its fitness scenarios: its
    Fitness group runs all of them, a batch you pick, or one.
 
+### Crew memory
+
+Right-click a deployed crew and choose **Open Crew Memory** to see what the crew has
+learned, read-only. The facts are grouped by topic, each with its value, the role that
+learned it, when, and the thread it was learned in when the export records one. Entries the
+export left out (a fact that holds a credential is never exported as memory) show as counts
+with the reason, never their text. **Refresh** reads again; **Export to Folder...** saves the
+crew's OMPI export as `<crew>-memory-ompi.zip` in a folder you pick.
+
+CrewForge reads the export from the Kubemoot operator's report service
+(`GET /memory-export/{namespace}/{crew}`), through a port-forward to the operator's pod with
+your kubeconfig's bearer token, so Kubernetes RBAC decides: you need `get` on the Crew. The
+port-forward needs `get` on services, `list` on pods and `create` on `pods/portforward` in
+the operator's namespace (`kubemoot`; set `crewforge.operatorNamespace` otherwise). A
+kubeconfig that signs in with a client certificate carries no bearer token, and the operator
+refuses it with a message that says so. An operator without the endpoint is reported as too old.
+
 The status bar always shows the context CrewForge is connected to. If the cluster cannot
 be reached, CrewForge says so in plain words and offers **Select Kubernetes Context**.
 
