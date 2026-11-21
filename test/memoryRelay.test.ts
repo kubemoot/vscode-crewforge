@@ -6,9 +6,9 @@ import type { Readable, Writable } from 'node:stream';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { KubeConfig } from '@kubernetes/client-node';
 import { ConnectionError, KubeError } from '../src/k8s/request';
-import type { PodTunnel } from '../src/memory/forward';
+import type { PodTunnel } from '../src/discussion/forward';
 import { resolveReportTarget } from '../src/memory/operatorTarget';
-import { bearerOf, explainStatus, MemoryError, MemoryRelay } from '../src/memory/relay';
+import { explainStatus, MemoryError, MemoryRelay } from '../src/memory/relay';
 import { FakeCluster } from './fakeCluster';
 
 const where = { namespace: 'crew-demo', crew: 'demo', context: 'lab', sentToken: true };
@@ -18,6 +18,10 @@ describe('explainStatus', () => {
   it('401 says whether a token was sent', () => {
     expect(explainStatus(401, 'a valid bearer token is required', where).message).toMatch(/did not accept your Kubernetes token/);
     expect(explainStatus(401, '', { ...where, sentToken: false }).message).toMatch(/needs a Kubernetes bearer token.*client certificate/);
+  });
+
+  it('401 for a minted token names the service account', () => {
+    expect(explainStatus(401, '', { ...where, serviceAccount: 'ops/crewforge' }).message).toMatch(/token minted for service account ops\/crewforge.*get on the Crew demo/);
   });
 
   it('403 names the permission', () => {
@@ -72,28 +76,14 @@ describe('resolveReportTarget', () => {
     await expect(resolveReportTarget(cluster([pod('a', false)]), 'kubemoot')).rejects.toThrow(/no ready pod/);
   });
 
-  it('names the permissions the port-forward needs on a 403', async () => {
-    const denied = new FakeCluster();
-    denied.failures.set('/api/v1/namespaces/kubemoot/services/kubemoot-operator-report', new KubeError('x', 403));
-    await expect(resolveReportTarget(denied, 'kubemoot')).rejects.toThrow(/get on services, list on pods, and create on pods\/portforward/);
+  it('says so when the pods cannot be listed', async () => {
+    const c = cluster([]);
+    c.failures.set('/api/v1/namespaces/kubemoot/pods?labelSelector=app%3Dop', new KubeError('x', 404));
+    await expect(resolveReportTarget(c, 'kubemoot')).rejects.toThrow(/Could not list the pods behind kubemoot\/kubemoot-operator-report/);
   });
 
   it('refuses an operator namespace that is not a name', async () => {
     await expect(resolveReportTarget(new FakeCluster(), '../x')).rejects.toThrow(/not a valid Kubernetes name/);
-  });
-});
-
-describe('bearerOf', () => {
-  const config = (header?: string): Pick<KubeConfig, 'applyToHTTPSOptions'> => ({
-    applyToHTTPSOptions: async (o) => {
-      if (header) o.headers = { ...(o.headers as Record<string, string>), Authorization: header };
-    },
-  });
-
-  it('gives a bearer token, and never a basic-auth password', async () => {
-    expect(await bearerOf(config('Bearer abc'))).toBe('Bearer abc');
-    expect(await bearerOf(config('Basic dXNlcjpwYXNz'))).toBeUndefined();
-    expect(await bearerOf(config())).toBeUndefined();
   });
 });
 
@@ -121,9 +111,9 @@ describe('MemoryRelay', () => {
     return c;
   };
 
-  const relay = (timeoutMs?: number): MemoryRelay => {
+  const relay = (timeoutMs?: number, settings?: { tokenServiceAccount: string; tokenAudiences: string[] }, api: FakeCluster = cluster(), maxBytes?: number): MemoryRelay => {
     const config = { applyToHTTPSOptions: async (o: { headers?: unknown }) => { if (token) o.headers = { Authorization: token }; }, getCurrentContext: () => 'lab' } as unknown as KubeConfig;
-    return new MemoryRelay(cluster(), config, 'kubemoot', { tunnel: () => tunnel }, timeoutMs);
+    return new MemoryRelay(api, config, 'kubemoot', { tunnel: () => tunnel }, timeoutMs, settings, maxBytes);
   };
 
   beforeEach(async () => {
@@ -190,6 +180,59 @@ describe('MemoryRelay', () => {
     const err = await relay().read('crew-demo', 'demo').catch((e: unknown) => e);
     expect(err).toBeInstanceOf(ConnectionError);
     expect((err as Error).message).toMatch(/Kubemoot operator.*context lab/);
+  });
+
+  it('names the port-forward permissions when the account may not read the report service', async () => {
+    const denied = cluster();
+    denied.failures.set('/api/v1/namespaces/kubemoot/services/kubemoot-operator-report', new KubeError('x', 403));
+    await expect(relay(undefined, undefined, denied).read('crew-demo', 'demo')).rejects.toThrow(/get on services, list on pods, and create on pods\/portforward in kubemoot/);
+    const broken = cluster();
+    broken.failures.set('/api/v1/namespaces/kubemoot/services/kubemoot-operator-report', new KubeError('boom', 500));
+    await expect(relay(undefined, undefined, broken).read('crew-demo', 'demo')).rejects.toThrow('boom');
+  });
+
+  it('sends a minted token for a certificate kubeconfig, as the chat does', async () => {
+    token = undefined;
+    const api = cluster();
+    const mint = api.request.bind(api);
+    api.request = async (method, p, body) => {
+      if (method !== 'POST') return mint(method, p, body);
+      api.calls.push({ method, path: p, body });
+      return JSON.stringify({ status: { token: 'minted-token' } });
+    };
+    await relay(undefined, { tokenServiceAccount: 'ops/crewforge', tokenAudiences: ['kubemoot'] }, api).read('crew-demo', 'demo');
+    expect(api.calls.find((c) => c.method === 'POST')?.path).toBe('/api/v1/namespaces/ops/serviceaccounts/crewforge/token');
+    expect(seen.every((s) => s.authorization === 'Bearer minted-token')).toBe(true);
+  });
+
+  it('says what is missing when the token cannot be minted', async () => {
+    const api = cluster();
+    const mint = api.request.bind(api);
+    api.request = async (method, p, body) => {
+      if (method === 'POST') throw new KubeError('forbidden', 403);
+      return mint(method, p, body);
+    };
+    await expect(relay(undefined, { tokenServiceAccount: 'ops/crewforge', tokenAudiences: [] }, api).read('crew-demo', 'demo')).rejects.toThrow(/create on serviceaccounts\/token in ops/);
+  });
+
+  it('gives up on a response larger than the limit', async () => {
+    const err = await relay(undefined, undefined, cluster(), 100).read('crew-demo', 'demo').catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ConnectionError);
+    expect((err as Error).message).toMatch(/too large/);
+  });
+
+  it('gives up when the operator does not answer in time', async () => {
+    server.removeAllListeners('request');
+    server.on('request', () => undefined);
+    const err = await relay(100).read('crew-demo', 'demo').catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ConnectionError);
+    expect((err as Error).message).toMatch(/no response in 0.1 s/);
+  });
+
+  it('opens the real Kubernetes port-forward by default, and reports a tunnel that fails as a cut connection', async () => {
+    const config = { applyToHTTPSOptions: async () => undefined, getCurrentContext: () => 'lab', getCurrentCluster: () => ({ server: 'https://127.0.0.1:1' }) } as unknown as KubeConfig;
+    const err = await new MemoryRelay(cluster(), config, 'kubemoot', undefined, 2000).read('crew-demo', 'demo').catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ConnectionError);
   });
 
   it('refuses a crew name that is not a name before opening anything', async () => {

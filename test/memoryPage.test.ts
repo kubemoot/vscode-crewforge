@@ -46,6 +46,12 @@ describe('renderMemoryPage', () => {
     expect(whole).toContain('Nothing was left out of the export.');
   });
 
+  it('counts the left-out entries from the manifest when there is no report', () => {
+    const noReport = renderMemoryPage({ ...view, report: undefined });
+    expect(noReport).toContain('2 entries were left out');
+    expect(noReport).not.toContain('<th>Reason</th>');
+  });
+
   it('says so when the crew has learned nothing', () => {
     expect(renderMemoryPage({ ...view, parsed: { ...read.parsed, facts: [] } })).toContain('This crew has learned no facts yet.');
   });
@@ -103,6 +109,11 @@ describe('MemoryDashboard', () => {
     expect(refused).not.toContain('selectContext');
     failure = new ConnectionError('Cannot reach the operator.');
     expect(await new MemoryDashboard(crew, connect).render()).toContain('selectContext');
+  });
+
+  it('Select Kubernetes Context runs the command', async () => {
+    await new MemoryDashboard(crew, connect).actions.selectContext();
+    expect(recorded.executed.map((e) => e.id)).toContain('crewforge.selectContext');
   });
 
   it('exports the zip it read into the picked folder, and never overwrites a file', async () => {
