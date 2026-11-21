@@ -1,5 +1,5 @@
 import { ConnectionError, KubeError, type KubeTransport } from '../k8s/request';
-import { startPath, streamPath } from './proxyPath';
+import { startPath, streamPath } from './gatewayPath';
 import { SseParser } from './sse';
 import { eventErrorText, isTerminal, type DiscussionEvent } from './types';
 

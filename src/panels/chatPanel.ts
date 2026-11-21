@@ -5,6 +5,7 @@ import { dashboardUrl, streamTimeoutMs, type Connection } from '../connection';
 import { unreachable, type CrewAvailability } from '../discussion/availability';
 import { DEFAULT_TIMING } from '../discussion/client';
 import { ChatSession, type SessionView } from '../discussion/session';
+import type { KubeTransport } from '../k8s/request';
 import { titleOf } from '../crew/displayName';
 import type { CrewSummary } from '../k8s/crews';
 import { newConversation, questionFor, type Conversation, type ConversationMeta } from '../store/conversation';
@@ -77,6 +78,7 @@ export class ChatPanel {
   }
 
   private readonly panel: vscode.WebviewPanel;
+  private readonly gateway: KubeTransport & { close?: () => Promise<void> };
   private shownText?: string;
   private readonly pageErrors: string[] = [];
 
@@ -95,8 +97,10 @@ export class ChatPanel {
     });
     this.panel.iconPath = tabIcon(extensionUri);
     const timing = { ...DEFAULT_TIMING, maxMs: streamTimeoutMs() };
+    // The discussion goes to the gateway over a port-forward, so it carries the caller's token.
+    this.gateway = connection.gateway?.(crew.namespace, crew.name) ?? connection.client;
     this.session = new ChatSession(
-      connection.client,
+      this.gateway,
       conversation ?? newConversation(connection.context, crew.namespace, crew.name),
       (c) => store.save(c),
       (view) => void this.post(view),
@@ -327,6 +331,7 @@ export class ChatPanel {
     this.disposed = true;
     if (this.availabilityTimer) clearInterval(this.availabilityTimer);
     this.session.stop();
+    void this.gateway.close?.();
     ChatPanel.panels.delete(this.key);
     if (ChatPanel.activePanel === this) ChatPanel.activePanel = undefined;
   }

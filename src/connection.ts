@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { GatewayClient, type CallerSettings, type GatewayTransport } from './discussion/gateway';
 import { loadKubeconfig } from './k8s/kubeconfig';
 import type { NamespaceScope } from './k8s/crews';
 import { KubeClient } from './k8s/request';
@@ -14,13 +15,35 @@ export interface Connection {
   server?: string;
   /** The namespace the kubeconfig's context sets, as `kubectl config set-context --namespace` does. */
   namespace?: string;
+  /**
+   * A client for a crew's discussion gateway, reached over a port-forward so the request
+   * carries the caller's Kubernetes token. Close it with the chat that uses it.
+   */
+  gateway?: (namespace: string, crew: string) => GatewayTransport;
+}
+
+/** Who CrewForge is at a crew's gateway, from the settings. */
+export function callerSettings(): CallerSettings {
+  const settings = vscode.workspace.getConfiguration('crewforge');
+  return {
+    tokenServiceAccount: settings.get<string>('tokenServiceAccount', '').trim(),
+    tokenAudiences: settings.get<string[]>('tokenAudiences', []).map((a) => a.trim()).filter((a) => a !== ''),
+  };
 }
 
 /** Connects with the settings, or with an explicit context (to continue a saved conversation). */
 export function connect(contextOverride?: string): Connection {
   const settings = vscode.workspace.getConfiguration('crewforge');
   const { source, config } = loadKubeconfig(settings.get<string>('kubeconfig', ''), contextOverride ?? settings.get<string>('context', ''));
-  return { source, context: config.getCurrentContext(), client: new KubeClient(config), server: config.getCurrentCluster()?.server, namespace: config.getContextObject(config.getCurrentContext())?.namespace || undefined };
+  const client = new KubeClient(config);
+  return {
+    source,
+    context: config.getCurrentContext(),
+    client,
+    server: config.getCurrentCluster()?.server,
+    namespace: config.getContextObject(config.getCurrentContext())?.namespace || undefined,
+    gateway: (namespace, crew) => new GatewayClient(client, config, namespace, crew, callerSettings()),
+  };
 }
 
 /** The setting entry that shows every namespace you can read. */
