@@ -120,7 +120,7 @@ describe('render', () => {
   it.skipIf(!hasHelm())('renders the fixture chart with the real helm', async () => {
     const out = await render(chart, { namespace: 'team-a' }, deps(execProgram));
     expect(out.map(objectKey)).toEqual(['Crew/demo', 'PromptModule/demo-rules']);
-  });
+  }, 30_000);
 });
 
 function hasHelm(): boolean {
