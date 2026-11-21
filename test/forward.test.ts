@@ -12,7 +12,10 @@ afterEach(async () => {
 
 /** A pod's port: an HTTP server that answers with the request line. */
 async function startPod(): Promise<number> {
-  const server = http.createServer((req, res) => res.end(`pod saw ${req.method} ${req.url}`));
+  const server = http.createServer((req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify({ method: req.method, url: req.url }));
+  });
   await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
   closers.push(() => new Promise<void>((r) => { server.closeAllConnections(); server.close(() => r()); }));
   return (server.address() as net.AddressInfo).port;
@@ -52,7 +55,7 @@ describe('listenForward', () => {
         res.on('end', () => resolve(text));
       }).on('error', reject);
     });
-    expect(body).toBe('pod saw GET /ping');
+    expect(JSON.parse(body)).toEqual({ method: 'GET', url: '/ping' });
     expect(tunnel.calls).toEqual([{ namespace: 'team-a', pod: 'gw-0', ports: [8080] }]);
   });
 

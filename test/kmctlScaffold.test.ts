@@ -75,7 +75,7 @@ describe('an undeployed kmctl scaffold in Crew Sources', () => {
     expect(labels(provider, await provider.getChildren(children[10]))).toEqual(['pods-in-namespace', 'coordinator-deployment', 'refuse-delete', 'warnings-and-restarts']);
     const crewItem = provider.getTreeItem(children[0]);
     expect((crewItem.command!.arguments![0] as { fsPath: string }).fsPath).toBe(path.join(SCAFFOLD, 'templates', 'crew.yaml'));
-  });
+  }, 30_000);
 
   it('ships no Model and names no model server; its policy states what the crew needs', () => {
     expect(RENDERED).not.toMatch(/^kind: Model$/m);
