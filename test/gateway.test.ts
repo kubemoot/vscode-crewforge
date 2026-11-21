@@ -129,6 +129,7 @@ interface Seen {
   method: string;
   url: string;
   authorization?: string;
+  reason?: string;
 }
 let gateway: http.Server;
 let seen: Seen[];
@@ -139,7 +140,7 @@ async function startGateway(): Promise<number> {
   seen = [];
   gatewayStatus = 200;
   gateway = http.createServer((req, res) => {
-    seen.push({ method: req.method ?? '', url: req.url ?? '', authorization: req.headers.authorization });
+    seen.push({ method: req.method ?? '', url: req.url ?? '', authorization: req.headers.authorization, reason: req.headers['kubemoot-access-reason'] as string | undefined });
     if (gatewayStatus !== 200) {
       res.writeHead(gatewayStatus, { 'Content-Type': 'text/plain' });
       res.end(gatewayStatus === 404 ? 'conversation not found' : 'no');
@@ -204,6 +205,16 @@ describe('GatewayClient', () => {
     expect(seen.map((s) => `${s.method} ${s.url.split('?')[0]}`)).toEqual(['POST /api/v1/discussions/demo', 'GET /api/v1/discussions/demo/conv-1/stream']);
     expect(seen.every((s) => s.authorization === 'Bearer kube-token')).toBe(true);
     expect(tunnel.calls[0]).toEqual({ namespace: 'team-a', pod: 'gw-0', ports: [8080] });
+  });
+
+  it('sends the extra headers of a request, such as an operator\'s reason, along with the token', async () => {
+    const { gw } = await client(withToken());
+    await gw.request('DELETE', '/api/v1/discussions/demo/conv-1', undefined, undefined, { 'Kubemoot-Access-Reason': 'retention request' });
+    await gw.request('DELETE', '/api/v1/discussions/demo/conv-2');
+    expect(seen.map((s) => [s.method, s.reason, s.authorization])).toEqual([
+      ['DELETE', 'retention request', 'Bearer kube-token'],
+      ['DELETE', undefined, 'Bearer kube-token'],
+    ]);
   });
 
   it('opens the forward once for many requests', async () => {

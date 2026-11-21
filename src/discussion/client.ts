@@ -196,7 +196,7 @@ class TurnStream {
 }
 
 /** Waits `ms`, or less when `signal` aborts first; never rejects. */
-function pause(ms: number, signal: AbortSignal): Promise<void> {
+export function pause(ms: number, signal: AbortSignal): Promise<void> {
   return new Promise((resolve) => {
     if (signal.aborted) return resolve();
     const done = () => {

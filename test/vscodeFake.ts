@@ -156,6 +156,12 @@ export const recorded = {
   commands: new Map<string, (...args: unknown[]) => unknown>(),
   executed: [] as { id: string; args: unknown[] }[],
   info: [] as string[],
+  /** The detail text of each information message that had one. */
+  infoDetails: [] as string[],
+  /** The detail text of each warning that had one. */
+  warningDetails: [] as string[],
+  /** The title and prompt of each input box shown. */
+  inputTitles: [] as string[],
   errors: [] as string[],
   /** Error messages shown as modal dialogs (also in errors). */
   modalErrors: [] as string[],
@@ -225,6 +231,9 @@ export function resetFake(): void {
   recorded.commands.clear();
   recorded.executed = [];
   recorded.info = [];
+  recorded.infoDetails = [];
+  recorded.warningDetails = [];
+  recorded.inputTitles = [];
   recorded.errors = [];
   recorded.modalErrors = [];
   recorded.clipboard = [];
@@ -401,6 +410,8 @@ export const window = {
   },
   showInformationMessage(message: string, ...actions: unknown[]) {
     recorded.info.push(message);
+    const first = actions[0] as { detail?: string } | string | undefined;
+    if (typeof first === 'object' && first?.detail) recorded.infoDetails.push(first.detail);
     const reply = Promise.resolve(actions.length && typeof actions[0] === 'string' ? recorded.infoAnswers.shift() : undefined);
     recorded.infoReplies.push(reply);
     return reply;
@@ -415,14 +426,16 @@ export const window = {
     const choice = recorded.quickPicks.shift();
     return Promise.resolve(typeof choice === 'function' ? (choice as (i: unknown[]) => unknown)(items) : choice);
   },
-  showInputBox(options: { value?: string; validateInput?: (v: string) => string | undefined }) {
+  showInputBox(options: { value?: string; title?: string; prompt?: string; validateInput?: (v: string) => string | undefined }) {
+    recorded.inputTitles.push(`${options.title ?? ''} | ${options.prompt ?? ''}`);
     recorded.inputOffers.push(options.value);
     const value = recorded.inputs.shift();
     if (value !== undefined && options.validateInput?.(value)) return Promise.resolve(undefined);
     return Promise.resolve(value);
   },
-  showWarningMessage(message: string) {
+  showWarningMessage(message: string, options?: { detail?: string }) {
     recorded.warnings.push(message);
+    if (options?.detail) recorded.warningDetails.push(options.detail);
     return Promise.resolve(recorded.warningAnswers.shift());
   },
   withProgress<T>(_options: unknown, task: (progress: { report(v: { message?: string }): void }, token: { onCancellationRequested(l: () => void): void }) => Promise<T>): Promise<T> {

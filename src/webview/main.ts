@@ -3,6 +3,7 @@ import { cardText } from '../discussion/cardText';
 import { turnStatus } from '../discussion/turnStatus';
 import type { AgentCard, TurnState } from '../discussion/reducer';
 import { agentsOf, problemsOf, type AgentNote, type ChatMessage, type ConversationMeta } from '../store/conversation';
+import type { ConversationActionId } from '../panels/conversationActions';
 import type { HostMessage, StateMessage, WebviewMessage } from './protocol';
 import { escapeHtml, formatAgo, htmlAttribute, icons, isWebLink, metaLine } from './render';
 import { reportErrors } from './reportErrors';
@@ -32,6 +33,22 @@ marked.use({
   },
 });
 
+/** The header buttons that act on the conversation on the crew, and what each does. */
+const CONVERSATION_BUTTONS: Array<[string, ConversationActionId]> = [
+  ['conv-stop', 'stop'],
+  ['conv-pause', 'pause'],
+  ['conv-resume', 'resume'],
+  ['conv-erase', 'erase'],
+];
+
+/** The buttons on a saved conversation in the list: what each does, its tooltip, and its icon. */
+const LIST_ACTIONS: Array<{ action: ConversationActionId; label: string; icon: string }> = [
+  { action: 'stop', label: 'Stop on the crew', icon: icons.halt },
+  { action: 'pause', label: 'Pause on the crew', icon: icons.pause },
+  { action: 'resume', label: 'Resume on the crew', icon: icons.resume },
+  { action: 'erase', label: 'Delete from the crew', icon: icons.eraseCrew },
+];
+
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const els = {
   sidebar: $<HTMLElement>('sidebar'),
@@ -46,6 +63,7 @@ const els = {
   copy: $<HTMLButtonElement>('copy'),
   rename: $<HTMLButtonElement>('rename'),
   deleteBtn: $<HTMLButtonElement>('delete'),
+  convButtons: CONVERSATION_BUTTONS.map(([id, action]) => ({ action, el: $<HTMLButtonElement>(id) })),
   exportBtn: $<HTMLButtonElement>('export'),
 };
 
@@ -85,11 +103,17 @@ els.copy.addEventListener('click', () => vscode.postMessage({ type: 'copy' }));
 els.exportBtn.addEventListener('click', () => vscode.postMessage({ type: 'export' }));
 els.rename.addEventListener('click', () => vscode.postMessage({ type: 'rename' }));
 els.deleteBtn.addEventListener('click', () => vscode.postMessage({ type: 'delete' }));
+for (const { action, el } of els.convButtons) el.addEventListener('click', () => vscode.postMessage({ type: 'conversationAction', action }));
 $('dashboard').addEventListener('click', (e) => {
   e.preventDefault();
   vscode.postMessage({ type: 'openDashboard' });
 });
 els.history.addEventListener('click', (e) => {
+  const act = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-conv-action]');
+  if (act?.dataset.id) {
+    vscode.postMessage({ type: 'conversationAction', action: act.dataset.convAction as ConversationActionId, id: act.dataset.id });
+    return;
+  }
   const item = (e.target as HTMLElement).closest<HTMLElement>('[data-id]');
   if (!item?.dataset.id) return;
   vscode.postMessage({ type: 'open', id: item.dataset.id });
@@ -148,7 +172,14 @@ function inputState(): { stop: boolean; canSend: boolean; note?: string } {
   if (state?.view.busy) return { stop: true, canSend: false, note: 'The crew is answering' };
   const availability = state?.availability;
   if (availability && availability.state !== 'ready') return { stop: false, canSend: false, note: availability.reason };
-  return { stop: false, canSend: els.input.value.trim() !== '' };
+  return { stop: false, canSend: els.input.value.trim() !== '', note: freshNote() };
+}
+
+/** Says so when the crew reported something new in the conversation shown, which is not in the chat itself. */
+function freshNote(): string | undefined {
+  const id = state?.view.conversation.conversationId;
+  if (!id || !state?.fresh.includes(id)) return undefined;
+  return state.links.dashboard ? 'The crew has something new in this conversation. Read it in the Kubemoot dashboard.' : 'The crew has something new in this conversation.';
 }
 
 /** Shows the Send or Stop button only when it can be used, with the reason beside the input when sending is blocked. */
@@ -180,23 +211,35 @@ function render(): void {
   // Renaming or deleting waits for the turn, which saves the conversation when it ends.
   els.rename.disabled = busy;
   els.deleteBtn.disabled = busy;
-  els.history.innerHTML = renderHistory(state.history, conversation.id);
+  // The crew knows a conversation by the id its gateway gave; one that has not reached it has nothing to act on.
+  for (const { el } of els.convButtons) el.hidden = !conversation.conversationId;
+  els.history.innerHTML = renderHistory(state.history, conversation.id, new Set(state.fresh));
   renderMessages();
   renderSend();
   vscode.postMessage({ type: 'shown', text: shownText(document.body) });
 }
 
-function renderHistory(history: ConversationMeta[], activeId: string): string {
+function renderHistory(history: ConversationMeta[], activeId: string, fresh: Set<string>): string {
   if (history.length === 0) return '<div class="no-discussions"><p>No saved conversations yet</p></div>';
   return history
-    .map(
-      (h) => `<div class="discussion-item${h.id === activeId ? ' active' : ''}">
+    .map((h) => {
+      const isNew = h.conversationId !== undefined && fresh.has(h.conversationId);
+      const badge = isNew ? '<span class="fresh-dot" role="img" title="Something new from the crew" aria-label="Something new from the crew"></span>' : '';
+      return `<div class="discussion-item${h.id === activeId ? ' active' : ''}${isNew ? ' fresh' : ''}">
         <button class="discussion-btn" data-id="${escapeHtml(h.id)}">
-          <span class="conv-title">${escapeHtml(h.title)}</span>
+          <span class="conv-title">${badge}${escapeHtml(h.title)}</span>
           <span class="conv-date">${escapeHtml(formatAgo(h.startedAt))}</span>
-        </button></div>`,
-    )
+        </button>${h.conversationId ? listActions(h.id) : ''}</div>`;
+    })
     .join('');
+}
+
+/** The buttons that act on a saved conversation on the crew, shown on hover or focus. */
+function listActions(id: string): string {
+  const buttons = LIST_ACTIONS.map(
+    (a) => `<button type="button" class="conv-action"${htmlAttribute('data-conv-action', a.action)}${htmlAttribute('data-id', id)}${htmlAttribute('title', a.label)}${htmlAttribute('aria-label', a.label)}>${a.icon}</button>`,
+  );
+  return `<div class="conv-actions">${buttons.join('')}</div>`;
 }
 
 function renderMessages(): void {

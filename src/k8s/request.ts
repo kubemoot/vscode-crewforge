@@ -25,7 +25,7 @@ export interface KubeTransport {
    * A request whose whole response body is wanted. Resolves to the body on 2xx; rejects
    * with an AbortError when `signal` aborts. A PATCH body is a JSON merge patch.
    */
-  request(method: string, path: string, body?: unknown, signal?: AbortSignal): Promise<string>;
+  request(method: string, path: string, body?: unknown, signal?: AbortSignal, headers?: Record<string, string>): Promise<string>;
   /** A long GET whose body arrives in chunks; resolves when the server ends it or `signal` aborts. */
   stream(path: string, onChunk: (text: string) => void, signal: AbortSignal): Promise<void>;
 }
@@ -41,9 +41,9 @@ export class KubeClient implements KubeTransport {
     private readonly timeoutMs = REQUEST_TIMEOUT_MS,
   ) {}
 
-  async request(method: string, path: string, body?: unknown, signal?: AbortSignal): Promise<string> {
+  async request(method: string, path: string, body?: unknown, signal?: AbortSignal, headers?: Record<string, string>): Promise<string> {
     for (let attempt = 1; ; attempt++) {
-      const res = await this.once(method, path, body, signal);
+      const res = await this.once(method, path, body, signal, headers);
       if (res.status >= 200 && res.status < 300) return res.text;
       const wait = retryDelayMs(res.status, res.retryAfter, attempt);
       if (wait === undefined) throw describeFailure(res.status, method, path, res.text, this.where());
@@ -51,9 +51,12 @@ export class KubeClient implements KubeTransport {
     }
   }
 
-  private async once(method: string, path: string, body?: unknown, signal?: AbortSignal): Promise<RawResponse> {
+  private async once(method: string, path: string, body?: unknown, signal?: AbortSignal, extra?: Record<string, string>): Promise<RawResponse> {
     const payload = body === undefined ? undefined : JSON.stringify(body);
-    const headers: Record<string, string> = payload ? { 'Content-Type': method === 'PATCH' ? 'application/merge-patch+json' : 'application/json' } : {};
+    const headers: Record<string, string> = {
+      ...(payload ? { 'Content-Type': method === 'PATCH' ? 'application/merge-patch+json' : 'application/json' } : {}),
+      ...extra,
+    };
     const { send, options } = await this.prepare(method, path, headers);
     if (signal?.aborted) throw abortError();
     return new Promise((resolve, reject) => {

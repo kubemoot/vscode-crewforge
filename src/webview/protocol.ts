@@ -1,5 +1,6 @@
 import type { CrewAvailability } from '../discussion/availability';
 import type { SessionView } from '../discussion/session';
+import type { ConversationActionId } from '../panels/conversationActions';
 import type { ConversationMeta } from '../store/conversation';
 
 /** Extension host to webview: what to show. */
@@ -15,6 +16,8 @@ export type StateMessage = {
   links: ChatLinkState;
   /** Whether the crew can take a question now; absent until known, when the page lets the person send. */
   availability?: CrewAvailability;
+  /** The gateway's ids of the conversations the crew said have something new since they were last opened. */
+  fresh: string[];
 };
 
 /** The agents whose source is open in the workspace, and whether a dashboard URL is set. */
@@ -44,6 +47,8 @@ export type WebviewMessage =
   | { type: 'export' }
   | { type: 'rename' }
   | { type: 'delete' }
+  /** Stops, pauses, resumes or deletes a conversation on the crew; of the conversation shown when `id` is absent, else of the saved conversation `id`. */
+  | { type: 'conversationAction'; action: ConversationActionId; id?: string }
   | { type: 'openDashboard' }
   /** Opens where an agent is defined: the Agent and its PromptModules in the workspace. */
   | { type: 'openAgentSource'; agent: string }

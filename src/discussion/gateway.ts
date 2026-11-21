@@ -195,9 +195,9 @@ export class GatewayClient implements GatewayTransport {
 
   private readonly serviceAccount?: string;
 
-  async request(method: string, path: string, body?: unknown, signal?: AbortSignal): Promise<string> {
+  async request(method: string, path: string, body?: unknown, signal?: AbortSignal, headers?: Record<string, string>): Promise<string> {
     const { client } = await this.open();
-    return this.explained(() => client.request(method, path, body, signal));
+    return this.explained(() => client.request(method, path, body, signal, headers));
   }
 
   async stream(path: string, onChunk: (text: string) => void, signal: AbortSignal): Promise<void> {

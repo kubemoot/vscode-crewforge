@@ -10,6 +10,8 @@ export interface Call {
   method: string;
   path: string;
   body?: unknown;
+  /** The extra headers the request carried, when it carried any. */
+  headers?: Record<string, string>;
 }
 
 /**
@@ -27,8 +29,8 @@ export class FakeTransport implements KubeTransport {
   /** When set, request() waits until aborted, like a POST stuck behind a slow server. */
   hangRequests = false;
 
-  async request(method: string, path: string, body?: unknown, signal?: AbortSignal): Promise<string> {
-    this.calls.push({ method, path, body });
+  async request(method: string, path: string, body?: unknown, signal?: AbortSignal, headers?: Record<string, string>): Promise<string> {
+    this.calls.push(headers ? { method, path, body, headers } : { method, path, body });
     if (this.hangRequests) {
       await new Promise<void>((_, reject) => signal?.addEventListener('abort', () => reject(Object.assign(new Error('stopped'), { name: 'AbortError' }))));
     }
