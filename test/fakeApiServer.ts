@@ -76,6 +76,10 @@ function gatewayServer(posts: FakeApi['posts'], received: FakeApi['gatewayReques
         posts.push({ path: url, body });
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end('{"conversationId":"conv-fake"}');
+      } else if (url.split('?')[0].endsWith('/events')) {
+        // The crew's conversation events carry no turn data; like the real gateway, hold the stream open until the client leaves.
+        res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+        res.write(': connected\n\n');
       } else {
         res.writeHead(200, { 'Content-Type': 'text/event-stream' });
         res.end(fixture('turn1.sse'));
