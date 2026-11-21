@@ -54,8 +54,11 @@ const intervals: ReturnType<typeof setInterval>[] = [];
 /** What the host says about the crew's availability; a test changes it before posting. */
 let availability: StateMessage['availability'];
 
+/** The conversations the host says have something new; a test changes it before posting. */
+let fresh: string[] = [];
+
 function stateMessage(conversation: Conversation, extra: Partial<StateMessage['view']> = {}, history: StateMessage['history'] = []): StateMessage {
-  return { type: 'state', view: { conversation, busy: false, ...extra }, crewTitle: conversation.crewName, history, about: '2 agents', links, availability };
+  return { type: 'state', view: { conversation, busy: false, ...extra }, crewTitle: conversation.crewName, history, about: '2 agents', links, availability, fresh };
 }
 
 /** Delivers a message as VS Code's host frame does: with the page's own origin. */
@@ -65,7 +68,10 @@ function post(conversation: Conversation, extra: Partial<StateMessage['view']> =
 
 const $ = (id: string) => document.getElementById(id)!;
 
-beforeEach(loadPage);
+beforeEach(async () => {
+  fresh = [];
+  await loadPage();
+});
 afterEach(() => {
   for (const p of recorded.panels) p.dispose();
   for (const id of intervals.splice(0)) clearInterval(id);
@@ -306,12 +312,73 @@ describe('the chat page', () => {
     c.messages.push({ role: 'user', content: 'q', timestamp: c.startedAt });
     post(c);
     expect(header.map((b) => b.hidden)).toEqual([false, false, false, false]);
-    expect(header.map((b) => b.getAttribute('aria-label'))).toEqual(['Rename conversation', 'Delete conversation', 'Copy conversation as Markdown', 'Save conversation as Markdown']);
+    expect(header.map((b) => b.getAttribute('aria-label'))).toEqual(['Rename conversation', 'Delete conversation from this computer', 'Copy conversation as Markdown', 'Save conversation as Markdown']);
     $('rename').click();
     $('delete').click();
     expect(sent.slice(1)).toEqual([{ type: 'rename' }, { type: 'delete' }]);
     post(c, { busy: true });
     expect(header.map((b) => b.disabled)).toEqual([true, true, false, false]);
+  });
+
+  it('offers stop, pause, resume and delete on the crew only for a conversation the crew knows', () => {
+    const c = newConversation('ctx', 'team-a', 'lab-ops');
+    const buttons = ['conv-stop', 'conv-pause', 'conv-resume', 'conv-erase'].map((id) => $(id) as HTMLButtonElement);
+    post(c);
+    expect(buttons.map((b) => b.hidden)).toEqual([true, true, true, true]);
+    c.conversationId = 'conv-1';
+    post(c);
+    expect(buttons.map((b) => b.hidden)).toEqual([false, false, false, false]);
+    expect(buttons.map((b) => b.getAttribute('aria-label'))).toEqual([
+      'Stop the conversation on the crew',
+      'Pause the conversation on the crew',
+      'Resume the conversation on the crew',
+      'Delete the conversation from the crew',
+    ]);
+    for (const b of buttons) b.click();
+    expect(sent.slice(1)).toEqual([
+      { type: 'conversationAction', action: 'stop' },
+      { type: 'conversationAction', action: 'pause' },
+      { type: 'conversationAction', action: 'resume' },
+      { type: 'conversationAction', action: 'erase' },
+    ]);
+  });
+
+  it('puts the same four actions on each saved conversation the crew knows, and opens it only from its title', () => {
+    const c = newConversation('ctx', 'team-a', 'lab-ops');
+    const meta = (id: string, conversationId?: string) => ({ id, title: id, startedAt: c.startedAt, crewName: 'lab-ops', namespace: 'team-a', context: 'ctx', ...(conversationId ? { conversationId } : {}) });
+    post(c, {}, [meta('old-1', 'conv-1'), meta('old-2')]);
+    const items = [...$('history').querySelectorAll('.discussion-item')];
+    expect(items[0].querySelectorAll('.conv-action')).toHaveLength(4);
+    expect(items[1].querySelectorAll('.conv-action')).toHaveLength(0);
+    const pause = items[0].querySelector<HTMLButtonElement>('[data-conv-action="pause"]')!;
+    expect(pause.title).toBe('Pause on the crew');
+    pause.click();
+    items[0].querySelector<HTMLButtonElement>('[data-conv-action="erase"]')!.click();
+    expect(sent.slice(1)).toEqual([
+      { type: 'conversationAction', action: 'pause', id: 'old-1' },
+      { type: 'conversationAction', action: 'erase', id: 'old-1' },
+    ]);
+  });
+
+  it('marks a saved conversation the crew said has something new, and says so under the one shown', () => {
+    const c = newConversation('ctx', 'team-a', 'lab-ops');
+    c.conversationId = 'conv-1';
+    const history = [{ id: 'old-1', title: 'Old', startedAt: c.startedAt, crewName: 'lab-ops', namespace: 'team-a', context: 'ctx', conversationId: 'conv-2' }];
+    post(c, {}, history);
+    expect($('history').querySelector('.fresh-dot')).toBeNull();
+    expect($('note').hidden).toBe(true);
+    fresh = ['conv-2'];
+    post(c, {}, history);
+    expect($('history').querySelector('.discussion-item.fresh .fresh-dot')?.getAttribute('title')).toBe('Something new from the crew');
+    expect($('note').hidden).toBe(true);
+    fresh = ['conv-1'];
+    post(c, {}, history);
+    expect($('note').textContent).toBe('The crew has something new in this conversation.');
+    links = { agents: [], dashboard: true };
+    post(c, {}, history);
+    expect($('note').textContent).toBe('The crew has something new in this conversation. Read it in the Kubemoot dashboard.');
+    post(c, { busy: true }, history);
+    expect($('note').textContent).toBe('The crew is answering');
   });
 
   it('shows what went wrong under an answer and a notice, escaped, and ignores a malformed list', () => {

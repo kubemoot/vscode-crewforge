@@ -116,6 +116,40 @@ Add `crewforge.tokenAudiences` when the crew lists `tokenAudiences`. A refusal s
 is missing: the crew requires a token (401), your identity may not use the crew (403), or the
 conversation is not yours (404).
 
+### Stopping, pausing, resuming and deleting a conversation
+
+A chat with a crew that has answered at least once can act on the conversation on the crew
+itself, through the same gateway connection and token as **Ask**. The chat header and each saved
+conversation in the list (on hover or focus) have four buttons:
+
+- **Stop**, **Pause** and **Resume** send the control to the conversation's running discussions.
+  A conversation with nothing running answers 409, and CrewForge says so.
+- **Delete from the crew** asks first, then removes the conversation from every place the crew
+  keeps it (history, discussion messages, workspace, scheduled reminders, learned memory facts)
+  and shows what it removed in each store and what it cannot remove (logs and backups). A
+  conversation that is still running offers **Stop and delete**. A delete that could not clear
+  every store says which, and repeating it removes what is left. The copy on your computer stays;
+  **Delete conversation from this computer** in the header removes that one.
+
+The owner of a conversation acts without a reason. For another caller's conversation the gateway
+needs the `kubemoot-conversation-controller` role and a reason: CrewForge asks for one (1 to 200
+characters) when the gateway says it is needed and sends it as `Kubemoot-Access-Reason`, which the
+crew records in its audit log. A refusal says which of these is missing: no token (401), an
+identity that may not use the crew (403), a conversation that is not yours or not there (404),
+nothing running or still running (409), or a store that failed (500).
+
+### Live updates
+
+An open chat listens to the crew's conversation events (`GET /api/v1/discussions/{crew}/events`,
+server-sent events) through the same port-forward, once per crew. An event says only that a
+conversation has something new, such as a late answer, a scheduled reminder that fired or a
+follow-up; it carries no content. CrewForge marks that conversation in the list with a dot, reads
+the conversation shown again from your saved copy, and says so under the chat. The mark clears when
+you open the conversation or ask in it. A dropped connection opens again and resumes after the last
+event received (`Last-Event-ID`), so no news is lost or repeated; CrewForge never subscribes to NATS.
+A gateway that is older than the event stream is left alone. The crew sends events only for
+conversations you own.
+
 ## Documentation
 
 The full documentation is on kubemoot.org:

@@ -40,3 +40,24 @@ export function streamPath(namespace: string, crew: string, conversationId: stri
   const search = q ? `?${q}` : '';
   return `${gatewayBase(namespace, crew)}/${encodeURIComponent(conversationId)}/stream${search}`;
 }
+
+/** What a person can do to a conversation that is running: send its threads a control. */
+export type ControlAction = 'stop' | 'pause' | 'resume';
+
+/** POST here, with no body, to stop, pause or resume the conversation's running threads. */
+export function controlPath(namespace: string, crew: string, conversationId: string, action: ControlAction): string {
+  if (!conversationId) throw new Error('conversationId is required');
+  return `${gatewayBase(namespace, crew)}/${encodeURIComponent(conversationId)}/${action}`;
+}
+
+/** DELETE here to erase the conversation; `force` erases one that is still running, stopping it first. */
+export function erasePath(namespace: string, crew: string, conversationId: string, force = false): string {
+  if (!conversationId) throw new Error('conversationId is required');
+  return `${gatewayBase(namespace, crew)}/${encodeURIComponent(conversationId)}${force ? '?force=true' : ''}`;
+}
+
+/** GET here for the crew's conversation events, resuming after `lastEventId` when there is one. */
+export function eventsPath(namespace: string, crew: string, lastEventId = ''): string {
+  const search = lastEventId ? `?${new URLSearchParams({ lastEventId }).toString()}` : '';
+  return `${gatewayBase(namespace, crew)}/events${search}`;
+}

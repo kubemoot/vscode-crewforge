@@ -61,6 +61,8 @@ export interface ConversationMeta {
   crewName: string;
   namespace: string;
   context: string;
+  /** The gateway's id for the conversation, once a question has reached it. */
+  conversationId?: string;
 }
 
 export function newConversation(context: string, namespace: string, crewName: string, now = new Date()): Conversation {
@@ -106,5 +108,5 @@ export function problemsOf(m: ChatMessage): string[] {
 }
 
 export function metaOf(c: Conversation): ConversationMeta {
-  return { id: c.id, title: c.title, startedAt: c.startedAt, crewName: c.crewName, namespace: c.namespace, context: c.context };
+  return { id: c.id, title: c.title, startedAt: c.startedAt, crewName: c.crewName, namespace: c.namespace, context: c.context, ...(c.conversationId ? { conversationId: c.conversationId } : {}) };
 }

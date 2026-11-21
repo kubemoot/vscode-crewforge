@@ -4,8 +4,9 @@ import * as vscode from 'vscode';
 import { dashboardUrl, streamTimeoutMs, type Connection } from '../connection';
 import { unreachable, type CrewAvailability } from '../discussion/availability';
 import { DEFAULT_TIMING } from '../discussion/client';
+import { ConversationEvents, type ConversationNews } from '../discussion/events';
 import { ChatSession, type SessionView } from '../discussion/session';
-import type { KubeTransport } from '../k8s/request';
+import { KubeError, type KubeTransport } from '../k8s/request';
 import { titleOf } from '../crew/displayName';
 import type { CrewSummary } from '../k8s/crews';
 import { newConversation, questionFor, type Conversation, type ConversationMeta } from '../store/conversation';
@@ -14,9 +15,11 @@ import { exportAsMarkdown, exportFileName } from '../store/export';
 import { crewAbout } from '../views/treeModel';
 import type { HostMessage, WebviewMessage } from '../webview/protocol';
 import { escapeHtml, icons } from '../webview/render';
+import { ConversationActions, isConversationAction, type ConversationTarget } from './conversationActions';
 import { messageText, type PanelState } from './panelState';
 import { tabIcon } from './tabIcon';
 import type { Located } from '../source/locate';
+import { errorText } from '../views/errors';
 import { showError } from '../views/notify';
 import { trimEnd } from '../text';
 
@@ -81,6 +84,10 @@ export class ChatPanel {
   private readonly gateway: KubeTransport & { close?: () => Promise<void> };
   private shownText?: string;
   private readonly pageErrors: string[] = [];
+  private readonly actions: ConversationActions;
+  private events?: ConversationEvents;
+  /** The gateway's ids of the conversations the crew said have something new, until they are opened or asked in. */
+  private readonly fresh = new Set<string>();
 
   private constructor(
     private readonly extensionUri: vscode.Uri,
@@ -106,6 +113,9 @@ export class ChatPanel {
       (view) => void this.post(view),
       timing,
     );
+    this.actions = new ConversationActions(this.gateway, crew.namespace, crew.name);
+    // Only a gateway reached over a port-forward has the event stream; the API server's service proxy does not carry it.
+    if (connection.gateway) this.followEvents();
     this.panel.webview.html = this.html();
     this.panel.webview.onDidReceiveMessage((m: WebviewMessage) => this.onMessage(m));
     this.panel.onDidChangeViewState(() => {
@@ -204,9 +214,10 @@ export class ChatPanel {
     error: (m) => {
       this.pageErrors.push(messageText(m.message));
     },
-    send: (m) => this.session.send(m.text),
+    send: (m) => this.send(m.text),
     stop: () => this.session.stop(),
     new: () => this.session.load(newConversation(this.connection.context, this.crew.namespace, this.crew.name)),
+    conversationAction: (m) => this.conversationAction(m.action, m.id),
     open: (m) => this.open(m.id),
     copy: () => vscode.env.clipboard.writeText(exportAsMarkdown(this.session.view.conversation)),
     copyMessage: (m) => this.copyMessage(m.index),
@@ -260,7 +271,82 @@ export class ChatPanel {
 
   private async open(id: string): Promise<void> {
     const c = await this.store.load({ context: this.connection.context, namespace: this.crew.namespace, crewName: this.crew.name, id });
+    this.markSeen(c.conversationId);
     this.session.load(c);
+  }
+
+  /** Asks a question, which also clears the mark that the conversation has something new. */
+  private async send(text: string): Promise<void> {
+    this.markSeen(this.session.view.conversation.conversationId);
+    await this.session.send(text);
+  }
+
+  private markSeen(conversationId: string | undefined): void {
+    if (conversationId) this.fresh.delete(conversationId);
+  }
+
+  /**
+   * Stops, pauses, resumes or deletes a conversation on the crew: the one shown, or the saved
+   * conversation the list names. The page is not trusted, so an unknown action is ignored.
+   */
+  private async conversationAction(action: unknown, id: unknown): Promise<void> {
+    if (!isConversationAction(action)) return;
+    const target = await this.targetOf(typeof id === 'string' ? id : undefined);
+    if (!target) {
+      void vscode.window.showInformationMessage('This conversation has not reached the crew yet. Ask the crew something first.');
+      return;
+    }
+    await this.actions.run(action, target);
+    this.markSeen(target.conversationId);
+    await this.post(this.session.view);
+  }
+
+  /** The gateway's conversation behind the one shown, or behind the saved conversation `id`. */
+  private async targetOf(id: string | undefined): Promise<ConversationTarget | undefined> {
+    const shown = this.session.view.conversation;
+    const c = id && id !== shown.id ? await this.store.load({ context: this.connection.context, namespace: this.crew.namespace, crewName: this.crew.name, id }) : shown;
+    return c.conversationId ? { conversationId: c.conversationId, title: c.title } : undefined;
+  }
+
+  /** Listens for the crew's conversation events for as long as the panel is open. */
+  private followEvents(): void {
+    this.events = new ConversationEvents(
+      this.gateway,
+      this.crew.namespace,
+      this.crew.name,
+      (news) => void this.onNews(news),
+      (err) => this.eventsEnded(err),
+    );
+    void this.events.start();
+  }
+
+  /**
+   * The crew says a conversation has something new: marks it in the list and, when it is the
+   * one shown and no turn runs, reads it again from the store. News of the conversation a
+   * running turn is streaming is that turn's own answer and is not marked.
+   */
+  private async onNews(news: ConversationNews): Promise<void> {
+    if (this.disposed) return;
+    const shown = this.session.view.conversation;
+    const own = shown.conversationId === news.conversationId;
+    if (own && this.session.busy) return;
+    this.fresh.add(news.conversationId);
+    if (own) await this.reloadShown(shown.id);
+    await this.post(this.session.view);
+  }
+
+  private async reloadShown(id: string): Promise<void> {
+    try {
+      this.session.load(await this.store.load({ context: this.connection.context, namespace: this.crew.namespace, crewName: this.crew.name, id }));
+    } catch {
+      // Not saved yet: what is on screen is all there is.
+    }
+  }
+
+  /** The event stream ended for good. A gateway without it (404) is an older one and stays quiet; anything else is said once. */
+  private eventsEnded(err: unknown): void {
+    if (err instanceof KubeError && err.status === 404) return;
+    void vscode.window.showWarningMessage(`CrewForge stopped listening for new activity in ${this.crew.name}: ${errorText(err)} Reopen the chat to listen again.`);
   }
 
   private async copyMessage(index: number): Promise<void> {
@@ -323,7 +409,16 @@ export class ChatPanel {
     if (!view.busy) this.history = await this.store.list(this.connection.context, this.crew.namespace, this.crew.name);
     if (this.disposed) return;
     const links = { agents: [...this.agentSources.keys()], dashboard: dashboardUrl() !== '' };
-    const message: HostMessage = { type: 'state', view: this.session.view, crewTitle: titleOf(this.crew), history: this.history, about: crewAbout(this.crew), links, availability: this.availability };
+    const message: HostMessage = {
+      type: 'state',
+      view: this.session.view,
+      crewTitle: titleOf(this.crew),
+      history: this.history,
+      about: crewAbout(this.crew),
+      links,
+      availability: this.availability,
+      fresh: [...this.fresh],
+    };
     await this.panel.webview.postMessage(message);
   }
 
@@ -331,6 +426,7 @@ export class ChatPanel {
     this.disposed = true;
     if (this.availabilityTimer) clearInterval(this.availabilityTimer);
     this.session.stop();
+    this.events?.stop();
     void this.gateway.close?.();
     ChatPanel.panels.delete(this.key);
     if (ChatPanel.activePanel === this) ChatPanel.activePanel = undefined;
@@ -366,8 +462,12 @@ export class ChatPanel {
         <h1 id="title"></h1><span class="crew-where" id="where"></span>
       </div>
       <div class="header-actions">
+        <button class="export-btn" id="conv-stop" title="Stop the conversation on the crew" aria-label="Stop the conversation on the crew" hidden>${icons.halt}</button>
+        <button class="export-btn" id="conv-pause" title="Pause the conversation on the crew" aria-label="Pause the conversation on the crew" hidden>${icons.pause}</button>
+        <button class="export-btn" id="conv-resume" title="Resume the conversation on the crew" aria-label="Resume the conversation on the crew" hidden>${icons.resume}</button>
+        <button class="export-btn" id="conv-erase" title="Delete the conversation from the crew" aria-label="Delete the conversation from the crew" hidden>${icons.eraseCrew}</button>
         <button class="export-btn" id="rename" title="Rename conversation" aria-label="Rename conversation" hidden>${icons.edit}</button>
-        <button class="export-btn" id="delete" title="Delete conversation" aria-label="Delete conversation" hidden>${icons.trash}</button>
+        <button class="export-btn" id="delete" title="Delete conversation from this computer" aria-label="Delete conversation from this computer" hidden>${icons.trash}</button>
         <button class="export-btn" id="copy" title="Copy conversation as Markdown" aria-label="Copy conversation as Markdown" hidden>${icons.copy}</button>
         <button class="export-btn" id="export" title="Save conversation as Markdown" aria-label="Save conversation as Markdown" hidden>${icons.download}</button>
       </div>

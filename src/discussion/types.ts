@@ -22,6 +22,10 @@ export interface DiscussionEvent {
    * client resumes once this event is handled.
    */
   id?: string;
+  /** On a conversation_updated event: the conversation that has something new. */
+  conversationId?: string;
+  /** On a conversation_updated event: when the news was published, RFC 3339 in UTC. */
+  at?: string;
 }
 
 export type EventType =
@@ -32,6 +36,8 @@ export type EventType =
   | 'synthesis'
   | 'done'
   | 'heartbeat'
+  /** On the conversation event stream: a conversation has something new. */
+  | 'conversation_updated'
   | 'error'
   /** Not from the gateway: the client lost the stream before the answer and is reconnecting. */
   | 'reconnecting'
