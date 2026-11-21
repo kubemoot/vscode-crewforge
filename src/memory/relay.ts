@@ -1,9 +1,9 @@
 import * as http from 'node:http';
-import type * as https from 'node:https';
 import { KubeConfig, PortForward } from '@kubernetes/client-node';
+import { listenForward, type LocalForward, type PodTunnel } from '../discussion/forward';
+import { TokenSource, type CallerSettings } from '../discussion/gateway';
 import { checkName } from '../k8s/paths';
 import { ConnectionError, KubeError, type KubeTransport } from '../k8s/request';
-import { listenForward, type LocalForward, type PodTunnel } from './forward';
 import { resolveReportTarget } from './operatorTarget';
 import { parseExport, parseReport, type ParsedExport, type SelectionReport } from './ompi';
 
@@ -25,6 +25,8 @@ export interface MemoryContext {
   crew: string;
   context: string;
   sentToken: boolean;
+  /** NAMESPACE/NAME of the ServiceAccount a token was minted for, when the settings ask for one. */
+  serviceAccount?: string;
 }
 
 /** The server's words, one short line. */
@@ -37,10 +39,13 @@ function inParens(text: string): string {
 }
 
 function unauthorized(where: MemoryContext): string {
+  if (where.serviceAccount) {
+    return `The Kubemoot operator did not accept the token minted for service account ${where.serviceAccount}. The account needs get on the Crew ${where.crew} in ${where.namespace}.`;
+  }
   if (where.sentToken) {
     return `The Kubemoot operator did not accept your Kubernetes token (context ${where.context}). It may have expired; get a fresh kubeconfig.`;
   }
-  return `The Kubemoot operator needs a Kubernetes bearer token, and the kubeconfig for context ${where.context} has none (it signs in with a client certificate or a password). Use a kubeconfig that signs in with a token.`;
+  return `The Kubemoot operator needs a Kubernetes bearer token, and the kubeconfig for context ${where.context} has none (it signs in with a client certificate or a password). Use a kubeconfig that signs in with a token, or set the crewforge.tokenServiceAccount setting to NAMESPACE/NAME of a ServiceAccount you may create tokens for.`;
 }
 
 function notFound(body: string, where: MemoryContext): string {
@@ -88,20 +93,12 @@ export interface RelayParts {
 
 const realParts: RelayParts = { tunnel: (config) => new PortForward(config) };
 
-/** A kubeconfig's bearer token only: a basic-auth password is never forwarded. Asked for on every request so a refreshed token is used. */
-export async function bearerOf(config: Pick<KubeConfig, 'applyToHTTPSOptions'>): Promise<string | undefined> {
-  const options: https.RequestOptions = { headers: {} };
-  await config.applyToHTTPSOptions(options);
-  const header = (options.headers as Record<string, unknown> | undefined)?.Authorization;
-  return typeof header === 'string' && /^Bearer\s+\S/.test(header) ? header : undefined;
-}
-
 interface Reply {
   status: number;
   body: Buffer;
 }
 
-function get(port: number, path: string, authorization: string | undefined, timeoutMs: number): Promise<Reply> {
+function get(port: number, path: string, authorization: string | undefined, timeoutMs: number, maxBytes: number): Promise<Reply> {
   return new Promise((resolve, reject) => {
     const headers: Record<string, string> = authorization ? { Authorization: authorization } : {};
     const req = http.request({ host: '127.0.0.1', port, path, method: 'GET', headers }, (res) => {
@@ -109,10 +106,9 @@ function get(port: number, path: string, authorization: string | undefined, time
       let size = 0;
       res.on('data', (b: Buffer) => {
         size += b.length;
-        if (size > MEMORY_MAX_BYTES) req.destroy(new Error('The memory export is too large.'));
-        else parts.push(b);
+        if (size <= maxBytes) parts.push(b);
       });
-      res.on('end', () => resolve({ status: res.statusCode ?? 0, body: Buffer.concat(parts) }));
+      res.on('end', () => (size > maxBytes ? reject(new Error('The memory export is too large.')) : resolve({ status: res.statusCode ?? 0, body: Buffer.concat(parts) })));
       res.on('error', reject);
     });
     req.setTimeout(timeoutMs, () => req.destroy(new Error(`no response in ${timeoutMs / 1000} s`)));
@@ -141,13 +137,23 @@ export class MemoryRelay {
     private readonly operatorNamespace: string,
     private readonly parts: RelayParts = realParts,
     private readonly timeoutMs = MEMORY_REQUEST_MS,
-  ) {}
+    settings: CallerSettings = { tokenServiceAccount: '', tokenAudiences: [] },
+    private readonly maxBytes = MEMORY_MAX_BYTES,
+  ) {
+    this.tokens = new TokenSource(api, config, settings);
+    this.serviceAccount = settings.tokenServiceAccount.trim() || undefined;
+  }
+
+  private readonly tokens: TokenSource;
+  private readonly serviceAccount?: string;
 
   /** The export as a zip and its selection report. */
   async read(namespace: string, crew: string): Promise<MemoryRead> {
     const ns = checkName('namespace', namespace);
     const name = checkName('crew', crew);
-    const target = await resolveReportTarget(this.api, this.operatorNamespace);
+    const target = await resolveReportTarget(this.api, this.operatorNamespace).catch((err: unknown) => {
+      throw explainForward(err, this.operatorNamespace);
+    });
     const forward = await listenForward(this.parts.tunnel(this.config), this.operatorNamespace, target.pod, target.port);
     try {
       return await this.fetchBoth(forward, ns, name);
@@ -164,14 +170,22 @@ export class MemoryRelay {
   }
 
   private async fetch(forward: LocalForward, path: string, namespace: string, crew: string): Promise<Buffer> {
-    const authorization = await bearerOf(this.config);
+    const authorization = await this.tokens.authorization();
     let reply: Reply;
     try {
-      reply = await get(forward.port, path, authorization, this.timeoutMs);
+      reply = await get(forward.port, path, authorization, this.timeoutMs, this.maxBytes);
     } catch (err) {
       throw new ConnectionError(`The connection to the Kubemoot operator (through a port-forward in context ${this.config.getCurrentContext()}) failed or was cut. ${(err as Error).message}`.trim(), (err as Error).message);
     }
     if (reply.status >= 200 && reply.status < 300) return reply.body;
-    throw explainStatus(reply.status, reply.body.toString('utf8'), { namespace, crew, context: this.config.getCurrentContext(), sentToken: authorization !== undefined });
+    throw explainStatus(reply.status, reply.body.toString('utf8'), { namespace, crew, context: this.config.getCurrentContext(), sentToken: authorization !== undefined, serviceAccount: this.serviceAccount });
   }
+}
+
+/** A refusal to read the Service or its pods, said as what the port-forward needs. */
+function explainForward(err: unknown, namespace: string): unknown {
+  if (err instanceof KubeError && err.status === 403) {
+    return new KubeError(`Your account may not reach the Kubemoot operator's report service. The port-forward needs get on services, list on pods, and create on pods/portforward in ${namespace}.`, 403, err.detail);
+  }
+  return err;
 }

@@ -90,8 +90,8 @@ CrewForge reads the export from the Kubemoot operator's report service
 your kubeconfig's bearer token, so Kubernetes RBAC decides: you need `get` on the Crew. The
 port-forward needs `get` on services, `list` on pods and `create` on `pods/portforward` in
 the operator's namespace (`kubemoot`; set `crewforge.operatorNamespace` otherwise). A
-kubeconfig that signs in with a client certificate carries no bearer token, and the operator
-refuses it with a message that says so. An operator without the endpoint is reported as too old.
+kubeconfig that signs in with a client certificate uses the same `crewforge.tokenServiceAccount`
+setting as the chat (see below), which mints a short-lived token for the memory view too. An operator without the endpoint is reported as too old.
 
 The status bar always shows the context CrewForge is connected to. If the cluster cannot
 be reached, CrewForge says so in plain words and offers **Select Kubernetes Context**.

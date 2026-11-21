@@ -1,6 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { groupByTopic, leftOutByReason, parseExport, parseReport } from '../src/memory/ompi';
 import { readZip, ZIP_LIMITS } from '../src/memory/zip';
 import { buildZip } from './zipBuilder';
@@ -38,6 +38,26 @@ describe('readZip', () => {
     const zip = buildZip({ 'a.txt': 'x' }, 0);
     zip.writeUInt32LE(ZIP_LIMITS.entryBytes + 1, zip.indexOf(Buffer.from([0x50, 0x4b, 0x01, 0x02])) + 24);
     expect(() => readZip(zip)).toThrow(/too large/);
+  });
+});
+
+describe('readZip limits', () => {
+  const saved = { ...ZIP_LIMITS };
+  afterEach(() => Object.assign(ZIP_LIMITS, saved));
+
+  it('refuses an archive of too many files or too many bytes in all', () => {
+    const zip = buildZip({ 'a.txt': 'xxxx', 'b.txt': 'yyyy' });
+    ZIP_LIMITS.entries = 1;
+    expect(() => readZip(zip)).toThrow(/too many files/);
+    ZIP_LIMITS.entries = saved.entries;
+    ZIP_LIMITS.totalBytes = 6;
+    expect(() => readZip(zip)).toThrow(/memory export is too large/);
+  });
+
+  it('refuses an entry whose local header is missing', () => {
+    const zip = buildZip({ 'a.txt': 'x' }, 0);
+    zip.writeUInt32LE(zip.length, zip.indexOf(Buffer.from([0x50, 0x4b, 0x01, 0x02])) + 42);
+    expect(() => readZip(zip)).toThrow(/damaged/);
   });
 });
 
