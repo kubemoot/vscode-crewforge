@@ -259,6 +259,11 @@ export function activate(context: vscode.ExtensionContext): CrewForgeApi {
         dashboards.openFitness(node);
       }),
     ),
+    vscode.commands.registerCommand('crewforge.openCrewMemory', (node?: SourceNode | CrewNode) =>
+      guard(async () => {
+        dashboards.openMemory(node);
+      }),
+    ),
     vscode.commands.registerCommand('crewforge.showConnectionInfo', () => guard(() => dashboards.showConnection())),
     ...registerScenarioCommands({ files: new ScenarioFiles(), runScenario: (node) => sourceFitness.runOne(node), reload: () => sources.reload(), guard }),
     sourcesView,

@@ -36,3 +36,4 @@ pre.diff .added { color: var(--vscode-gitDecoration-addedResourceForeground, #81
 pre.diff .removed { color: var(--vscode-gitDecoration-deletedResourceForeground, #c74e39); }
 pre.diff .same { color: var(--vscode-descriptionForeground); }
 details > summary { cursor: pointer; padding: 0.15rem 0; }
+pre.memory-value { font-family: inherit; white-space: pre-wrap; word-break: break-word; margin: 0; }

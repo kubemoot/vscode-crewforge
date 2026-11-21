@@ -32,6 +32,7 @@ import { gatherVitals, parseHelmStatus, type CrewTarget, type CrewVitals, type V
 import { renderFitnessPage, type FitnessView } from './fitnessPage';
 import { agentCounts, lastDeployOf, renderOverview, type OverviewRow } from './overview';
 import { PagePanel, type PageModel } from './pagePanel';
+import { MemoryDashboard } from './memoryDashboard';
 
 export interface DashboardParts {
   extensionUri: vscode.Uri;
@@ -83,6 +84,15 @@ export class Dashboards implements vscode.Disposable {
     const existing = PagePanel.find(key)?.model as FitnessDashboard | undefined;
     existing?.select(selected);
     return PagePanel.show(this.parts.extensionUri, key, existing ?? new FitnessDashboard(at, this, selected));
+  }
+
+  /** Opens the read-only memory page of a deployed crew, or the crew behind a node of either view. */
+  openMemory(node?: SourceNode | CrewNode): PagePanel | undefined {
+    let crew: CrewSummary | undefined;
+    if (node?.kind === 'crew') crew = node.crew;
+    else if (node && 'deployment' in node) crew = node.deployment.crew;
+    if (!crew) return undefined;
+    return PagePanel.show(this.parts.extensionUri, `memory:${crew.namespace}/${crew.name}`, new MemoryDashboard(crew));
   }
 
   async showConnection(): Promise<void> {

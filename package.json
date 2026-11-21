@@ -290,6 +290,12 @@
         "icon": "$(pulse)"
       },
       {
+        "command": "crewforge.openCrewMemory",
+        "title": "Open Crew Memory",
+        "category": "CrewForge",
+        "icon": "$(database)"
+      },
+      {
         "command": "crewforge.showConnectionInfo",
         "title": "Show Connection Info",
         "category": "CrewForge",
@@ -692,6 +698,11 @@
           "group": "dashboard@1"
         },
         {
+          "command": "crewforge.openCrewMemory",
+          "when": "view == crewforge.crews && viewItem =~ /^crew/",
+          "group": "dashboard@2"
+        },
+        {
           "command": "crewforge.addScenario",
           "when": "view == crewforge.sources && viewItem =~ /^(fitness|declSection-fitness)/",
           "group": "scenario@1"
@@ -972,6 +983,10 @@
           "when": "false"
         },
         {
+          "command": "crewforge.openCrewMemory",
+          "when": "false"
+        },
+        {
           "command": "crewforge.addScenario",
           "when": "false"
         },
@@ -1122,6 +1137,11 @@
           "type": "string",
           "default": "",
           "description": "Kubernetes context to use. Empty uses the kubeconfig's current context."
+        },
+        "crewforge.operatorNamespace": {
+          "type": "string",
+          "default": "kubemoot",
+          "markdownDescription": "Namespace of the Kubemoot operator, whose report service `kubemoot-operator-report` serves a crew's memory export to the memory view."
         },
         "crewforge.namespaces": {
           "type": "array",
