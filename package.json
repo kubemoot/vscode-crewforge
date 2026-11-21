@@ -1211,7 +1211,8 @@
     "ovsx": {
       "@vscode/vsce": "$@vscode/vsce"
     },
-    "minimatch": "^11.0.9"
+    "minimatch": "^11.0.9",
+    "glob": "^14.0.6"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
