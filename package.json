@@ -1,6 +1,6 @@
 {
   "name": "crewforge",
-  "displayName": "CrewForge",
+  "displayName": "CrewForge for Kubemoot",
   "description": "Create, deploy, ask, and test Kubemoot agent crews on Kubernetes from VS Code, through your kubeconfig",
   "version": "0.0.0",
   "publisher": "kubemoot",
@@ -51,7 +51,7 @@
       "activitybar": [
         {
           "id": "kubemoot",
-          "title": "Kubemoot",
+          "title": "CrewForge for Kubemoot",
           "icon": "media/kubemoot.svg"
         }
       ]
