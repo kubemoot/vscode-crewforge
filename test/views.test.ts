@@ -69,7 +69,7 @@ describe('tree model', () => {
 describe('cardText', () => {
   const base = { agent: 'a', status: '', stoodAside: false };
 
-  it('shows every working status the gateway sends, with the GPU when known', () => {
+  it('shows every working status the gateway sends, with the accelerator when known', () => {
     expect(cardText({ ...base, status: 'waking' })).toEqual({ text: 'starting up', working: false, problem: false });
     expect(cardText({ ...base, status: 'ready' })).toEqual({ text: 'ready', working: false, problem: false });
     expect(cardText({ ...base, status: 'triaging', gpu: 'rig0' })).toEqual({ text: 'queued on rig0...', working: true, problem: false });
@@ -120,7 +120,7 @@ describe('agentProblems', () => {
     ];
     expect(agentProblems(cards)).toEqual([
       'broken failed: tool error',
-      'crowded stood aside: every GPU was busy, so it could not run',
+      'crowded stood aside: every accelerator was busy, so it could not run',
       'slow did not finish before the turn ended',
       'parked did not finish before the turn ended',
     ]);

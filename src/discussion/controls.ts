@@ -69,7 +69,7 @@ function parse<T>(text: string, what: string): T {
   try {
     return JSON.parse(text) as T;
   } catch {
-    throw new Error(`The discussion gateway answered ${what} with something that is not JSON: ${text.slice(0, 200)}`);
+    throw new Error(`The gateway answered ${what} with something that is not JSON: ${text.slice(0, 200)}`);
   }
 }
 
@@ -142,7 +142,7 @@ function badRequest(err: KubeError, request: Request, said: string): KubeError {
     return new ControlError(`This conversation belongs to another caller. To ${verbOf(request)} it, give a reason of 1 to ${MAX_REASON} characters.`, 400, err.detail, true);
   }
   const why = said ? `: ${said}` : '.';
-  return new ControlError(`The discussion gateway did not accept the ${verbOf(request)}${why}`, 400, err.detail);
+  return new ControlError(`The gateway did not accept the ${verbOf(request)}${why}`, 400, err.detail);
 }
 
 function notFound(err: KubeError, request: Request): KubeError {
@@ -151,10 +151,10 @@ function notFound(err: KubeError, request: Request): KubeError {
 
 function conflict(err: KubeError, request: Request, said: string): KubeError {
   if (request.action === 'delete') {
-    return new ControlError('The conversation still has a running discussion. Stop it first, or choose Stop and delete.', 409, err.detail, false, true);
+    return new ControlError('The conversation still has a turn running. Stop it first, or choose Stop and delete.', 409, err.detail, false, true);
   }
   const why = said ? ` (${said})` : '';
-  return new ControlError(`The conversation has no running discussion to ${request.action}${why}.`, 409, err.detail);
+  return new ControlError(`The conversation has no turn running to ${request.action}${why}.`, 409, err.detail);
 }
 
 function failed(err: KubeError, request: Request): KubeError {
@@ -187,7 +187,7 @@ export function describeControlFailure(err: unknown, request: Request): unknown 
 const STORES: Array<[keyof ErasureCounts, string]> = [
   ['history', 'conversation history'],
   ['owner', 'owner record'],
-  ['discussionMessages', 'discussion messages'],
+  ['discussionMessages', 'agent messages'],
   ['workspaceObjects', 'workspace objects'],
   ['coordinatorEvents', 'coordinator events'],
   ['scheduled', 'scheduled reminders and follow-ups'],
@@ -202,10 +202,10 @@ export function erasureLines(report: ConversationErasure): string[] {
   return lines;
 }
 
-/** One line for a notification: how many things were removed from how many threads. */
+/** One line for a notification: how many things were removed from how many turns. */
 export function erasureSummary(report: ConversationErasure): string {
   const total = STORES.reduce((sum, [key]) => sum + (report.deleted?.[key] ?? 0), 0);
   const threads = report.threads?.length ?? 0;
-  const where = threads === 1 ? '1 thread' : `${threads} threads`;
+  const where = threads === 1 ? '1 turn' : `${threads} turns`;
   return `Deleted the conversation from the crew: ${total} items removed across ${where}.`;
 }

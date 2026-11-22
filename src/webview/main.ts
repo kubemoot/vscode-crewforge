@@ -41,12 +41,12 @@ const CONVERSATION_BUTTONS: Array<[string, ConversationActionId]> = [
   ['conv-erase', 'erase'],
 ];
 
-/** The buttons on a saved conversation in the list: what each does, its tooltip, and its icon. */
-const LIST_ACTIONS: Array<{ action: ConversationActionId; label: string; icon: string }> = [
-  { action: 'stop', label: 'Stop on the crew', icon: icons.halt },
-  { action: 'pause', label: 'Pause on the crew', icon: icons.pause },
-  { action: 'resume', label: 'Resume on the crew', icon: icons.resume },
-  { action: 'erase', label: 'Delete from the crew', icon: icons.eraseCrew },
+/** The entries of a saved conversation's menu in the list: what each does, and its tooltip. */
+const LIST_ACTIONS: Array<{ action: ConversationActionId; label: string; title: string }> = [
+  { action: 'stop', label: 'Stop', title: 'Stop the conversation on the crew' },
+  { action: 'pause', label: 'Pause', title: 'Pause the conversation on the crew' },
+  { action: 'resume', label: 'Resume', title: 'Resume the conversation on the crew' },
+  { action: 'erase', label: 'Delete from the crew...', title: 'Delete the conversation from the crew' },
 ];
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -60,6 +60,7 @@ const els = {
   input: $<HTMLTextAreaElement>('input'),
   send: $<HTMLButtonElement>('send'),
   note: $<HTMLParagraphElement>('note'),
+  menu: $<HTMLDetailsElement>('menu'),
   copy: $<HTMLButtonElement>('copy'),
   rename: $<HTMLButtonElement>('rename'),
   deleteBtn: $<HTMLButtonElement>('delete'),
@@ -107,6 +108,17 @@ for (const { action, el } of els.convButtons) el.addEventListener('click', () =>
 $('dashboard').addEventListener('click', (e) => {
   e.preventDefault();
   vscode.postMessage({ type: 'openDashboard' });
+});
+// A menu closes when an entry is chosen, when the page is clicked elsewhere, and on Escape.
+document.addEventListener('click', (e) => {
+  const target = e.target as HTMLElement;
+  for (const menu of document.querySelectorAll<HTMLDetailsElement>('details.menu[open]')) {
+    if (!menu.contains(target) || target.closest('.menu-item')) menu.open = false;
+  }
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  for (const menu of document.querySelectorAll<HTMLDetailsElement>('details.menu[open]')) menu.open = false;
 });
 els.history.addEventListener('click', (e) => {
   const act = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-conv-action]');
@@ -179,7 +191,7 @@ function inputState(): { stop: boolean; canSend: boolean; note?: string } {
 function freshNote(): string | undefined {
   const id = state?.view.conversation.conversationId;
   if (!id || !state?.fresh.includes(id)) return undefined;
-  return state.links.dashboard ? 'The crew has something new in this conversation. Read it in the Kubemoot dashboard.' : 'The crew has something new in this conversation.';
+  return state.links.dashboard ? 'The crew has something new in this conversation. Read it under Conversations in the Kubemoot dashboard.' : 'The crew has something new in this conversation.';
 }
 
 /** Shows the Send or Stop button only when it can be used, with the reason beside the input when sending is blocked. */
@@ -208,6 +220,7 @@ function render(): void {
   const hasMessages = conversation.messages.length > 0;
   // A conversation is saved once it has a message; before that there is nothing to act on.
   for (const button of [els.copy, els.exportBtn, els.rename, els.deleteBtn]) button.hidden = !hasMessages;
+  els.menu.hidden = !hasMessages && !conversation.conversationId;
   // Renaming or deleting waits for the turn, which saves the conversation when it ends.
   els.rename.disabled = busy;
   els.deleteBtn.disabled = busy;
@@ -234,12 +247,12 @@ function renderHistory(history: ConversationMeta[], activeId: string, fresh: Set
     .join('');
 }
 
-/** The buttons that act on a saved conversation on the crew, shown on hover or focus. */
+/** The menu of what a saved conversation on the crew can be told to do, shown on hover or focus. */
 function listActions(id: string): string {
-  const buttons = LIST_ACTIONS.map(
-    (a) => `<button type="button" class="conv-action"${htmlAttribute('data-conv-action', a.action)}${htmlAttribute('data-id', id)}${htmlAttribute('title', a.label)}${htmlAttribute('aria-label', a.label)}>${a.icon}</button>`,
+  const entries = LIST_ACTIONS.map(
+    (a) => `<button type="button" class="menu-item conv-action" role="menuitem"${htmlAttribute('data-conv-action', a.action)}${htmlAttribute('data-id', id)}${htmlAttribute('title', a.title)}>${escapeHtml(a.label)}</button>`,
   );
-  return `<div class="conv-actions">${buttons.join('')}</div>`;
+  return `<details class="menu conv-actions"><summary title="Conversation actions" aria-label="Conversation actions">${icons.more}</summary><div class="menu-list" role="menu">${entries.join('')}</div></details>`;
 }
 
 function renderMessages(): void {
@@ -270,12 +283,12 @@ function refocus(focused: { action?: string; index?: string }): void {
   [...buttons].find((b) => b.dataset.action === focused.action && b.dataset.index === focused.index)?.focus();
 }
 
-/** The empty state; `crew` reads after "Discuss with": a display name, or "the <name> crew". */
+/** The empty state; `crew` reads after "Ask": a display name, or "the <name> crew". */
 function emptyState(crew: string, about: string): string {
   const list = about ? `<p class="agent-list">${escapeHtml(about)}</p>` : '';
   return `<div class="empty-state"><div class="empty-icon">${icons.crewLarge}</div>
-    <h2>Discuss with ${escapeHtml(crew)}</h2>
-    <p>Ask a question and its agents will discuss it.</p>${list}</div>`;
+    <h2>Ask ${escapeHtml(crew)}</h2>
+    <p>Type a question below. The answer appears here.</p>${list}</div>`;
 }
 
 type MessageActionId = 'copy' | 'reask' | 'edit' | 'dashboard';
@@ -297,10 +310,10 @@ const MESSAGE_ACTIONS: Record<MessageActionId, (index: number) => void> = {
   dashboard: (index) => vscode.postMessage({ type: 'openTurnInDashboard', index }),
 };
 
-/** Opens the turn a message ends in the Kubemoot dashboard; offered when a dashboard URL is set and the turn's thread is known. */
-const DASHBOARD_ACTION: MessageAction = { action: 'dashboard', label: 'Open this turn in the Kubemoot dashboard', icon: icons.dashboard };
+/** Opens the Moot of the turn a message ends, in the Kubemoot dashboard; offered when a dashboard URL is set and the turn's thread is known. */
+const DASHBOARD_ACTION: MessageAction = { action: 'dashboard', label: 'Open in the Moot', icon: icons.dashboard };
 
-/** The message's buttons: its role's, and Open in Dashboard for a turn the dashboard can show. */
+/** The message's buttons: its role's, and Open in the Moot for a turn the dashboard can show. */
 function actionsFor(base: MessageAction[], m: ChatMessage): MessageAction[] {
   return state?.links?.dashboard && typeof m.threadId === 'string' && m.threadId ? [...base, DASHBOARD_ACTION] : base;
 }
@@ -372,13 +385,13 @@ function problemList(m: ChatMessage): string {
   return `<div class="turn-problems" role="note" aria-label="What went wrong in this turn"><ul>${items}</ul></div>`;
 }
 
-/** The agents that took part in the turn a message ends, folded away under a count. */
+/** The Moot of the turn a message ends: the agents that took part, folded away under a count. */
 function turnAgents(m: ChatMessage): string {
   const agents = agentsOf(m);
   if (agents.length === 0) return '';
   const cards = agents.map((a) => noteCard(a)).join('');
-  const count = agents.length === 1 ? '1 agent took part' : `${agents.length} agents took part`;
-  return `<details class="turn-agents"><summary>${count}</summary><div class="findings-feed">${cards}</div></details>`;
+  const count = agents.length === 1 ? 'The Moot: 1 agent' : `The Moot: ${agents.length} agents`;
+  return `<details class="turn-agents"><summary title="What each agent said in this turn">${count}</summary><div class="findings-feed">${cards}</div></details>`;
 }
 
 function noteCard(a: AgentNote): string {

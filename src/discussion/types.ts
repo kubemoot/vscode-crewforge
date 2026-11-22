@@ -1,5 +1,5 @@
 /**
- * One event on a crew's discussion stream, as the discussion gateway sends it over SSE.
+ * One event on a crew's discussion stream, as the gateway sends it over SSE.
  * Mirrors kmctl's discussion.Event so both clients read the same contract.
  */
 export interface DiscussionEvent {
@@ -13,7 +13,7 @@ export interface DiscussionEvent {
   threadId?: string;
   error?: string;
   stood_aside?: boolean;
-  /** The model an agent is waiting for GPU room to run. */
+  /** The model an agent is waiting for accelerator room to run. */
   model?: string;
   /** Why an agent is waiting or stood aside, such as gpu-busy or model-too-large. */
   reason?: string;
@@ -51,5 +51,5 @@ export function isTerminal(e: DiscussionEvent): boolean {
 /** What an error event says went wrong, in plain words. */
 export function eventErrorText(e: DiscussionEvent): string {
   const detail = e.error || e.content;
-  return detail ? `The crew's discussion gateway reported an error: ${detail}` : "The crew's discussion gateway reported an error.";
+  return detail ? `The crew's gateway reported an error: ${detail}` : "The crew's gateway reported an error.";
 }

@@ -8,6 +8,7 @@ import { Dashboards } from '../src/dashboard/register';
 import { ConnectionError } from '../src/k8s/request';
 import type { MemoryConnection } from '../src/memory/connect';
 import { parseExport, parseReport } from '../src/memory/ompi';
+import { META_SEPARATOR } from '../src/webview/render';
 import { MemoryError, type MemoryRead } from '../src/memory/relay';
 import { recorded, resetFake, Uri } from './vscodeFake';
 
@@ -24,8 +25,10 @@ describe('renderMemoryPage', () => {
     expect(html).toContain('preferences (1)');
     expect(html).toContain('coordinator');
     expect(html).toContain('2026-11-18 10:00Z');
-    expect(html).toContain('<code>thread-abc</code>');
-    expect(html).toContain('Read-only. 3 facts in crew-demo/demo');
+    expect(html).toContain('<span title="Learned in the Moot thread-abc">2026-11-18 10:00Z</span>');
+    expect(html).not.toContain('<th>Thread</th>');
+    expect(html).toContain(`3 facts${META_SEPARATOR}read-only${META_SEPARATOR}exported`);
+    expect(html).toContain('title="crew-demo/demo, OMPI protocol');
   });
 
   it('escapes a fact value', () => {
@@ -34,7 +37,7 @@ describe('renderMemoryPage', () => {
   });
 
   it('shows the left-out entries as counts and reasons, with no key or text', () => {
-    expect(html).toContain('3 entries were left out');
+    expect(html).toContain('3 entries left out of the export');
     expect(html).toMatch(/its value holds a credential \(bearer token\); not exported as memory<\/td><td>2</);
     expect(html).toMatch(/its topic or key holds a credential; not exported as memory<\/td><td>1</);
     expect(html).not.toContain('crew-demo.demo');
@@ -48,7 +51,7 @@ describe('renderMemoryPage', () => {
 
   it('counts the left-out entries from the manifest when there is no report', () => {
     const noReport = renderMemoryPage({ ...view, report: undefined });
-    expect(noReport).toContain('2 entries were left out');
+    expect(noReport).toContain('2 entries left out of the export');
     expect(noReport).not.toContain('<th>Reason</th>');
   });
 

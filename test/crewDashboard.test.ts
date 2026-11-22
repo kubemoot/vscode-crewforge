@@ -142,13 +142,13 @@ describe('the Contents of a crew', () => {
     expect(html).toContain('data-action="group" data-arg="rag" title="Show the RAG Sources group in the tree">RAG Sources 0</button>');
     expect(html).toContain('>Agents 2</button> · ');
     expect(html).toContain('>Deployment</button>');
-    expect(html).toContain('From the cluster; a group opens it in Deployed Crews.');
+    expect(html).toContain('title="From the cluster; a group opens it in the tree"');
   });
 
   it('counts what an undeployed source declares, and leaves the section out when nothing can be counted', async () => {
     const v = await gatherVitals({ entry }, deps({ declarations, deploymentOf: async () => undefined }));
     expect(v).toMatchObject({ contentsFrom: 'source', contents: [{ group: 'agents', count: 1 }, { group: 'models', count: 0 }] });
-    expect(renderCrewPage(v)).toContain('Declared in the source; a group opens it in Crew Sources.');
+    expect(renderCrewPage(v)).toContain('title="Declared in the source; a group opens it in the tree"');
     expect(renderCrewPage(v)).toContain('>Models 0</button>');
     const failed = await gatherVitals(
       { entry },
@@ -180,7 +180,7 @@ describe('renderCrewPage', () => {
   it('shows a deployed crew: status, deployment times, agents by role, conditions, and conversations', async () => {
     const v = await vitals();
     const html = renderCrewPage(v);
-    for (const text of ['<h1>demo <span class="badge good">Ready</span></h1>', 'crew-demo in lab', 'Chart version differs: source 0.2.2, deployed 0.46.0-rc.0', '/w/demo', 'Helm chart', '2026-09-29T10:00:00Z', 'me@example.com', '1 coordinator, 1 tooler', 'AgentsReady', 'Which nodes?', 'Agent k8s failed', 'qwen-8b (qwen3:8b), bare']) {
+    for (const text of ['<h1>demo <span class="badge good">Ready</span></h1>', 'crew-demo in lab', 'Chart version differs: source 0.2.2, deployed 0.46.0-rc.0', '/w/demo', 'Helm chart', '2026-09-29 10:00Z', 'me@example.com', '1 coordinator, 1 tooler', 'AgentsReady', 'Which nodes?', 'Agent k8s failed', 'qwen-8b (qwen3:8b), bare']) {
       expect(html).toContain(text);
     }
     expect(enabled(v)).toEqual(['deploy', 'redeploy', 'undeploy', 'ask', 'fitness', 'fitnessDashboard', 'lint', 'yaml', 'refresh']);

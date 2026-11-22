@@ -1,5 +1,6 @@
-import { banner, buttons, escape, note, section, SELECT_CONTEXT_BUTTON, table } from './html';
+import { actionBar, banner, escape, moment, note, section, SELECT_CONTEXT_BUTTON, table } from './html';
 import { groupByTopic, leftOutByReason, type ParsedExport, type SelectionReport } from '../memory/ompi';
+import { META_SEPARATOR } from '../webview/render';
 
 /** What the memory page shows. */
 export interface MemoryView {
@@ -16,24 +17,20 @@ export interface MemoryView {
   contextProblem?: boolean;
 }
 
-function when(iso: string): string {
-  return iso ? escape(iso.replace('T', ' ').replace(/:\d\dZ$/, 'Z')) : '<span class="muted">unknown</span>';
+function when(iso: string, thread: string): string {
+  if (!iso) return '<span class="muted">unknown</span>';
+  const learned = thread ? ` title="Learned in the Moot ${escape(thread)}"` : '';
+  return `<span${learned}>${escape(moment(iso))}</span>`;
 }
 
 function factRow(f: { key: string; value: string; learnedBy: string; learnedAt: string; thread: string }): string[] {
-  return [
-    escape(f.key),
-    `<pre class="memory-value">${escape(f.value)}</pre>`,
-    f.learnedBy ? escape(f.learnedBy) : '<span class="muted">unknown</span>',
-    when(f.learnedAt),
-    f.thread ? `<code>${escape(f.thread)}</code>` : '<span class="muted">none</span>',
-  ];
+  return [escape(f.key), `<pre class="memory-value">${escape(f.value)}</pre>`, f.learnedBy ? escape(f.learnedBy) : '<span class="muted">unknown</span>', when(f.learnedAt, f.thread)];
 }
 
 function topics(parsed: ParsedExport): string {
   if (parsed.facts.length === 0) return note('This crew has learned no facts yet.');
   return groupByTopic(parsed.facts)
-    .map((g) => section(`${g.topic || '(no topic)'} (${g.facts.length})`, table(['Key', 'Value', 'Learned by', 'When', 'Thread'], g.facts.map(factRow))))
+    .map((g) => section(`${g.topic || '(no topic)'} (${g.facts.length})`, table(['Key', 'Value', 'Learned by', 'When'], g.facts.map(factRow))))
     .join('');
 }
 
@@ -45,7 +42,7 @@ export function leftOutSection(parsed: ParsedExport, report: SelectionReport | u
   const reasons = leftOutByReason(report);
   const total = report ? report.leftOut.length : parsed.manifest.skipped;
   if (total === 0) return note('Nothing was left out of the export.');
-  const head = `${total} ${total === 1 ? 'entry was' : 'entries were'} left out of the export and are not shown here. Credentials are never exported as memory.`;
+  const head = `${total} ${total === 1 ? 'entry' : 'entries'} left out of the export. Credentials are never exported as memory.`;
   if (reasons.length === 0) return note(head);
   return note(head) + table(['Reason', 'Entries'], reasons.map((r) => [escape(r.reason), String(r.count)]));
 }
@@ -53,13 +50,16 @@ export function leftOutSection(parsed: ParsedExport, report: SelectionReport | u
 /** The memory page of one crew. Every value is escaped. */
 export function renderMemoryPage(view: MemoryView): string {
   const head = `<h1>${escape(view.title)} memory</h1>`;
-  const actions = buttons([
-    { action: 'refresh', label: 'Refresh', title: 'Read the crew memory again' },
-    { action: 'exportZip', label: 'Export to Folder...', title: 'Save the OMPI export as a zip in a folder you pick', disabled: view.parsed ? undefined : 'Nothing was read to export' },
-    ...(view.contextProblem ? [SELECT_CONTEXT_BUTTON] : []),
+  const actions = actionBar([
+    { action: 'exportZip', label: 'Export...', title: 'Save the OMPI export as a zip in a folder you pick', disabled: view.parsed ? undefined : 'Nothing was read to export', primary: true },
+    { action: 'refresh', label: 'Refresh', title: 'Read the crew memory again', primary: true },
+    ...(view.contextProblem ? [{ ...SELECT_CONTEXT_BUTTON, primary: true }] : []),
   ]);
   if (view.error || !view.parsed) return head + actions + banner(view.error ?? 'The memory could not be read.');
   const { manifest } = view.parsed;
-  const meta = note(`Read-only. ${view.parsed.facts.length} ${view.parsed.facts.length === 1 ? 'fact' : 'facts'} in ${view.namespace}/${view.crew}, from the crew's OMPI memory export (protocol ${manifest.protocolVersion || 'unknown'}, exported ${manifest.exportedAt || 'at an unknown time'}), read through context ${view.context}.`);
+  const count = `${view.parsed.facts.length} ${view.parsed.facts.length === 1 ? 'fact' : 'facts'}`;
+  const detail = `${view.namespace}/${view.crew}, OMPI protocol ${manifest.protocolVersion || 'unknown'}, read through context ${view.context}`;
+  const line = [count, 'read-only', `exported ${moment(manifest.exportedAt) ?? 'at an unknown time'}`].join(META_SEPARATOR);
+  const meta = `<p class="muted" title="${escape(detail)}">${escape(line)}</p>`;
   return head + actions + meta + topics(view.parsed) + section('Left out', leftOutSection(view.parsed, view.report));
 }

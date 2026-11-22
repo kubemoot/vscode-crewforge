@@ -335,8 +335,8 @@ describe('ChatPanel links into the workspace and the dashboard', () => {
     await panel.webview.receive({ type: 'openTurnInDashboard', index: 1 });
     await panel.webview.receive({ type: 'openTurnInDashboard', index: 0 });
     await panel.webview.receive({ type: 'openTurnInDashboard', index: '1' });
-    expect(recorded.opened).toEqual(['http://localhost:8080/dashboard/discussions?thread=th-1&namespace=team-a&crew=lab-ops']);
-    expect(dashboardThreadUrl('https://d.example', { namespace: 'n s', name: 'c' }, 'a&b')).toBe('https://d.example/discussions?thread=a%26b&namespace=n+s&crew=c');
+    expect(recorded.opened).toEqual(['http://localhost:8080/dashboard/moot?thread=th-1&namespace=team-a&crew=lab-ops']);
+    expect(dashboardThreadUrl('https://d.example', { namespace: 'n s', name: 'c' }, 'a&b')).toBe('https://d.example/moot?thread=a%26b&namespace=n+s&crew=c');
   });
 
   it('asks the last question again after a redeploy, unless there is none or a turn runs', async () => {

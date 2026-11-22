@@ -80,7 +80,7 @@ describe('controlConversation', () => {
     const err = await controlConversation(api, 'team-a', 'demo', 'conv-1', 'pause').catch((e: unknown) => e);
     expect(err).toBeInstanceOf(ControlError);
     expect((err as ControlError).status).toBe(409);
-    expect((err as ControlError).message).toBe('The conversation has no running discussion to pause (the conversation has no running discussion).');
+    expect((err as ControlError).message).toBe('The conversation has no turn running to pause (the conversation has no running discussion).');
     expect((err as ControlError).running).toBe(false);
   });
 
@@ -113,7 +113,7 @@ describe('eraseConversation', () => {
     api.responses.push(failure(409, '{"error":"the conversation has a running discussion; stop it first, or pass force=true"}'));
     const err = (await eraseConversation(api, 'team-a', 'demo', 'conv-1').catch((e: unknown) => e)) as ControlError;
     expect(err.running).toBe(true);
-    expect(err.message).toBe('The conversation still has a running discussion. Stop it first, or choose Stop and delete.');
+    expect(err.message).toBe('The conversation still has a turn running. Stop it first, or choose Stop and delete.');
   });
 
   it('says which stores a failed delete could not clear, and that deleting again removes the rest', async () => {
@@ -152,9 +152,9 @@ describe('describeControlFailure', () => {
   it('says what a 400 that is not about a reason means', () => {
     const plain = describeControlFailure(failure(400, '{"error":"conversation id is not valid"}'), { crew: 'demo', action: 'delete' }) as ControlError;
     expect(plain.needsReason).toBe(false);
-    expect(plain.message).toBe('The discussion gateway did not accept the delete: conversation id is not valid');
+    expect(plain.message).toBe('The gateway did not accept the delete: conversation id is not valid');
     const bare = describeControlFailure(failure(400, 'nope'), request) as ControlError;
-    expect(bare.message).toBe('The discussion gateway did not accept the stop.');
+    expect(bare.message).toBe('The gateway did not accept the stop.');
   });
 
   it('says a 500 on a control and a 503 plainly', () => {
@@ -181,7 +181,7 @@ describe('erasure report', () => {
       'Removed:',
       '  conversation history: 1',
       '  owner record: 1',
-      '  discussion messages: 12',
+      '  agent messages: 12',
       '  workspace objects: 0',
       '  coordinator events: 4',
       '  scheduled reminders and follow-ups: 2',
@@ -200,9 +200,9 @@ describe('erasure report', () => {
     expect(erasureLines({ conversationId: 'c' } as ConversationErasure)).toContain('  crew memory facts: 0');
   });
 
-  it('sums the items and counts the threads in one line', () => {
-    expect(erasureSummary(report)).toBe('Deleted the conversation from the crew: 23 items removed across 2 threads.');
-    expect(erasureSummary({ ...report, threads: ['t1'] })).toContain('across 1 thread.');
-    expect(erasureSummary({ conversationId: 'c', deleted: report.deleted, kept: [] })).toContain('across 0 threads.');
+  it('sums the items and counts the turns in one line', () => {
+    expect(erasureSummary(report)).toBe('Deleted the conversation from the crew: 23 items removed across 2 turns.');
+    expect(erasureSummary({ ...report, threads: ['t1'] })).toContain('across 1 turn.');
+    expect(erasureSummary({ conversationId: 'c', deleted: report.deleted, kept: [] })).toContain('across 0 turns.');
   });
 });

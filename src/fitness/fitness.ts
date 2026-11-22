@@ -299,7 +299,7 @@ async function listKind(client: KubeTransport, kind: KubemootKind, fitnessKind: 
 
 /**
  * Fitness runs in progress anywhere the account can see: across the cluster, or in
- * `namespace` when listing across the cluster is not allowed. Crews share the GPUs,
+ * `namespace` when listing across the cluster is not allowed. Crews share the accelerators,
  * so a second run at once measures contention, not the crew.
  */
 export async function runsInProgress(client: KubeTransport, kinds: Map<string, KubemootKind>, namespace: string): Promise<FitnessRun[]> {

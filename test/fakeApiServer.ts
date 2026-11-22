@@ -14,7 +14,7 @@ export interface FakeApi {
   url: string;
   kubeconfig: string;
   posts: { path: string; body: string }[];
-  /** What the crew's discussion gateway received, with the Authorization header each request carried. */
+  /** What the crew's gateway received, with the Authorization header each request carried. */
   gatewayRequests: { method: string; path: string; authorization?: string }[];
   /** Every request, as `METHOD path`. */
   requests: string[];
@@ -64,7 +64,7 @@ function fixedRoute(method: string, url: string, cluster?: FakeCluster): Reply |
 const GATEWAY_SERVICE = { spec: { selector: { app: 'gw' }, ports: [{ port: 80, targetPort: 8080 }] } };
 const GATEWAY_PODS = { items: [{ metadata: { name: 'gw-0' }, status: { phase: 'Running', conditions: [{ type: 'Ready', status: 'True' }] } }] };
 
-/** A crew's discussion gateway: answers every question with a recorded stream, and records what it received. */
+/** A crew's gateway: answers every question with a recorded stream, and records what it received. */
 function gatewayServer(posts: FakeApi['posts'], received: FakeApi['gatewayRequests']): http.Server {
   return http.createServer((req, res) => {
     let body = '';
@@ -152,7 +152,7 @@ function writeKubeconfig(url: string, context: string, others: { name: string; s
 
 /**
  * A local stand-in for the Kubernetes API server: lists Crews (two fixed ones, or a whole
- * FakeCluster's objects) and serves a crew's discussion gateway over a port-forward,
+ * FakeCluster's objects) and serves a crew's gateway over a port-forward,
  * answering every question with a recorded stream. Writes a kubeconfig pointing at
  * it (context "fake" unless named).
  */

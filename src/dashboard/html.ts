@@ -20,10 +20,11 @@ export interface ButtonSpec {
   primary?: boolean;
 }
 
-export function button(b: ButtonSpec): string {
+export function button(b: ButtonSpec, inMenu = false): string {
   const arg = b.arg === undefined ? '' : ` data-arg="${escape(b.arg)}"`;
   const disabled = b.disabled ? ' disabled' : '';
-  const cls = b.primary ? 'btn primary' : 'btn';
+  const plain = b.primary ? 'btn primary' : 'btn';
+  const cls = inMenu ? 'menu-item" role="menuitem' : plain;
   return `<button type="button" class="${cls}" data-action="${escape(b.action)}"${arg} title="${escape(b.disabled ?? b.title)}"${disabled}>${escape(b.label)}</button>`;
 }
 
@@ -37,7 +38,27 @@ export const OPEN_SOURCE_FOLDER: ButtonSpec = { action: 'openSourceFolder', labe
 export const DEPLOY_TO_NAMESPACE: ButtonSpec = { action: 'deploy', label: 'Deploy to Namespace...', title: 'Deploy the source to a namespace you pick', primary: true };
 
 export function buttons(specs: ButtonSpec[]): string {
-  return specs.length ? `<div class="actions">${specs.map(button).join('')}</div>` : '';
+  return specs.length ? `<div class="actions">${specs.map((b) => button(b)).join('')}</div>` : '';
+}
+
+/**
+ * The page's actions as the buttons that carry the page's main task (the specs marked
+ * primary) and, for the rest, one "More" menu. A page with nothing else to offer shows
+ * no menu.
+ */
+export function actionBar(specs: ButtonSpec[]): string {
+  const main = specs.filter((b) => b.primary);
+  const rest = specs.filter((b) => !b.primary);
+  if (rest.length === 0) return buttons(main);
+  const menu = `<details class="menu"><summary class="btn" title="More actions">More</summary><div class="menu-list" role="menu">${rest.map((b) => button(b, true)).join('')}</div></details>`;
+  return `<div class="actions">${main.map((b) => button(b)).join('')}${menu}</div>`;
+}
+
+/** A time as people read it: "2026-11-20 10:00Z", without seconds or fractions. Text that is not an ISO time is returned as it is. */
+export function moment(iso: string | undefined): string | undefined {
+  if (!iso) return undefined;
+  const m = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})(?::\d{2}(?:\.\d+)?)?Z$/.exec(iso);
+  return m ? `${m[1]} ${m[2]}Z` : iso;
 }
 
 /** A titled section. `body` is HTML already escaped. */

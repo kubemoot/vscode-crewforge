@@ -61,7 +61,7 @@ export class FitnessCommands {
     return true;
   }
 
-  /** Starts a run after warning about runs of other crews on the shared GPUs; the run's name, or undefined when the developer declines. */
+  /** Starts a run after warning about runs of other crews on the shared accelerators; the run's name, or undefined when the developer declines. */
   private async start(client: KubeTransport, kinds: Map<string, KubemootKind>, deployment: Deployment, definition: Manifest): Promise<string | undefined> {
     const busy = await runsInProgress(client, kinds, deployment.namespace);
     if (busy.length && !(await this.confirmBusy(busy.map((r) => `${r.namespace}/${r.name}`)))) return undefined;
@@ -87,7 +87,7 @@ export class FitnessCommands {
   }
 
   private async confirmBusy(runs: string[]): Promise<boolean> {
-    const message = `A fitness run is already in progress (${runs.join(', ')}). Crews share the GPUs, so two runs at once measure contention, not the crew. Start anyway?`;
+    const message = `A fitness run is already in progress (${runs.join(', ')}). Crews share the accelerators, so two runs at once measure contention, not the crew. Start anyway?`;
     return confirmModal(message, 'Start anyway');
   }
 }

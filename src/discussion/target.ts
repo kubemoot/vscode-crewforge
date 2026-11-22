@@ -1,7 +1,7 @@
 import { KubeError, type KubeTransport } from '../k8s/request';
 import { checkName } from '../k8s/paths';
 
-/** The port of a crew's discussion gateway Service. */
+/** The port of a crew's gateway Service. */
 export const GATEWAY_PORT = 80;
 
 /** The pod and container port a crew's gateway Service leads to. */
@@ -56,7 +56,7 @@ export async function resolveTarget(api: KubeTransport, namespace: string, crew:
     namespace: ns,
     service: name,
     port: GATEWAY_PORT,
-    missing: `Crew ${crew} has no discussion service ${name} in namespace ${ns}. Check that the crew is Ready and the namespace is right.`,
+    missing: `Crew ${crew} has no gateway service ${name} in namespace ${ns}. Check that the crew is Ready and the namespace is right.`,
     notReady: 'Check that the crew is Ready.',
   });
 }

@@ -1,7 +1,7 @@
 import { checkName } from '../k8s/paths';
 
 /**
- * Paths on a crew's discussion gateway, the Service `<crew>-discussion` on port 80 in the
+ * Paths on a crew's gateway, the Service `<crew>-discussion` on port 80 in the
  * crew's namespace. They are relative to the gateway's own root: CrewForge reaches it over
  * a port-forward to its pod (see `gateway.ts`), not through the API server's service proxy,
  * which strips the `Authorization` header the gateway needs to know who is asking.

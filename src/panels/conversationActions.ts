@@ -58,7 +58,7 @@ export class ConversationActions {
     for (;;) {
       try {
         const sent = await controlConversation(this.client, this.namespace, this.crew, target.conversationId, action, reason);
-        void vscode.window.showInformationMessage(`${PAST[action]} "${target.title}" (${plural(sent.threads?.length ?? 0, 'running thread')}).`);
+        void vscode.window.showInformationMessage(`${PAST[action]} "${target.title}" (${plural(sent.threads?.length ?? 0, 'running turn')}).`);
         return;
       } catch (err) {
         if (!needsReason(err) || reason !== undefined) throw err;
@@ -77,7 +77,7 @@ export class ConversationActions {
     const sure = await confirmModal(
       `Delete "${target.title}" from the crew?`,
       'Delete from crew',
-      'This removes the conversation from every place the crew keeps it: its history, discussion messages, workspace, scheduled reminders and learned memory facts. The copy on this computer stays. This cannot be undone.',
+      "This removes the conversation from every place the crew keeps it: its history, the agents' messages, workspace, scheduled reminders and learned memory facts. The copy on this computer stays. This cannot be undone.",
     );
     if (!sure) return;
     const asked: EraseOptions = {};
@@ -101,7 +101,7 @@ export class ConversationActions {
       return asked.reason !== undefined;
     }
     if (err instanceof ControlError && err.running && !asked.force) {
-      asked.force = await confirmModal(`"${target.title}" is still running.`, 'Stop and delete', 'The discussion is stopped first, then the conversation is deleted.');
+      asked.force = await confirmModal(`"${target.title}" is still running.`, 'Stop and delete', 'The crew stops it first, then the conversation is deleted.');
       return asked.force;
     }
     throw err;

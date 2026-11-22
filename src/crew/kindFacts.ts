@@ -234,7 +234,7 @@ function schedulingPolicy(o: Obj): KindFacts {
   return {
     description: line(`rules for ${phases.join(', ') || 'no phases'}`, error && 'invalid'),
     lines: [
-      'Governs which Model each discussion phase runs on: required and preferred Model labels, and the speed or quality lean per capability.',
+      'Governs which Model each phase of the Moot runs on: required and preferred Model labels, and the speed or quality lean per capability.',
       fact('Archetype', o.spec?.archetypeRef ?? 'consent-3'),
       fact('Phases with rules', phases.join(', ')),
       fact('Quality bias', bias.join(', ')),
@@ -249,7 +249,7 @@ function archetype(o: Obj): KindFacts {
   const phases = list(o.spec?.phases).map((p) => text(obj(p).name)).filter(defined);
   return {
     description: phases.join(', '),
-    lines: ['Governs how the coordinator runs a discussion: its phases and their order.', fact('Phases', phases.join(', ')), text(o.spec?.description)].filter(defined),
+    lines: ['Governs how the coordinator runs the Moot: its phases and their order.', fact('Phases', phases.join(', ')), text(o.spec?.description)].filter(defined),
     icon: 'workflow',
   };
 }

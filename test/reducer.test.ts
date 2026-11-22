@@ -79,9 +79,9 @@ describe('reduce', () => {
   });
 
   it('ends the turn on error with the message, falling back to content, then a default', () => {
-    expect(fold([{ type: 'error', error: 'boom' }])).toMatchObject({ done: true, error: "The crew's discussion gateway reported an error: boom" });
-    expect(fold([{ type: 'error', content: 'from content' }]).error).toBe("The crew's discussion gateway reported an error: from content");
-    expect(fold([{ type: 'error' }]).error).toBe("The crew's discussion gateway reported an error.");
+    expect(fold([{ type: 'error', error: 'boom' }])).toMatchObject({ done: true, error: "The crew's gateway reported an error: boom" });
+    expect(fold([{ type: 'error', content: 'from content' }]).error).toBe("The crew's gateway reported an error: from content");
+    expect(fold([{ type: 'error' }]).error).toBe("The crew's gateway reported an error.");
   });
 
   it('keeps a reason only with the status it came with', () => {

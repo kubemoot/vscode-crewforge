@@ -189,7 +189,7 @@ describe('renderFitnessPage', () => {
     expect(html).toContain('Judge: done, 2 scenarios scored, mean 43');
     expect(html).toMatch(/data-action="xlsx" data-arg="s1" title="Download/);
     expect(html).toMatch(/data-action="openDashboard" data-arg="s1" title="Open the Kubemoot dashboard/);
-    expect(html).toContain('2 / 0 / 0');
+    expect(html).toContain('2 passed, 0 failed, 0 errored');
     const noUrl = renderFitnessPage(view({ runs: [done], selected: done }));
     expect(noUrl).toContain('title="Set crewforge.dashboardUrl to download the XLSX." disabled');
     expect(noUrl).toContain('title="Set crewforge.dashboardUrl to open the Kubemoot dashboard." disabled');

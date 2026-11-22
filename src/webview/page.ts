@@ -35,7 +35,18 @@ globalThis.addEventListener('message', (event: MessageEvent<PageHostMessage>) =>
   }
 });
 
+// A menu closes when an entry is chosen, when the page is clicked elsewhere, and on Escape.
+function closeMenus(except?: HTMLElement): void {
+  for (const menu of document.querySelectorAll<HTMLDetailsElement>('details.menu[open]')) {
+    if (!except || !menu.contains(except) || except.closest('.menu-item')) menu.open = false;
+  }
+}
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') closeMenus();
+});
+
 document.addEventListener('click', (event) => {
+  closeMenus(event.target as HTMLElement);
   const target = (event.target as HTMLElement).closest<HTMLElement>('[data-action]');
   if (!target || (target as HTMLButtonElement).disabled) return;
   event.preventDefault();
