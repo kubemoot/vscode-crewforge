@@ -2825,6 +2825,11 @@
     },
     "spec": {
      "properties": {
+      "acceleratorMemoryMiB": {
+       "format": "int32",
+       "minimum": 0,
+       "type": "integer"
+      },
       "capabilities": {
        "items": {
         "type": "string"
@@ -2914,6 +2919,10 @@
       {
        "message": "source.ollama.tag must equal spec.model: Ollama serves a model only under its tag",
        "rule": "!has(self.source) || !has(self.source.ollama) || self.source.ollama.tag == self.model"
+      },
+      {
+       "message": "spec.vramMib is the old name of spec.acceleratorMemoryMiB: set only acceleratorMemoryMiB, or give both the same value",
+       "rule": "!has(self.vramMib) || !has(self.acceleratorMemoryMiB) || self.vramMib == self.acceleratorMemoryMiB"
       }
      ]
     },

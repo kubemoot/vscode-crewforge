@@ -10,16 +10,23 @@ const withStatus = (o: Obj, status: Record<string, unknown>): Obj => ({ ...o, st
 describe('Model facts', () => {
   it('give a crew-local Model its size from the size label or its parameters, and its abilities from labels and spec', () => {
     const model = withStatus(
-      obj('Model', 'qwen-8b', NS, { model: 'qwen3:8b', serverRef: 'ollama', vramMib: 5120, parameters: '8B', capabilities: ['vision', 'tool-calling'] }, { contextWindow: '40960', 'capability/tool-calling': 'true', 'capability/reasoning': 'true', 'capability/off': 'false' }),
+      obj('Model', 'qwen-8b', NS, { model: 'qwen3:8b', serverRef: 'ollama', acceleratorMemoryMiB: 5120, parameters: '8B', capabilities: ['vision', 'tool-calling'] }, { contextWindow: '40960', 'capability/tool-calling': 'true', 'capability/reasoning': 'true', 'capability/off': 'false' }),
       { ready: true, state: 'Available' },
     );
     const facts = factsOf(related(model));
     expect(facts.description).toBe('qwen3:8b · small · 40960 context');
-    expect(facts.lines).toEqual(['Model: qwen3:8b', 'Server: ollama', 'Parameters: 8B', 'Size: small', 'Capabilities: reasoning, tool-calling, vision', 'Context length: 40960', 'VRAM (MiB): 5120', 'State: Available']);
+    expect(facts.lines).toEqual(['Model: qwen3:8b', 'Server: ollama', 'Parameters: 8B', 'Size: small', 'Capabilities: reasoning, tool-calling, vision', 'Context length: 40960', 'Accelerator memory (MiB): 5120', 'State: Available']);
     expect(facts).toMatchObject({ icon: 'chip', ready: true });
     expect(modelSize(obj('Model', 'm', NS, { parameters: '32B' }, { 'kubemoot.ai/size': 'medium' }))).toBe('medium');
     expect(modelSize(obj('Model', 'm', NS, { parameters: '32B' }))).toBe('large');
     expect(modelSize(obj('Model', 'm', NS, { parameters: 'lots' }))).toBeUndefined();
+  });
+
+  it('show the deprecated vramMib of a Model that has no acceleratorMemoryMiB, and prefer the new name', () => {
+    const old = factsOf(related(obj('Model', 'old', NS, { model: 'm', vramMib: 7000 })));
+    expect(old.lines).toContain('Accelerator memory (MiB): 7000');
+    const both = factsOf(related(obj('Model', 'both', NS, { model: 'm', acceleratorMemoryMiB: 8000, vramMib: 7000 })));
+    expect(both.lines).toContain('Accelerator memory (MiB): 8000');
   });
 
   it('mark the retired latencyClass of an older Model, and show it only when the Model has no size', () => {

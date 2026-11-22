@@ -129,7 +129,7 @@ describe('the chat page', () => {
     c.messages.push({ role: 'user', content: 'q', timestamp: c.startedAt });
     post(c, {
       busy: true,
-      turn: { startedAt: Date.now(), connected: true, threadId: 't', done: false, cards: [{ agent: 'node-watcher', status: 'evaluating', gpu: 'rig0', stoodAside: false }] },
+      turn: { startedAt: Date.now(), connected: true, threadId: 't', done: false, cards: [{ agent: 'node-watcher', status: 'evaluating', accelerator: 'rig0', stoodAside: false }] },
     });
     expect($('messages').querySelector('.finding-agent')?.textContent).toBe('node-watcher');
     expect($('messages').textContent).toContain('analyzing on rig0');

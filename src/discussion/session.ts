@@ -3,7 +3,7 @@ import { titleFrom, type ChatMessage, type ChatSignal, type Conversation } from 
 import { agentProblems, cardText } from './cardText';
 import { ask, DEFAULT_TIMING, streamTurn, type TurnEnd, type TurnTiming } from './client';
 import { initialTurn, reduce, type TurnState } from './reducer';
-import type { DiscussionEvent } from './types';
+import { acceleratorOf, type DiscussionEvent } from './types';
 
 /** What a chat panel renders. */
 export interface SessionView {
@@ -168,7 +168,7 @@ export function turnRecord(turn?: TurnState): Pick<ChatMessage, 'threadId' | 'ag
 
 function toSignal(e: DiscussionEvent): ChatSignal | undefined {
   if (e.type === 'phase') {
-    return { type: e.status || 'phase', agentName: e.agent || '', timestamp: now(), data: compact({ gpu: e.gpu, signal: e.signal, stoodAside: e.stood_aside }) };
+    return { type: e.status || 'phase', agentName: e.agent || '', timestamp: now(), data: compact({ accelerator: acceleratorOf(e), signal: e.signal, stoodAside: e.stood_aside }) };
   }
   if (e.type === 'finding') {
     return { type: e.signal || 'finding', agentName: e.agent || '', timestamp: now(), data: compact({ summary: e.summary }) };

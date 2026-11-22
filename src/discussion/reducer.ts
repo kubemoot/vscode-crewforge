@@ -1,10 +1,10 @@
-import { eventErrorText, type DiscussionEvent } from './types';
+import { acceleratorOf, eventErrorText, type DiscussionEvent } from './types';
 
 /** What one agent is doing in the current turn, as the stream has told us. */
 export interface AgentCard {
   agent: string;
   status: string;
-  gpu?: string;
+  accelerator?: string;
   signal?: string;
   summary?: string;
   stoodAside: boolean;
@@ -45,7 +45,7 @@ const handlers: Record<string, Handler> = {
     upsertCard(s, e.agent, (c) => ({
       ...c,
       status: e.status ?? c.status,
-      gpu: e.gpu ?? c.gpu,
+      accelerator: acceleratorOf(e) ?? c.accelerator,
       signal: e.signal ?? c.signal,
       stoodAside: e.stood_aside ?? c.stoodAside,
       model: e.model ?? c.model,

@@ -41,14 +41,18 @@ const VERDICTS = new Map([
   ['failure', 'failed'],
 ]);
 
+const ACCELERATOR_BUSY_TEXT = 'stood aside: every accelerator was busy, so it could not run';
+
 /** Why an agent stood aside because it could not run, in plain words. */
 const STAND_ASIDE_REASONS = new Map([
-  ['gpu-busy', 'stood aside: every accelerator was busy, so it could not run'],
+  ['accelerator-busy', ACCELERATOR_BUSY_TEXT],
+  // gpu-busy is the deprecated alias of accelerator-busy.
+  ['gpu-busy', ACCELERATOR_BUSY_TEXT],
   ['model-too-large', 'stood aside: no accelerator in this cluster can hold its model'],
 ]);
 
 function where(card: AgentCard): string {
-  return card.gpu ? ` on ${card.gpu}` : '';
+  return card.accelerator ? ` on ${card.accelerator}` : '';
 }
 
 export function cardText(card: AgentCard): CardText {
