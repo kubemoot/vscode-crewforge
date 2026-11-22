@@ -47,23 +47,22 @@ export class ConversationActions {
     private readonly crew: string,
   ) {}
 
-  /** Runs `action` on the conversation; a failure is thrown for the caller to show. */
-  async run(action: ConversationActionId, target: ConversationTarget): Promise<void> {
-    if (action === 'erase') await this.erase(target);
-    else await this.control(action, target);
+  /** Runs `action` on the conversation; a failure is thrown for the caller to show. True when the crew took it, false when the person declined. */
+  async run(action: ConversationActionId, target: ConversationTarget): Promise<boolean> {
+    return action === 'erase' ? this.erase(target) : this.control(action, target);
   }
 
-  private async control(action: ControlAction, target: ConversationTarget): Promise<void> {
+  private async control(action: ControlAction, target: ConversationTarget): Promise<boolean> {
     let reason: string | undefined;
     for (;;) {
       try {
         const sent = await controlConversation(this.client, this.namespace, this.crew, target.conversationId, action, reason);
         void vscode.window.showInformationMessage(`${PAST[action]} "${target.title}" (${plural(sent.threads?.length ?? 0, 'running turn')}).`);
-        return;
+        return true;
       } catch (err) {
         if (!needsReason(err) || reason !== undefined) throw err;
         reason = await askReason(`${action} "${target.title}"`);
-        if (reason === undefined) return;
+        if (reason === undefined) return false;
       }
     }
   }
@@ -73,20 +72,20 @@ export class ConversationActions {
    * what cannot be. A conversation that is still running is deleted only when the person
    * chooses Stop and delete.
    */
-  private async erase(target: ConversationTarget): Promise<void> {
+  private async erase(target: ConversationTarget): Promise<boolean> {
     const sure = await confirmModal(
       `Delete "${target.title}" from the crew?`,
       'Delete from crew',
       "This removes the conversation from every place the crew keeps it: its history, the agents' messages, workspace, scheduled reminders and learned memory facts. The copy on this computer stays. This cannot be undone.",
     );
-    if (!sure) return;
+    if (!sure) return false;
     const asked: EraseOptions = {};
     for (;;) {
       try {
         showErasure(await eraseConversation(this.client, this.namespace, this.crew, target.conversationId, asked));
-        return;
+        return true;
       } catch (err) {
-        if (!(await this.resolve(err, asked, target))) return;
+        if (!(await this.resolve(err, asked, target))) return false;
       }
     }
   }

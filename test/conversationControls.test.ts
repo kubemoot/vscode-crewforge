@@ -107,6 +107,23 @@ describe('conversation actions', () => {
     expect(recorded.info).toContain(`${said} "Which nodes?" (2 running turns).`);
   });
 
+  it('tells the page which conversations it paused, until they are resumed, stopped, or the person declines', async () => {
+    const panel = open(await saved('1', 'conv-1'));
+    const paused = () => (panel.webview.posted.at(-1) as { paused: string[] }).paused;
+    const reply = (action: string) => gateway.responses.push(JSON.stringify({ conversationId: 'conv-1', action, threads: ['t1'] }));
+    reply('pause');
+    await act(panel, 'pause');
+    expect(paused()).toEqual(['conv-1']);
+    reply('resume');
+    await act(panel, 'resume');
+    expect(paused()).toEqual([]);
+    reply('pause');
+    await act(panel, 'pause');
+    reply('stop');
+    await act(panel, 'stop');
+    expect(paused()).toEqual([]);
+  });
+
   it('says one running turn in the singular', async () => {
     const panel = open(await saved('1', 'conv-1'));
     gateway.responses.push('{"conversationId":"conv-1","action":"stop","threads":["t1"]}');

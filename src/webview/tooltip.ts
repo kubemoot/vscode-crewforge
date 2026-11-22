@@ -57,6 +57,10 @@ function tooltipFor(focused: Element | null): { target: Element; text: string } 
 function place(bubble: HTMLElement, target: Element, width: number, height: number): void {
   const at = target.getBoundingClientRect();
   const room = bubble.getBoundingClientRect().width;
+  if (target.matches('h1, h2, h3')) {
+    placeByHeading(bubble, target, at, room, width);
+    return;
+  }
   const menu = target.closest('[role="menu"]')?.getBoundingClientRect();
   if (menu) {
     const beside = [menu.right + 6, menu.left - room - 6].find((x) => x >= 4 && x + room <= width - 4);
@@ -67,4 +71,32 @@ function place(bubble: HTMLElement, target: Element, width: number, height: numb
   bubble.style.left = `${Math.max(4, Math.min(at.left, width - room - 4))}px`;
   const tall = bubble.getBoundingClientRect().height;
   bubble.style.top = `${at.bottom + 4 + tall > height ? Math.max(4, at.top - tall - 4) : at.bottom + 4}px`;
+}
+
+/**
+ * A heading's bubble goes beside the heading, on one line when the room allows, and under
+ * the paragraphs that follow the heading when it would be taller than the heading, so it
+ * never hides the page's own text.
+ */
+function placeByHeading(bubble: HTMLElement, heading: Element, at: DOMRect, room: number, width: number): void {
+  const left = at.right + 8;
+  const free = width - left - 4;
+  if (free >= Math.min(room, 160)) {
+    bubble.style.maxWidth = `${free}px`;
+    if (bubble.getBoundingClientRect().height <= at.height + 6) {
+      bubble.style.left = `${left}px`;
+      bubble.style.top = `${at.top}px`;
+      return;
+    }
+  }
+  bubble.style.maxWidth = '';
+  bubble.style.left = `${Math.max(4, Math.min(at.left, width - room - 4))}px`;
+  bubble.style.top = `${Math.max(at.bottom, bottomOfParagraphsAfter(heading)) + 4}px`;
+}
+
+/** The bottom edge of the run of paragraphs right after an element, or 0 when none follows. */
+function bottomOfParagraphsAfter(el: Element): number {
+  let bottom = 0;
+  for (let next = el.nextElementSibling; next?.matches('p'); next = next.nextElementSibling) bottom = next.getBoundingClientRect().bottom;
+  return bottom;
 }

@@ -18,6 +18,8 @@ export type StateMessage = {
   availability?: CrewAvailability;
   /** The gateway's ids of the conversations the crew said have something new since they were last opened. */
   fresh: string[];
+  /** The gateway's ids of the conversations CrewForge paused and has not resumed or stopped. */
+  paused: string[];
 };
 
 /** The agents whose source is open in the workspace, and whether a dashboard URL is set. */
