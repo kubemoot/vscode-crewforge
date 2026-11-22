@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { TERMS, withTerm } from '../definitions';
 import { connect, namespaceScope, type Connection } from '../connection';
 import { listCrewsEach } from '../k8s/crews';
 import { deploymentDescription, historyLines, type Deployment } from '../source/deployments';
@@ -298,7 +299,7 @@ function fitnessItem(node: Extract<SourceNode, { kind: 'fitness' }>, busy: boole
   const item = new vscode.TreeItem('Fitness', vscode.TreeItemCollapsibleState.Collapsed);
   item.iconPath = new vscode.ThemeIcon('beaker');
   item.description = busy ? 'run in progress' : undefined;
-  item.tooltip = 'Click for the Fitness dashboard; expand for the runs.';
+  item.tooltip = `${TERMS.fitness}\nClick for the Fitness dashboard; expand for the runs.`;
   item.contextValue = `fitness${running(busy)}`;
   item.command = { command: 'crewforge.openFitnessDashboard', title: 'Open Fitness Dashboard', arguments: [node] };
   return item;
@@ -318,7 +319,7 @@ function runItem(node: Extract<SourceNode, { kind: 'run' }>): vscode.TreeItem {
   const item = new vscode.TreeItem(run.name, vscode.TreeItemCollapsibleState.None);
   item.description = runSummary(run);
   const error = run.error ? `\n${run.error}` : '';
-  item.tooltip = `${run.kind} ${run.namespace}/${run.name}\n${runSummary(run)}${error}`;
+  item.tooltip = withTerm(`${run.kind} ${run.namespace}/${run.name}\n${runSummary(run)}${error}`);
   const [icon, color] = RUN_ICONS[run.phase] ?? (isRunning(run) ? ['sync~spin'] : ['circle-outline']);
   item.iconPath = new vscode.ThemeIcon(icon, color ? new vscode.ThemeColor(color) : undefined);
   item.contextValue = 'run';
@@ -349,7 +350,7 @@ function declaredItem(declared: DeclaredItem, root: string): vscode.TreeItem {
   const item = new vscode.TreeItem(declared.label, vscode.TreeItemCollapsibleState.None);
   item.id = `declared:${root}:${declared.icon}:${declared.label}:${declared.file ?? ''}`;
   item.description = declared.description;
-  item.tooltip = declared.file ? `${declared.tooltip}\n${declared.file}:${declared.line + 1}` : declared.tooltip;
+  item.tooltip = withTerm(declared.file ? `${declared.tooltip}\n${declared.file}:${declared.line + 1}` : declared.tooltip);
   item.iconPath = new vscode.ThemeIcon(declared.icon, declared.warn ? new vscode.ThemeColor('list.warningForeground') : undefined);
   item.contextValue = declaredContext(declared);
   if (declared.file) item.command = openAt(declared.file, declared.line);
@@ -377,7 +378,7 @@ function sourceWhat(entry: SourceEntry): string {
 
 function sourceTooltip(entry: SourceEntry): string {
   const named = entry.crewName ? `Kubernetes name: ${entry.crewName}` : '';
-  const lines = [entry.source.root, named, entry.identity.id, entry.identity.revision ? `revision ${entry.identity.revision}` : '', 'Click for the crew dashboard; expand for what it declares and where it runs.'];
+  const lines = [TERMS.source, entry.source.root, named, entry.identity.id, entry.identity.revision ? `revision ${entry.identity.revision}` : '', 'Click for the crew dashboard; expand for what it declares and where it runs.'];
   return lines.filter(Boolean).join('\n');
 }
 
@@ -407,7 +408,7 @@ function deploymentItem(node: Extract<SourceNode, { kind: 'deployment' }>, busy:
 }
 
 function deploymentTooltip(d: Deployment, drift: string, error?: string): string {
-  const lines = [`${d.namespace}/${d.crew.name} via ${d.channel}`, `Phase: ${d.crew.phase}`, `Source: ${drift}`];
+  const lines = [`${d.namespace}/${d.crew.name} via ${d.channel}`, TERMS.deployment, `Phase: ${d.crew.phase}`, `Source: ${drift}`];
   if (d.owner) lines.push(`Owner: ${d.owner}`);
   if (d.revision) lines.push(`Revision: ${d.revision}`);
   if (!d.linked) lines.push('This Crew does not name this source; it may come from another copy of the crew.');
@@ -427,9 +428,10 @@ function fluxLines(node: Extract<SourceNode, { kind: 'deployment' }>): string[] 
 function resourceItem(node: Extract<SourceNode, { kind: 'resource' }>): vscode.TreeItem {
   const { drift } = node;
   const item = new vscode.TreeItem(`${drift.kind}/${drift.name}`, vscode.TreeItemCollapsibleState.None);
-  const { text, icon, color } = DRIFT_STATES[drift.state];
+  const { text, tip, icon, color } = DRIFT_STATES[drift.state];
   item.description = text;
-  item.tooltip = drift.paths.length ? `${text}:\n${drift.paths.join('\n')}` : text;
+  const detail = drift.paths.length ? `${text}:\n${drift.paths.join('\n')}` : text;
+  item.tooltip = withTerm(`${drift.kind} ${drift.name}\n${tip}\n${detail}`);
   item.iconPath = new vscode.ThemeIcon(icon, new vscode.ThemeColor(color));
   item.contextValue = `resource-${drift.state}`;
   item.command = { command: 'crewforge.showDrift', title: 'Compare with Live', arguments: [node] };

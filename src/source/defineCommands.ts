@@ -239,7 +239,7 @@ async function askOne(q: Question, context: DefineContext): Promise<string | str
   const items = q.items(context);
   if (items.length === 0) return [];
   const chosen = await vscode.window.showQuickPick(
-    items.map((label) => ({ label })),
+    items.map((label) => ({ label, description: q.title })),
     { title: q.title, placeHolder: `${q.title} (choose any)`, canPickMany: true },
   );
   return chosen?.map((c) => c.label);

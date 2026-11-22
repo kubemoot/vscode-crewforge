@@ -63,8 +63,8 @@ CrewForge says so and names the command.
    own namespace, with 1 to 5 specialists. It ships no models and names no model server:
    its scheduling policy states what it needs, a model that can call tools, and the
    cluster's model catalog supplies the models. Name it in plain words; CrewForge suggests
-   the Kubernetes name from it, and **Rename...** later changes either.
-5. Edit it, or use **Add <Kind>...** on a group in Crew Sources to add an Agent, a
+   the Kubernetes name from it, and **Rename the Crew...** later changes either.
+5. Edit it, or use **Add an Agent to the Crew...**, **Add a PromptModule (Instructions)...** and the other **Add** entries on a group in Crew Sources to add an Agent, a
    PromptModule, a RAG source, an MCP server, and more. **Edit Scheduling Needs...** on
    the Models group states what the crew needs for a phase, such as triage or mulling, in
    its CrewSchedulingPolicy: the abilities a model must have (tool-calling, reasoning,
@@ -76,13 +76,20 @@ CrewForge says so and names the command.
    using the catalog. The status bar says where the crew stands against its deployment:
    not deployed, in sync, or changed. **Lint** checks the chart against your cluster's
    schemas.
-6. Choose **Deploy to Namespace...** to run it with Helm, then **Ask**, **Run Fitness**,
-   and **Redeploy** after each edit. A deployed crew carries its fitness scenarios: its
+6. Choose **Deploy to Namespace...** to run it with Helm, then **Ask the Crew a Question**,
+   **Run Fitness on the Crew**, and **Redeploy from Source** after each edit. A deployed crew carries its fitness scenarios: its
    Fitness group runs all of them, a batch you pick, or one.
+
+### Tooltips
+
+Every view, tree item, command, status bar item, page heading, table column, and button says
+what it is or does in a tooltip: hover it, or tab to it in a page and the tooltip shows. The
+terms use the Kubemoot dashboard's definitions, so the two say the same thing. The texts live
+in `src/definitions.ts`, and a test fails when a command, tree item, or page control has none.
 
 ### Crew memory
 
-Right-click a deployed crew and choose **Open Crew Memory** to see what the crew has
+Right-click a deployed crew and choose **Open the Crew Memory** to see what the crew has
 learned, read-only. The facts are grouped by topic, each with its value, the role that
 learned it, and when; hover the time to see the Moot it was learned in, when the export records one. Entries the
 export left out (a fact that holds a credential is never exported as memory) show as counts

@@ -1,3 +1,4 @@
+import { TERMS } from '../src/definitions';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { loadCrewDetails, missingText, type CrewDetails } from '../src/crew/details';
 import type { CrewSummary } from '../src/k8s/crews';
@@ -135,7 +136,7 @@ describe('the Tools group of a live crew', () => {
     expect(cluster.calls.filter((c) => c.path === CATALOG)).toHaveLength(1);
     expect(shown(tools)).toEqual(['helm_list|from kubernetes · k8s', 'pods_list|from kubernetes · k8s']);
     const pods = provider.getTreeItem(tools[1]);
-    expect(pods.tooltip).toBe('Tool pods_list\nFrom: MCPServer kubernetes\nList pods\nEnabled by: k8s\nInputs: namespace (required)');
+    expect(pods.tooltip).toBe(`Tool pods_list\n${TERMS.tool}\nFrom: MCPServer kubernetes\nList pods\nEnabled by: k8s\nInputs: namespace (required)`);
     await showToolDetails(new LiveDocuments(), tools[1]);
     expect(recorded.shownDocuments).toEqual(['crewforge-live:/team-a/lab-ops/tools/pods_list.md (markdown)']);
   });

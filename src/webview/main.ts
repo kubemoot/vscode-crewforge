@@ -5,7 +5,9 @@ import type { AgentCard, TurnState } from '../discussion/reducer';
 import { agentsOf, problemsOf, type AgentNote, type ChatMessage, type ConversationMeta } from '../store/conversation';
 import type { ConversationActionId } from '../panels/conversationActions';
 import type { HostMessage, StateMessage, WebviewMessage } from './protocol';
-import { escapeHtml, formatAgo, htmlAttribute, icons, isWebLink, metaLine } from './render';
+import { CHAT, CHAT_TEXT, conversationTitleTip, iconTip, openConversationTip, type IconAction } from '../definitions';
+import { escapeHtml, formatAgo, htmlAttribute, iconAttrs, iconTitle, icons, isWebLink, metaLine, tipAttrs } from './render';
+import { enableFocusTooltips } from './tooltip';
 import { reportErrors } from './reportErrors';
 import { shownText } from './shown';
 
@@ -42,11 +44,11 @@ const CONVERSATION_BUTTONS: Array<[string, ConversationActionId]> = [
 ];
 
 /** The entries of a saved conversation's menu in the list: what each does, and its tooltip. */
-const LIST_ACTIONS: Array<{ action: ConversationActionId; label: string; title: string }> = [
-  { action: 'stop', label: 'Stop', title: 'Stop the conversation on the crew' },
-  { action: 'pause', label: 'Pause', title: 'Pause the conversation on the crew' },
-  { action: 'resume', label: 'Resume', title: 'Resume the conversation on the crew' },
-  { action: 'erase', label: 'Delete from the crew...', title: 'Delete the conversation from the crew' },
+const LIST_ACTIONS: Array<{ action: ConversationActionId; label: string; tip: IconAction }> = [
+  { action: 'stop', label: 'Stop', tip: CHAT.stop },
+  { action: 'pause', label: 'Pause', tip: CHAT.pause },
+  { action: 'resume', label: 'Resume', tip: CHAT.resume },
+  { action: 'erase', label: 'Delete from the crew...', tip: CHAT.erase },
 ];
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -157,6 +159,7 @@ setInterval(() => {
 }, 1000);
 
 setupResizer();
+enableFocusTooltips(document);
 reportErrors((message) => vscode.postMessage({ type: 'error', message }));
 
 vscode.postMessage({ type: 'ready' });
@@ -199,7 +202,9 @@ function renderSend(): void {
   const input = inputState();
   els.send.hidden = !input.stop && !input.canSend;
   if (els.send.classList.contains('stop') !== input.stop || !els.send.innerHTML) els.send.innerHTML = input.stop ? icons.stop : icons.send;
-  els.send.title = input.stop ? 'Stop this turn' : 'Send';
+  const sendTip = input.stop ? CHAT.stopTurn : CHAT.send;
+  els.send.title = iconTip(sendTip);
+  els.send.setAttribute('aria-label', sendTip.label);
   els.send.classList.toggle('stop', input.stop);
   els.note.hidden = !input.note;
   els.note.textContent = input.note ?? '';
@@ -214,7 +219,7 @@ function render(): void {
   if (!state) return;
   const { conversation, busy } = state.view;
   els.title.textContent = state.crewTitle;
-  els.title.title = conversation.crewName;
+  els.title.title = conversationTitleTip(conversation.crewName);
   const technical = state.crewTitle === conversation.crewName ? '' : `${conversation.crewName} · `;
   els.where.textContent = `${technical}${conversation.namespace} · ${conversation.context}`;
   const hasMessages = conversation.messages.length > 0;
@@ -237,9 +242,9 @@ function renderHistory(history: ConversationMeta[], activeId: string, fresh: Set
   return history
     .map((h) => {
       const isNew = h.conversationId !== undefined && fresh.has(h.conversationId);
-      const badge = isNew ? '<span class="fresh-dot" role="img" title="Something new from the crew" aria-label="Something new from the crew"></span>' : '';
+      const badge = isNew ? `<span class="fresh-dot" role="img"${iconAttrs(CHAT.freshDot)}></span>` : '';
       return `<div class="discussion-item${h.id === activeId ? ' active' : ''}${isNew ? ' fresh' : ''}">
-        <button class="discussion-btn" data-id="${escapeHtml(h.id)}">
+        <button class="discussion-btn" data-id="${escapeHtml(h.id)}"${htmlAttribute('title', openConversationTip(h.title, formatAgo(h.startedAt)))}>
           <span class="conv-title">${badge}${escapeHtml(h.title)}</span>
           <span class="conv-date">${escapeHtml(formatAgo(h.startedAt))}</span>
         </button>${h.conversationId ? listActions(h.id) : ''}</div>`;
@@ -250,9 +255,9 @@ function renderHistory(history: ConversationMeta[], activeId: string, fresh: Set
 /** The menu of what a saved conversation on the crew can be told to do, shown on hover or focus. */
 function listActions(id: string): string {
   const entries = LIST_ACTIONS.map(
-    (a) => `<button type="button" class="menu-item conv-action" role="menuitem"${htmlAttribute('data-conv-action', a.action)}${htmlAttribute('data-id', id)}${htmlAttribute('title', a.title)}>${escapeHtml(a.label)}</button>`,
+    (a) => `<button type="button" class="menu-item conv-action" role="menuitem"${htmlAttribute('data-conv-action', a.action)}${htmlAttribute('data-id', id)}${iconTitle(a.tip)}>${escapeHtml(a.label)}</button>`,
   );
-  return `<details class="menu conv-actions"><summary title="Conversation actions" aria-label="Conversation actions">${icons.more}</summary><div class="menu-list" role="menu">${entries.join('')}</div></details>`;
+  return `<details class="menu conv-actions"><summary${iconAttrs(CHAT.menu)}>${icons.more}</summary><div class="menu-list" role="menu">${entries.join('')}</div></details>`;
 }
 
 function renderMessages(): void {
@@ -286,8 +291,8 @@ function refocus(focused: { action?: string; index?: string }): void {
 /** The empty state; `crew` reads after "Ask": a display name, or "the <name> crew". */
 function emptyState(crew: string, about: string): string {
   const list = about ? `<p class="agent-list">${escapeHtml(about)}</p>` : '';
-  return `<div class="empty-state"><div class="empty-icon">${icons.crewLarge}</div>
-    <h2>Ask ${escapeHtml(crew)}</h2>
+  return `<div class="empty-state"><div class="empty-icon" aria-hidden="true">${icons.crewLarge}</div>
+    <h2${tipAttrs(CHAT_TEXT.askHeading)}>Ask ${escapeHtml(crew)}</h2>
     <p>Type a question below. The answer appears here.</p>${list}</div>`;
 }
 
@@ -296,7 +301,7 @@ type MessageActionId = 'copy' | 'reask' | 'edit' | 'dashboard';
 /** One button under a message: what it does, its tooltip, and its icon. */
 interface MessageAction {
   action: MessageActionId;
-  label: string;
+  tip: IconAction;
   icon: string;
   /** Sends a question, so it waits while a turn runs. */
   asks?: boolean;
@@ -311,7 +316,7 @@ const MESSAGE_ACTIONS: Record<MessageActionId, (index: number) => void> = {
 };
 
 /** Opens the Moot of the turn a message ends, in the Kubemoot dashboard; offered when a dashboard URL is set and the turn's thread is known. */
-const DASHBOARD_ACTION: MessageAction = { action: 'dashboard', label: 'Open in the Moot', icon: icons.dashboard };
+const DASHBOARD_ACTION: MessageAction = { action: 'dashboard', tip: CHAT.openTurn, icon: icons.dashboard };
 
 /** The message's buttons: its role's, and Open in the Moot for a turn the dashboard can show. */
 function actionsFor(base: MessageAction[], m: ChatMessage): MessageAction[] {
@@ -325,9 +330,9 @@ const ROLES = {
     icon: icons.user,
     body: (m: ChatMessage) => `<div class="message-text">${escapeHtml(m.content)}</div>`,
     actions: [
-      { action: 'copy', label: 'Copy', icon: icons.copy },
-      { action: 'reask', label: 'Ask again', icon: icons.reask, asks: true },
-      { action: 'edit', label: 'Edit and resend', icon: icons.edit },
+      { action: 'copy', tip: CHAT.copyMessage, icon: icons.copy },
+      { action: 'reask', tip: CHAT.reask, icon: icons.reask, asks: true },
+      { action: 'edit', tip: CHAT.edit, icon: icons.edit },
     ] as MessageAction[],
   },
   assistant: {
@@ -335,8 +340,8 @@ const ROLES = {
     icon: icons.crew,
     body: (m: ChatMessage) => `<div class="message-text markdown-content">${marked.parse(m.content, { async: false })}</div>`,
     actions: [
-      { action: 'copy', label: 'Copy answer as Markdown', icon: icons.copy },
-      { action: 'reask', label: 'Ask the question again', icon: icons.reask, asks: true },
+      { action: 'copy', tip: CHAT.copyAnswer, icon: icons.copy },
+      { action: 'reask', tip: CHAT.reaskAnswer, icon: icons.reask, asks: true },
     ] as MessageAction[],
   },
 };
@@ -382,7 +387,7 @@ function problemList(m: ChatMessage): string {
   const problems = problemsOf(m);
   if (problems.length === 0) return '';
   const items = problems.map((p) => `<li>${escapeHtml(p)}</li>`).join('');
-  return `<div class="turn-problems" role="note" aria-label="What went wrong in this turn"><ul>${items}</ul></div>`;
+  return `<div class="turn-problems" role="note" aria-label="What went wrong in this turn"${tipAttrs(CHAT_TEXT.problems)}><ul>${items}</ul></div>`;
 }
 
 /** The Moot of the turn a message ends: the agents that took part, folded away under a count. */
@@ -391,7 +396,7 @@ function turnAgents(m: ChatMessage): string {
   if (agents.length === 0) return '';
   const cards = agents.map((a) => noteCard(a)).join('');
   const count = agents.length === 1 ? 'The Moot: 1 agent' : `The Moot: ${agents.length} agents`;
-  return `<details class="turn-agents"><summary title="What each agent said in this turn">${count}</summary><div class="findings-feed">${cards}</div></details>`;
+  return `<details class="turn-agents"><summary${tipAttrs(CHAT_TEXT.agentsTookPart)}>${count}</summary><div class="findings-feed">${cards}</div></details>`;
 }
 
 function noteCard(a: AgentNote): string {
@@ -400,7 +405,7 @@ function noteCard(a: AgentNote): string {
 
 /** An agent's name on its card: a link to its source when the crew's source is open in the workspace. */
 function agentLabel(agent: string): string {
-  if (!state?.links?.agents.includes(agent)) return `<span class="finding-agent">${escapeHtml(agent)}</span>`;
+  if (!state?.links?.agents.includes(agent)) return `<span class="finding-agent"${tipAttrs(CHAT_TEXT.agentName)}>${escapeHtml(agent)}</span>`;
   const title = `Open where ${agent} is defined: the Agent and its PromptModules`;
   return `<button type="button" class="finding-agent"${htmlAttribute('data-agent', agent)}${htmlAttribute('title', title)}>${escapeHtml(agent)}</button>`;
 }
@@ -411,8 +416,7 @@ function actionRow(actions: MessageAction[], index: number, busy: boolean): stri
     const attributes = [
       htmlAttribute('data-action', a.action),
       htmlAttribute('data-index', String(index)),
-      htmlAttribute('title', a.label),
-      htmlAttribute('aria-label', a.label),
+      iconAttrs(a.tip),
     ].join('');
     return `<button type="button" class="action-btn"${attributes}${a.asks && busy ? ' disabled' : ''}>${a.icon}</button>`;
   });
@@ -436,13 +440,13 @@ function renderTurn(turn: TurnState): string {
       const { text, working, problem } = cardText(card);
       const cls = cardClass(card, problem);
       return `<div class="finding-card${cls}">${agentLabel(card.agent)}
-        <span class="${working ? 'finding-status' : 'finding-summary'}">${escapeHtml(text)}</span>${working ? '<div class="finding-spinner"></div>' : ''}</div>`;
+        <span class="${working ? 'finding-status' : 'finding-summary'}">${escapeHtml(text)}</span>${working ? '<div class="finding-spinner" aria-hidden="true"></div>' : ''}</div>`;
     })
     .join('');
   const feed = cards ? `<div class="findings-feed">${cards}</div>` : '';
   const answer = turn.synthesis
     ? `<div class="message-text markdown-content">${marked.parse(turn.synthesis, { async: false })}</div>`
-    : `<div class="loading-indicator"><div class="loading-spinner"></div><span class="loading-text">${escapeHtml(turnStatus(turn))}</span></div>`;
+    : `<div class="loading-indicator"><div class="loading-spinner" aria-hidden="true"></div><span class="loading-text"${tipAttrs(CHAT_TEXT.status)}>${escapeHtml(turnStatus(turn))}</span></div>`;
   return `<div class="message crew turn">${feed}${answer}</div>`;
 }
 

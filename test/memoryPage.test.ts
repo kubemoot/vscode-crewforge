@@ -26,7 +26,7 @@ describe('renderMemoryPage', () => {
     expect(html).toContain('coordinator');
     expect(html).toContain('datetime="2026-11-18T10:00:00Z"');
     expect(html).toContain('<span title="Learned in the Moot thread-abc"><time datetime="2026-11-18T10:00:00Z" title="2026-11-18T10:00:00Z">');
-    expect(html).not.toContain('<th>Thread</th>');
+    expect(html).not.toMatch(/<th[^>]*>Thread<\/th>/);
     expect(html).toContain(`3 facts${META_SEPARATOR}read-only${META_SEPARATOR}exported`);
     expect(html).toContain('title="crew-demo/demo, OMPI protocol');
   });
@@ -52,7 +52,7 @@ describe('renderMemoryPage', () => {
   it('counts the left-out entries from the manifest when there is no report', () => {
     const noReport = renderMemoryPage({ ...view, report: undefined });
     expect(noReport).toContain('2 entries left out of the export');
-    expect(noReport).not.toContain('<th>Reason</th>');
+    expect(noReport).not.toMatch(/<th[^>]*>Reason<\/th>/);
   });
 
   it('says so when the crew has learned nothing', () => {

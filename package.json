@@ -99,13 +99,13 @@
       },
       {
         "command": "crewforge.askCrew",
-        "title": "Ask",
+        "title": "Ask the Crew a Question",
         "category": "CrewForge",
         "icon": "$(comment-discussion)"
       },
       {
         "command": "crewforge.continueConversation",
-        "title": "Continue a Conversation",
+        "title": "Continue a Saved Conversation",
         "category": "CrewForge",
         "icon": "$(history)"
       },
@@ -155,7 +155,7 @@
       },
       {
         "command": "crewforge.updateDeployment",
-        "title": "Redeploy",
+        "title": "Redeploy from Source",
         "category": "CrewForge",
         "icon": "$(sync)"
       },
@@ -167,7 +167,7 @@
       },
       {
         "command": "crewforge.removeDeployment",
-        "title": "Undeploy",
+        "title": "Undeploy (Remove the Crew from the Namespace)",
         "category": "CrewForge",
         "icon": "$(trash)"
       },
@@ -197,19 +197,19 @@
       },
       {
         "command": "crewforge.redeploy",
-        "title": "Redeploy",
+        "title": "Redeploy from Source",
         "category": "CrewForge",
         "icon": "$(sync)"
       },
       {
         "command": "crewforge.askSource",
-        "title": "Ask",
+        "title": "Ask the Deployed Crew a Question",
         "category": "CrewForge",
         "icon": "$(comment-discussion)"
       },
       {
         "command": "crewforge.crewActions",
-        "title": "Next Steps...",
+        "title": "Show Next Steps for the Crew...",
         "category": "CrewForge"
       },
       {
@@ -220,13 +220,13 @@
       },
       {
         "command": "crewforge.runFitness",
-        "title": "Run Fitness",
+        "title": "Run Fitness on the Crew",
         "category": "CrewForge",
         "icon": "$(beaker)"
       },
       {
         "command": "crewforge.showRun",
-        "title": "Show Fitness Run Report",
+        "title": "Show the Fitness Run Report",
         "category": "CrewForge"
       },
       {
@@ -267,13 +267,13 @@
       },
       {
         "command": "crewforge.renameCrew",
-        "title": "Rename...",
+        "title": "Rename the Crew...",
         "category": "CrewForge",
         "icon": "$(edit)"
       },
       {
         "command": "crewforge.openCrewDashboard",
-        "title": "Open Dashboard",
+        "title": "Open the Crew Dashboard",
         "category": "CrewForge",
         "icon": "$(dashboard)"
       },
@@ -285,19 +285,19 @@
       },
       {
         "command": "crewforge.openFitnessDashboard",
-        "title": "Open Fitness Dashboard",
+        "title": "Open the Fitness Dashboard",
         "category": "CrewForge",
         "icon": "$(pulse)"
       },
       {
         "command": "crewforge.openCrewMemory",
-        "title": "Open Crew Memory",
+        "title": "Open the Crew Memory",
         "category": "CrewForge",
         "icon": "$(database)"
       },
       {
         "command": "crewforge.showConnectionInfo",
-        "title": "Show Connection Info",
+        "title": "Show Connection Info (Context and Versions)",
         "category": "CrewForge",
         "icon": "$(plug)"
       },
@@ -327,19 +327,19 @@
       },
       {
         "command": "crewforge.addAgent",
-        "title": "Add Agent...",
+        "title": "Add an Agent to the Crew...",
         "category": "CrewForge",
         "icon": "$(add)"
       },
       {
         "command": "crewforge.addPromptModule",
-        "title": "Add PromptModule...",
+        "title": "Add a PromptModule (Instructions)...",
         "category": "CrewForge",
         "icon": "$(add)"
       },
       {
         "command": "crewforge.addSkill",
-        "title": "Add Skill...",
+        "title": "Add a Skill...",
         "category": "CrewForge",
         "icon": "$(add)"
       },
@@ -357,31 +357,31 @@
       },
       {
         "command": "crewforge.addRAGSource",
-        "title": "Add RAGSource...",
+        "title": "Add a RAGSource (Documents the Crew Searches)...",
         "category": "CrewForge",
         "icon": "$(add)"
       },
       {
         "command": "crewforge.addEmbeddingModel",
-        "title": "Add EmbeddingModel...",
+        "title": "Add an EmbeddingModel...",
         "category": "CrewForge",
         "icon": "$(add)"
       },
       {
         "command": "crewforge.addMCPServer",
-        "title": "Add MCPServer...",
+        "title": "Add an MCPServer (Tools)...",
         "category": "CrewForge",
         "icon": "$(add)"
       },
       {
         "command": "crewforge.addCrewSchedulingPolicy",
-        "title": "Add CrewSchedulingPolicy...",
+        "title": "Add a CrewSchedulingPolicy...",
         "category": "CrewForge",
         "icon": "$(add)"
       },
       {
         "command": "crewforge.addNotificationSink",
-        "title": "Add NotificationSink...",
+        "title": "Add a NotificationSink (Alerts)...",
         "category": "CrewForge",
         "icon": "$(add)"
       },
@@ -392,7 +392,7 @@
       },
       {
         "command": "crewforge.showToolDetails",
-        "title": "Show Tool Details",
+        "title": "Show Tool Details (Inputs and Server)",
         "category": "CrewForge",
         "icon": "$(info)"
       },
@@ -416,24 +416,24 @@
       },
       {
         "command": "crewforge.showDeployedScenario",
-        "title": "Show Scenario Script",
+        "title": "Show the Scenario Script",
         "category": "CrewForge"
       },
       {
         "command": "crewforge.pauseRun",
-        "title": "Pause Fitness Run",
+        "title": "Pause the Fitness Run",
         "category": "CrewForge",
         "icon": "$(debug-pause)"
       },
       {
         "command": "crewforge.resumeRun",
-        "title": "Resume Fitness Run",
+        "title": "Resume the Fitness Run",
         "category": "CrewForge",
         "icon": "$(debug-continue)"
       },
       {
         "command": "crewforge.stopRun",
-        "title": "Stop Fitness Run",
+        "title": "Stop the Fitness Run",
         "category": "CrewForge",
         "icon": "$(debug-stop)"
       },

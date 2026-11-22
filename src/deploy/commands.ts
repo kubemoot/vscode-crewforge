@@ -1,3 +1,4 @@
+import { CHANNEL_TIPS } from '../definitions';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as vscode from 'vscode';
@@ -179,7 +180,7 @@ function askNamespace(source: string, crew: string, context: string): Thenable<s
 /** The deployable channel the developer picks; undefined when cancelled, unavailable, or Flux. */
 async function pickChannel(options: ChannelOption[]): Promise<DeployChannel | undefined> {
   const choice = await vscode.window.showQuickPick(
-    options.map((option) => ({ label: `${option.enabled ? '' : '$(circle-slash) '}${CHANNEL_LABELS[option.channel]}`, description: option.reason, option })),
+    options.map((option) => ({ label: `${option.enabled ? '' : '$(circle-slash) '}${CHANNEL_LABELS[option.channel]}`, description: option.reason ?? CHANNEL_TIPS[option.channel], option })),
     { placeHolder: 'Deploy through which channel?' },
   );
   if (!choice) return undefined;

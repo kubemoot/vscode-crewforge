@@ -46,3 +46,5 @@ pre.memory-value { font-family: inherit; white-space: pre-wrap; word-break: brea
 .menu-item:hover:not([disabled]), .menu-item:focus-visible { background: var(--vscode-menu-selectionBackground, var(--vscode-list-hoverBackground)); outline: none; }
 .menu-item[disabled] { opacity: 0.5; cursor: default; }
 .summary { margin: 0.5rem 0; }
+.focus-tip { position: fixed; z-index: 1000; max-width: 22rem; padding: 0.35rem 0.55rem; font-size: 0.85em; line-height: 1.35; color: var(--vscode-editorHoverWidget-foreground, var(--vscode-foreground)); background: var(--vscode-editorHoverWidget-background, var(--vscode-editorWidget-background)); border: 1px solid var(--vscode-editorHoverWidget-border, var(--vscode-widget-border, rgba(128, 128, 128, 0.5))); border-radius: 3px; box-shadow: 0 2px 8px var(--vscode-widget-shadow, rgba(0, 0, 0, 0.3)); pointer-events: none; }
+.btn:focus-visible, .link:focus-visible, .tab:focus-visible, summary:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: 1px; }

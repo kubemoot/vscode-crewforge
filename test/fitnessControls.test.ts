@@ -164,10 +164,10 @@ describe('renderFitnessPage', () => {
         iterations: [toRun('CrewFitness', fitnessObject('CrewFitness', 'it', { testRef: 'a' }, { phase: 'Passed', durationMs: 42000 }) as never)],
       }),
     );
-    expect(html).toContain('<h1>Fitness: demo</h1>');
+    expect(html).toMatch(/<h1[^>]*>Fitness: demo<\/h1>/);
     expect(html).toContain('data-action="select" data-arg="s1"');
     expect(html).toContain('1 of 4 iterations');
-    expect(html).toContain('<progress max="4" value="1"></progress>');
+    expect(html).toMatch(/<progress max="4" value="1"[^>]*><\/progress>/);
     expect(html).toMatch(/data-action="run"[^>]*title="A fitness run for this crew is in progress\." disabled/);
     expect(html).toContain('data-action="pause" data-arg="s1"');
     expect(html).toContain('data-action="stop" data-arg="s1"');
@@ -206,7 +206,7 @@ describe('renderFitnessPage', () => {
     const html = renderFitnessPage(view({ runs: [f], selected: f, error: 'partial <read>', cannotRun: 'No source.' }));
     expect(html).toContain('&lt;judge down&gt;');
     expect(html).toContain('partial &lt;read&gt;');
-    expect(html).toContain('badge bad">fail');
+    expect(html).toMatch(/badge bad"[^>]*>fail/);
     expect(html).toContain('3 s');
     expect(html).toMatch(/data-action="run"[^>]*title="No source\." disabled/);
     const going = single({ single: true });

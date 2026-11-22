@@ -5,7 +5,9 @@ import { ChatPanel } from '../src/panels/chatPanel';
 import { newConversation, type Conversation } from '../src/store/conversation';
 import { ConversationStore } from '../src/store/conversations';
 import type { StateMessage, WebviewMessage } from '../src/webview/protocol';
+import { CHAT, iconTip, TERMS } from '../src/definitions';
 import { META_SEPARATOR } from '../src/webview/render';
+import { controlsWithoutTooltip } from './tooltipCheck';
 import { recorded, resetFake, Uri } from './vscodeFake';
 
 let sent: WebviewMessage[];
@@ -93,7 +95,7 @@ describe('the chat page', () => {
     const message = { ...stateMessage(newConversation('ctx', 'team-a', 'lab-ops')), crewTitle: 'Lab-Ops Crew' };
     window.dispatchEvent(new MessageEvent('message', { data: message, origin: window.origin }));
     expect($('title').textContent).toBe('Lab-Ops Crew');
-    expect($('title').title).toBe('lab-ops');
+    expect($('title').title).toBe(`Crew lab-ops. ${TERMS.crew}`);
     expect($('where').textContent).toBe('lab-ops · team-a · ctx');
     expect($('messages').textContent).toContain('Ask Lab-Ops Crew');
   });
@@ -129,7 +131,7 @@ describe('the chat page', () => {
     expect($('messages').querySelector('.finding-agent')?.textContent).toBe('node-watcher');
     expect($('messages').textContent).toContain('analyzing on rig0');
     expect($('messages').querySelector('.loading-text')?.textContent).toMatch(/^1 of 1 agent still working/);
-    expect($('send').title).toBe('Stop this turn');
+    expect($('send').title).toBe(iconTip(CHAT.stopTurn));
   });
 
   it('sends on Enter, not on Shift+Enter, and asks to stop while busy', () => {
@@ -164,9 +166,9 @@ describe('the chat page', () => {
     expect(sent.filter((m) => m.type === 'send')).toEqual([]);
     input.value = 'Which nodes?';
     input.dispatchEvent(new Event('input'));
-    expect([send.hidden, send.title]).toEqual([false, 'Send']);
+    expect([send.hidden, send.title]).toEqual([false, iconTip(CHAT.send)]);
     post(c, { busy: true });
-    expect([send.hidden, send.title, note.hidden, note.textContent]).toEqual([false, 'Stop this turn', false, 'The crew is answering']);
+    expect([send.hidden, send.title, note.hidden, note.textContent]).toEqual([false, iconTip(CHAT.stopTurn), false, 'The crew is answering']);
     input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
     expect(sent.filter((m) => m.type === 'send' || m.type === 'stop')).toEqual([]);
     $('form').dispatchEvent(new Event('submit'));
@@ -245,7 +247,7 @@ describe('the chat page', () => {
       ['Copy', 'Ask again', 'Edit and resend'],
       ['Copy answer as Markdown', 'Ask the question again'],
     ]);
-    for (const b of $('messages').querySelectorAll('.action-btn')) expect(b.getAttribute('title')).toBe(b.getAttribute('aria-label'));
+    for (const b of $('messages').querySelectorAll('.action-btn')) expect(b.getAttribute('title')).toMatch(new RegExp(`^${b.getAttribute('aria-label')}: .+`));
     const click = (index: number, action: string) => ($('messages').querySelector(`[data-index="${index}"][data-action="${action}"]`) as HTMLElement).click();
     click(1, 'copy');
     click(1, 'reask');
@@ -358,12 +360,7 @@ describe('the chat page', () => {
     post(c);
     expect(buttons.map((b) => b.hidden)).toEqual([false, false, false, false]);
     expect(buttons.map((b) => b.textContent)).toEqual(['Stop', 'Pause', 'Resume', 'Delete from the crew...']);
-    expect(buttons.map((b) => b.title)).toEqual([
-      'Stop the conversation on the crew',
-      'Pause the conversation on the crew',
-      'Resume the conversation on the crew',
-      'Delete the conversation from the crew',
-    ]);
+    expect(buttons.map((b) => b.title)).toEqual([CHAT.stop, CHAT.pause, CHAT.resume, CHAT.erase].map(iconTip));
     for (const b of buttons) b.click();
     expect(sent.slice(1)).toEqual([
       { type: 'conversationAction', action: 'stop' },
@@ -382,7 +379,7 @@ describe('the chat page', () => {
     expect(items[0].querySelectorAll('details.menu')).toHaveLength(1);
     expect(items[1].querySelectorAll('.conv-action')).toHaveLength(0);
     const pause = items[0].querySelector<HTMLButtonElement>('[data-conv-action="pause"]')!;
-    expect(pause.title).toBe('Pause the conversation on the crew');
+    expect(pause.title).toBe(iconTip(CHAT.pause));
     expect(pause.textContent).toBe('Pause');
     pause.click();
     items[0].querySelector<HTMLButtonElement>('[data-conv-action="erase"]')!.click();
@@ -401,7 +398,7 @@ describe('the chat page', () => {
     expect($('note').hidden).toBe(true);
     fresh = ['conv-2'];
     post(c, {}, history);
-    expect($('history').querySelector('.discussion-item.fresh .fresh-dot')?.getAttribute('title')).toBe('Something new from the crew');
+    expect($('history').querySelector('.discussion-item.fresh .fresh-dot')?.getAttribute('title')).toBe(iconTip(CHAT.freshDot));
     expect($('note').hidden).toBe(true);
     fresh = ['conv-1'];
     post(c, {}, history);
@@ -592,5 +589,26 @@ describe('the chat page', () => {
     expect(buttons[0].getAttribute('aria-label')).toBe('Open in the Moot');
     buttons[1].click();
     expect(sent.at(-1)).toEqual({ type: 'openTurnInDashboard', index: 3 });
+  });
+
+  it('gives every control, heading, and menu item a tooltip, in each state of the page', () => {
+    expect(controlsWithoutTooltip(document.body)).toEqual([]);
+    const c = newConversation('ctx', 'team-a', 'lab-ops');
+    c.conversationId = 'conv-1';
+    links = { agents: ['k8s'], dashboard: true };
+    post(c, {}, []);
+    expect(controlsWithoutTooltip(document.body)).toEqual([]);
+    c.messages.push(
+      { role: 'user', content: 'Which nodes?', timestamp: c.startedAt },
+      { role: 'assistant', content: 'Two.', timestamp: c.startedAt, threadId: 't1', agents: [{ agent: 'k8s', text: 'agrees', problem: false }, { agent: 'docs', text: 'failed', problem: true }], problems: ['docs failed'] },
+      { role: 'system', content: 'Stopped.', timestamp: c.startedAt, threadId: 't2' },
+    );
+    const history = [{ id: c.id, title: 'Which nodes?', startedAt: c.startedAt, crewName: 'lab-ops', namespace: 'team-a', context: 'ctx', conversationId: 'conv-1' }, { id: 'b', title: 'Other', startedAt: c.startedAt, crewName: 'lab-ops', namespace: 'team-a', context: 'ctx' }];
+    fresh = ['conv-1'];
+    post(c, {}, history);
+    expect(controlsWithoutTooltip(document.body)).toEqual([]);
+    expect(document.body.querySelectorAll('.menu-item[title]').length).toBeGreaterThan(8);
+    post(c, { busy: true, turn: { startedAt: Date.now(), connected: true, threadId: 't', done: false, cards: [{ agent: 'k8s', status: 'evaluating', stoodAside: false }, { agent: 'docs', status: 'waiting', stoodAside: false }] } }, history);
+    expect(controlsWithoutTooltip(document.body)).toEqual([]);
   });
 });

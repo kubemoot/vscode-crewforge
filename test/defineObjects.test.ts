@@ -1,3 +1,4 @@
+import { ABILITY_TIPS } from '../src/definitions';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -375,7 +376,7 @@ describe('Add <Kind> and Remove from Source', () => {
       recorded.inputs.push('30');
       expect(await definitions().editNeeds(models())).toBe(policyFile());
       expect(phases.map((p) => `${p.label}|${p.description}`)).toEqual(['mulling|requires tool-calling', 'triage|preferFaster 50', "Another phase...|a phase of the policy's archetype"]);
-      expect(abilities).toEqual([{ label: 'tool-calling', picked: false }, { label: 'reasoning', picked: false }, { label: 'vision', picked: false }]);
+      expect(abilities).toEqual([{ label: 'tool-calling', description: ABILITY_TIPS['tool-calling'], picked: false }, { label: 'reasoning', description: ABILITY_TIPS.reasoning, picked: false }, { label: 'vision', description: ABILITY_TIPS.vision, picked: false }]);
       expect(sizes.map((s) => s.label)).toEqual(['No size preference', 'small', 'medium', 'large']);
       expect(sizes[0].description).toMatch(/\(now\)$/);
       expect(recorded.inputOffers).toEqual(['50']);

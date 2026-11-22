@@ -1,5 +1,6 @@
 import type { CrewCondition, CrewSummary } from '../k8s/crews';
 import { capacityLine, retentionLines } from '../k8s/crewState';
+import { TERMS } from '../definitions';
 import { titleOf } from '../crew/displayName';
 import { provenanceOf } from '../source/provenance';
 
@@ -56,7 +57,7 @@ export function agentCount(n: number): string {
 /** The hover text of a crew: its state, then its metadata; the archetype comes from its CrewSchedulingPolicy once known. */
 export function crewTooltip(crew: CrewSummary, archetype?: string): string {
   const display = titleOf(crew);
-  const lines = [display === crew.name ? '' : display, `${crew.namespace}/${crew.name}`, `Phase: ${crew.phase}${crew.ready ? ' (ready)' : ''}`];
+  const lines = [display === crew.name ? '' : display, `${crew.namespace}/${crew.name}`, TERMS.crew, `Phase: ${crew.phase}${crew.ready ? ' (ready)' : ''}`];
   if (crew.coordinator) lines.push(`Coordinator: ${crew.coordinator}`);
   if (crew.message) lines.push(crew.message);
   if (crew.description) lines.push(`Description: ${crew.description}`);

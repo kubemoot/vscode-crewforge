@@ -138,7 +138,7 @@ describe('the Contents of a crew', () => {
     expect(v.contentsFrom).toBe('live');
     expect(v.contents.map((c) => `${c.group}:${c.count}`)).toEqual(['agents:2', 'prompts:0', 'skills:0', 'models:0', 'rag:0', 'mcp:0', 'tools:0', 'policies:0', 'notifications:0', 'fitness:0', 'deployment:1']);
     const html = renderCrewPage(v);
-    expect(html).toContain('<h2>Contents</h2>');
+    expect(html).toMatch(/<h2[^>]*>Contents<\/h2>/);
     expect(html).toContain('data-action="group" data-arg="rag" title="Show the RAG Sources group in the tree">RAG Sources 0</button>');
     expect(html).toContain('>Agents 2</button> · ');
     expect(html).toContain('>Deployment</button>');
@@ -160,7 +160,7 @@ describe('the Contents of a crew', () => {
       }),
     );
     expect(failed).toMatchObject({ contentsFrom: 'none', contents: [] });
-    expect(renderCrewPage(failed)).not.toContain('<h2>Contents</h2>');
+    expect(renderCrewPage(failed)).not.toMatch(/<h2[^>]*>Contents<\/h2>/);
     expect((await gatherVitals({ entry }, deps({ deploymentOf: async () => undefined }))).contentsFrom).toBe('none');
   });
 });
@@ -180,7 +180,8 @@ describe('renderCrewPage', () => {
   it('shows a deployed crew: status, deployment times, agents by role, conditions, and conversations', async () => {
     const v = await vitals();
     const html = renderCrewPage(v);
-    for (const text of ['<h1>demo <span class="badge good">Ready</span></h1>', 'crew-demo in lab', 'Chart version differs: source 0.2.2, deployed 0.46.0-rc.0', '/w/demo', 'Helm chart', 'datetime="2026-09-29T10:00:00Z"', 'me@example.com', '1 coordinator, 1 tooler', 'AgentsReady', 'Which nodes?', 'Agent k8s failed', 'qwen-8b (qwen3:8b), bare']) {
+    expect(html).toMatch(/<h1[^>]*>demo <span class="badge good"[^>]*>Ready<\/span><\/h1>/);
+    for (const text of ['crew-demo in lab', 'Chart version differs: source 0.2.2, deployed 0.46.0-rc.0', '/w/demo', 'Helm chart', 'datetime="2026-09-29T10:00:00Z"', 'me@example.com', '1 coordinator, 1 tooler', 'AgentsReady', 'Which nodes?', 'Agent k8s failed', 'qwen-8b (qwen3:8b), bare']) {
       expect(html).toContain(text);
     }
     expect(enabled(v)).toEqual(['deploy', 'redeploy', 'undeploy', 'ask', 'fitness', 'fitnessDashboard', 'lint', 'yaml', 'refresh']);

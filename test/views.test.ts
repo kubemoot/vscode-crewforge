@@ -1,3 +1,4 @@
+import { TERMS } from '../src/definitions';
 import { describe, expect, it } from 'vitest';
 import { agentProblems, cardText } from '../src/discussion/cardText';
 import type { CrewSummary } from '../src/k8s/crews';
@@ -19,7 +20,7 @@ describe('tree model', () => {
     expect(crewDescription(c)).toBe('Ready, 2 agents');
     expect(crewDescription(crew('x', 'n', { agents: 1 }))).toBe('Ready, 1 agent');
     expect(crewDescription(crew('x', 'n'))).toBe('Ready');
-    expect(crewTooltip(c)).toBe('team-1/lab-ops\nPhase: Ready (ready)\nCoordinator: coord\nCrew operational\nNamespace: team-1');
+    expect(crewTooltip(c)).toBe(`team-1/lab-ops\n${TERMS.crew}\nPhase: Ready (ready)\nCoordinator: coord\nCrew operational\nNamespace: team-1`);
     expect(crewAbout(c)).toBe('2 agents, coordinator coord');
     expect(crewAbout(crew('x', 'n', { ready: false, phase: 'Pending' }))).toBe('phase Pending: it may not answer yet');
     expect(crewAbout(crew('x', 'n', { agents: 1 }))).toBe('1 agent');
@@ -45,6 +46,7 @@ describe('tree model', () => {
     });
     expect(crewTooltip(c, 'consent-3').split('\n')).toEqual([
       'team-1/lab-ops',
+      TERMS.crew,
       'Phase: Deploying',
       'Description: Answers lab questions',
       'Namespace: team-1',

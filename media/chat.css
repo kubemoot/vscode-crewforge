@@ -171,3 +171,7 @@ button.finding-agent:focus-visible { outline: 1px solid var(--color-accent); out
   .finding-agent { min-width: 0; }
   .input-area { padding: 0.5rem; }
 }
+
+/* Tooltip shown on keyboard focus */
+.focus-tip { position: fixed; z-index: 1000; max-width: 22rem; padding: 0.35rem 0.55rem; font-size: 0.85em; line-height: 1.35; color: var(--vscode-editorHoverWidget-foreground, var(--vscode-foreground)); background: var(--vscode-editorHoverWidget-background, var(--vscode-editorWidget-background)); border: 1px solid var(--vscode-editorHoverWidget-border, var(--vscode-widget-border, rgba(128, 128, 128, 0.5))); border-radius: 3px; box-shadow: 0 2px 8px var(--vscode-widget-shadow, rgba(0, 0, 0, 0.3)); pointer-events: none; }
+.sidebar-resizer:focus-visible { outline: 1px solid var(--color-accent); }

@@ -1,5 +1,8 @@
+import { ACTIONS, COLUMNS, FACTS, HEADINGS, lookup } from '../definitions';
+import type { CrewSummary } from '../k8s/crews';
+import { canAnswer } from '../k8s/crewState';
 import { SELECT_CONTEXT } from '../views/errors';
-import { escapeHtml, formatTime } from '../webview/render';
+import { escapeHtml, formatTime, tipAttrs } from '../webview/render';
 
 /** Markup built by this module, already escaped: a value a page shows as it is. */
 export class Html {
@@ -35,13 +38,13 @@ export function button(b: ButtonSpec, inMenu = false): string {
 }
 
 /** The button a page shows when it could not read the cluster: another context may help. */
-export const SELECT_CONTEXT_BUTTON: ButtonSpec = { action: 'selectContext', label: SELECT_CONTEXT.title, title: 'Pick another context from the kubeconfig' };
+export const SELECT_CONTEXT_BUTTON: ButtonSpec = { action: 'selectContext', label: SELECT_CONTEXT.title, title: ACTIONS.selectContext };
 
 /** The button a page shows when no local source renders the crew. */
-export const OPEN_SOURCE_FOLDER: ButtonSpec = { action: 'openSourceFolder', label: "Open the Crew's Source Folder...", title: 'Add the folder that holds its chart or bundle to the workspace', primary: true };
+export const OPEN_SOURCE_FOLDER: ButtonSpec = { action: 'openSourceFolder', label: "Open the Crew's Source Folder...", title: ACTIONS.openSourceFolder, primary: true };
 
 /** The button a page shows when the crew is not deployed and a source can deploy it. */
-export const DEPLOY_TO_NAMESPACE: ButtonSpec = { action: 'deploy', label: 'Deploy to Namespace...', title: 'Deploy the source to a namespace you pick', primary: true };
+export const DEPLOY_TO_NAMESPACE: ButtonSpec = { action: 'deploy', label: 'Deploy to Namespace...', title: ACTIONS.deployShort, primary: true };
 
 export function buttons(specs: ButtonSpec[]): string {
   return specs.length ? `<div class="actions">${specs.map((b) => button(b)).join('')}</div>` : '';
@@ -56,7 +59,7 @@ export function actionBar(specs: ButtonSpec[]): string {
   const main = specs.filter((b) => b.primary);
   const rest = specs.filter((b) => !b.primary);
   if (rest.length === 0) return buttons(main);
-  const menu = `<details class="menu"><summary class="btn" title="More actions">More</summary><div class="menu-list" role="menu">${rest.map((b) => button(b, true)).join('')}</div></details>`;
+  const menu = `<details class="menu"><summary class="btn" title="${escape(ACTIONS.moreActions)}">More</summary><div class="menu-list" role="menu">${rest.map((b) => button(b, true)).join('')}</div></details>`;
   return `<div class="actions">${main.map((b) => button(b)).join('')}${menu}</div>`;
 }
 
@@ -70,9 +73,14 @@ export function moment(iso: string | undefined, now = Date.now(), locale?: strin
   return new Html(shown ? `<time datetime="${escape(iso)}" title="${escape(iso)}">${escape(shown)}</time>` : escape(iso));
 }
 
-/** A titled section. `body` is HTML already escaped. */
-export function section(title: string, body: string): string {
-  return `<section><h2>${escape(title)}</h2>${body}</section>`;
+/** A heading of a page or pane: its tag, its text, and the definition of its term as the tooltip. */
+export function heading(tag: 'h1' | 'h2' | 'h3', content: string, tip: string | undefined): string {
+  return `<${tag}${tipAttrs(tip)}>${content}</${tag}>`;
+}
+
+/** A titled section; `tip` defines its heading, else the heading's own text is looked up. `body` is HTML already escaped. */
+export function section(title: string, body: string, tip?: string): string {
+  return `<section>${heading('h2', escape(title), tip ?? lookup(HEADINGS, title))}${body}</section>`;
 }
 
 /** Label and value rows; rows without a value are left out. Values are escaped. */
@@ -83,13 +91,13 @@ export function facts(rows: [string, Shown][]): string {
 }
 
 function fact([label, value]: [string, Shown]): string {
-  return `<dt>${escape(label)}</dt><dd>${escape(value)}</dd>`;
+  return `<dt${tipAttrs(lookup(FACTS, label))}>${escape(label)}</dt><dd>${escape(value)}</dd>`;
 }
 
 /** A table: header cells are escaped; body cells are HTML already escaped (use `escape` or `cell`). */
 export function table(head: string[], rows: string[][], empty = 'None'): string {
   if (rows.length === 0) return `<p class="muted">${escape(empty)}</p>`;
-  const th = head.map((h) => `<th>${escape(h)}</th>`).join('');
+  const th = head.map((h) => `<th${tipAttrs(lookup(COLUMNS, h))}>${escape(h)}</th>`).join('');
   const body = rows.map(tableRow).join('');
   return `<table><thead><tr>${th}</tr></thead><tbody>${body}</tbody></table>`;
 }
@@ -102,9 +110,15 @@ function tableCell(cell: string): string {
   return `<td>${cell}</td>`;
 }
 
-/** A status word with a color class: good, warn, bad, or plain. */
-export function badge(text: string, tone: 'good' | 'warn' | 'bad' | 'plain' = 'plain'): string {
-  return `<span class="badge ${tone}">${escape(text)}</span>`;
+/** A status word with a color class (good, warn, bad, or plain); `title` says what the status describes. */
+export function badge(text: string, tone: 'good' | 'warn' | 'bad' | 'plain', title: string): string {
+  return `<span class="badge ${tone}"${tipAttrs(title)}>${escape(text)}</span>`;
+}
+
+/** A crew's phase as a badge: ready when it can take a question, with that as its tooltip. */
+export function crewPhaseBadge(crew: CrewSummary): string {
+  const ok = canAnswer(crew).ok;
+  return badge(crew.phase, readyTone(ok), `The crew's phase in the cluster. ${ok ? 'It can take a question.' : 'It cannot take a question yet.'}`);
 }
 
 /** The tone of a readiness badge: good when ready, warn otherwise. */

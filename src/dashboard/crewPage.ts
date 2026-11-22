@@ -1,11 +1,12 @@
 import { canAnswer, capacityLine, retentionLines } from '../k8s/crewState';
 import type { CrewSummary } from '../k8s/crews';
 import { GROUPS } from '../crew/groups';
+import { ACTIONS, HEADINGS, TERMS } from '../definitions';
 import { chartVersionBanner } from '../source/normalize';
 import { META_SEPARATOR } from '../webview/render';
 import { tabBar, type CrewTab } from './crewTabs';
 import { agentsByRole, type CrewVitals } from './crewVitals';
-import { actionBar, badge, banner, escape, facts, moment, note, section, SELECT_CONTEXT_BUTTON, table, readyTone, type ButtonSpec, type Shown } from './html';
+import { actionBar, badge, banner, crewPhaseBadge, escape, facts, heading, moment, note, section, SELECT_CONTEXT_BUTTON, table, readyTone, type ButtonSpec, type Shown } from './html';
 
 /** The crew dashboard's page body: the header, the buttons, the tabs, and the shown tab (the overview unless `body` is given). */
 export function renderCrewPage(v: CrewVitals, tab: CrewTab = 'overview', body?: string): string {
@@ -14,12 +15,13 @@ export function renderCrewPage(v: CrewVitals, tab: CrewTab = 'overview', body?: 
 }
 
 function header(v: CrewVitals): string {
-  const state = v.deployment ? badge(v.deployment.crew.phase, readyTone(canAnswer(v.deployment.crew).ok)) : badge('not deployed');
+  const state = v.deployment ? crewPhaseBadge(v.deployment.crew) : badge('not deployed', 'plain', 'No deployment of this crew was found in the namespaces CrewForge reads.');
   const place = v.deployment ? `${v.deployment.namespace} in ${v.context}` : `not deployed in ${v.context}`;
   const where = v.title === v.name ? place : `${v.name} · ${place}`;
   const description = v.description ? `<p>${escape(v.description)}</p>` : '';
   const version = chartVersionBanner(v.source?.chart?.version, v.provenance?.chartVersion);
-  return `<h1>${escape(v.title)} ${state}</h1><p class="muted">${escape(where)}</p>${description}${version ? banner(version) : ''}`;
+  const title = heading('h1', `${escape(v.title)} ${state}`, TERMS.crew);
+  return `${title}<p class="muted">${escape(where)}</p>${description}${version ? banner(version) : ''}`;
 }
 
 /** The first reason that blocks a button, if any. */
@@ -41,15 +43,15 @@ export function crewButtons(v: CrewVitals): ButtonSpec[] {
   const r = reasons(v);
   const deployed = v.deployment !== undefined;
   return [
-    { action: 'deploy', label: 'Deploy to Namespace...', title: 'Deploy to a namespace you pick (helm upgrade --install, or kubectl apply for a bundle)', disabled: r.noSource, primary: !deployed },
-    { action: 'redeploy', label: 'Redeploy', title: 'Redeploy from source to the namespace it was last deployed to (helm upgrade)', disabled: blocked(r.noSource, r.notDeployed, r.flux) },
-    { action: 'undeploy', label: 'Undeploy', title: 'Remove the deployment (helm uninstall, or delete its Kubemoot objects)', disabled: blocked(r.notDeployed, r.flux) },
-    { action: 'ask', label: 'Ask', title: 'Ask this crew a question', disabled: r.notDeployed, primary: deployed },
-    { action: 'fitness', label: 'Run Fitness', title: 'Run one of its fitness definitions', disabled: blocked(r.notDeployed, r.noSource, r.running) },
-    { action: 'fitnessDashboard', label: 'Fitness Runs', title: 'Open the fitness dashboard for this deployment', disabled: r.notDeployed },
-    { action: 'lint', label: 'Lint', title: 'Lint (helm lint and schema check)', disabled: r.noSource },
-    { action: 'yaml', label: 'Show YAML', title: v.sourceAt ? "Open the Crew's source file at the Crew" : 'Show the live Crew YAML', disabled: r.nothingToShow },
-    { action: 'refresh', label: 'Refresh', title: 'Read everything again' },
+    { action: 'deploy', label: 'Deploy to Namespace...', title: ACTIONS.deploy, disabled: r.noSource, primary: !deployed },
+    { action: 'redeploy', label: 'Redeploy', title: ACTIONS.redeploy, disabled: blocked(r.noSource, r.notDeployed, r.flux) },
+    { action: 'undeploy', label: 'Undeploy', title: ACTIONS.undeploy, disabled: blocked(r.notDeployed, r.flux) },
+    { action: 'ask', label: 'Ask', title: ACTIONS.ask, disabled: r.notDeployed, primary: deployed },
+    { action: 'fitness', label: 'Run Fitness', title: ACTIONS.fitness, disabled: blocked(r.notDeployed, r.noSource, r.running) },
+    { action: 'fitnessDashboard', label: 'Fitness Runs', title: ACTIONS.fitnessDashboard, disabled: r.notDeployed },
+    { action: 'lint', label: 'Lint', title: ACTIONS.lint, disabled: r.noSource },
+    { action: 'yaml', label: 'Show YAML', title: v.sourceAt ? ACTIONS.yamlSource : ACTIONS.yamlLive, disabled: r.nothingToShow },
+    { action: 'refresh', label: 'Refresh', title: ACTIONS.refreshPage },
     ...(v.deploymentError ? [SELECT_CONTEXT_BUTTON] : []),
   ];
 }
@@ -117,7 +119,7 @@ function agentsSection(v: CrewVitals): string {
 }
 
 function agentState(a: { ready?: boolean; phase?: string }): string {
-  return badge(a.ready ? 'ready' : (a.phase ?? 'starting'), readyTone(a.ready));
+  return badge(a.ready ? 'ready' : (a.phase ?? 'starting'), readyTone(a.ready), a.ready ? 'The agent is running and can take part in a moot.' : 'The agent is not ready to take part in a moot yet.');
 }
 
 function modelLabel(m: { name: string; model?: string }): string {
@@ -139,7 +141,7 @@ function contentsSection(v: CrewVitals): string {
 function statusSection(v: CrewVitals): string {
   if (!v.deployment) return '';
   const crew = v.deployment.crew;
-  const conditions = (crew.conditions ?? []).map((c) => [escape(c.type), badge(c.status, c.status === 'True' ? 'good' : 'warn'), escape(c.reason ?? ''), escape(c.message ?? '')]);
+  const conditions = (crew.conditions ?? []).map((c) => [escape(c.type), badge(c.status, c.status === 'True' ? 'good' : 'warn', c.status === 'True' ? 'This condition holds.' : 'This condition does not hold.'), escape(c.reason ?? ''), escape(c.message ?? '')]);
   const head = facts([
     ['Phase', crew.phase],
     ['Reconciled', crew.ready ? 'yes' : 'no'],
@@ -168,5 +170,5 @@ function conversationsSection(v: CrewVitals): string {
     ['Answering now', c.active],
   ]);
   const errors = table(['When', 'Problem'], c.errors.map((e) => [escape(moment(e.at)), escape(e.text)]), 'No failed turns or agent failures saved.');
-  return section('Conversations', `${note('Saved by CrewForge on this computer.')}${counts}<h3>Recent problems</h3>${errors}`);
+  return section('Conversations', `${note('Saved by CrewForge on this computer.')}${counts}${heading('h3', 'Recent problems', HEADINGS['Recent problems'])}${errors}`);
 }

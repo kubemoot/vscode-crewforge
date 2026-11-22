@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { TERMS } from '../definitions';
 import { connect, namespaceScope, type Connection } from '../connection';
 import { loadCrewDetails, type CrewDetails } from '../crew/details';
 import type { Group } from '../crew/groups';
@@ -192,7 +193,7 @@ function connectionItem(node: Extract<CrewNode, { kind: 'connection' }>): vscode
   const item = new vscode.TreeItem(node.label, vscode.TreeItemCollapsibleState.None);
   item.id = 'connection';
   item.description = 'Crews Overview';
-  item.tooltip = node.tooltip;
+  item.tooltip = `${TERMS.connection}\n\n${node.tooltip}`;
   item.iconPath = new vscode.ThemeIcon('plug');
   item.contextValue = 'connection';
   item.command = { command: 'crewforge.openCrewsOverview', title: 'Open Crews Overview' };
@@ -202,6 +203,8 @@ function connectionItem(node: Extract<CrewNode, { kind: 'connection' }>): vscode
 function namespaceItem(group: NamespaceGroup): vscode.TreeItem {
   const item = new vscode.TreeItem(group.namespace, vscode.TreeItemCollapsibleState.Expanded);
   item.id = `namespace:${group.namespace}`;
+  const crews = group.crews.length === 1 ? '1 crew' : `${group.crews.length} crews`;
+  item.tooltip = `Namespace ${group.namespace}: ${crews}\n${TERMS.namespace}`;
   item.iconPath = new vscode.ThemeIcon('symbol-namespace');
   item.contextValue = 'namespace';
   return item;
