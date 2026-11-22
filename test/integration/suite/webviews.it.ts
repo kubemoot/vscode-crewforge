@@ -86,7 +86,7 @@ describe('CrewForge webviews in a real VS Code', () => {
     await pageShows(api, key, ['Runs', 'lab-ops-baseline']);
     assert.ok(await api.press(key, 'select', 'lab-ops-baseline'));
     await pageShows(api, key, [
-      'Run lab-ops-baseline',
+      'Scenarios',
       'Judge: done, 2 scenarios scored, mean 72',
       'Lists every pod with its phase.',
       'Names the warning events but misses their reasons.',
