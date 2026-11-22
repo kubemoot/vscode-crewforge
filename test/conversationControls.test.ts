@@ -104,14 +104,14 @@ describe('conversation actions', () => {
     gateway.responses.push(JSON.stringify({ conversationId: 'conv-1', action, threads: ['t1', 't2'] }));
     await act(panel, action);
     expect(gateway.calls.filter((c) => c.method === 'POST')).toEqual([{ method: 'POST', path: `/api/v1/discussions/lab-ops/conv-1/${action}`, body: undefined }]);
-    expect(recorded.info).toContain(`${said} "Which nodes?" (2 running threads).`);
+    expect(recorded.info).toContain(`${said} "Which nodes?" (2 running turns).`);
   });
 
-  it('says one running thread in the singular', async () => {
+  it('says one running turn in the singular', async () => {
     const panel = open(await saved('1', 'conv-1'));
     gateway.responses.push('{"conversationId":"conv-1","action":"stop","threads":["t1"]}');
     await act(panel, 'stop');
-    expect(recorded.info).toContain('Stopped "Which nodes?" (1 running thread).');
+    expect(recorded.info).toContain('Stopped "Which nodes?" (1 running turn).');
   });
 
   it('acts on a saved conversation from the list, not the one shown', async () => {
@@ -121,7 +121,7 @@ describe('conversation actions', () => {
     gateway.responses.push('{"conversationId":"conv-2","action":"pause","threads":["t9"]}');
     await act(panel, 'pause', other.id);
     expect(gateway.calls.at(-1)?.path).toBe('/api/v1/discussions/lab-ops/conv-2/pause');
-    expect(recorded.info).toContain('Paused "Other" (1 running thread).');
+    expect(recorded.info).toContain('Paused "Other" (1 running turn).');
   });
 
   it('ignores an action the page made up, and tells a conversation the crew never saw to ask first', async () => {
@@ -154,7 +154,7 @@ describe('conversation actions', () => {
     expect(recorded.errors.at(-1)).toContain('you need the kubemoot-conversation-controller role');
     gateway.responses.push(failure(409, '{"error":"the conversation has no running discussion"}'));
     await act(panel, 'resume');
-    expect(recorded.errors.at(-1)).toContain('The conversation has no running discussion to resume');
+    expect(recorded.errors.at(-1)).toContain('The conversation has no turn running to resume');
     gateway.responses.push(failure(500, '{"error":"boom"}'));
     await act(panel, 'pause');
     expect(recorded.errors.at(-1)).toContain('The crew lab-ops failed to pause the conversation.');
@@ -213,8 +213,8 @@ describe('delete from the crew', () => {
     expect(recorded.warnings).toEqual(['Delete "Which nodes?" from the crew?']);
     expect(recorded.warningDetails[0]).toContain('The copy on this computer stays');
     expect(gateway.calls.filter((c) => c.method === 'DELETE')).toEqual([{ method: 'DELETE', path: '/api/v1/discussions/lab-ops/conv-1', body: undefined }]);
-    expect(recorded.info).toEqual(['Deleted the conversation from the crew: 17 items removed across 1 thread.']);
-    expect(recorded.infoDetails[0]).toContain('discussion messages: 9');
+    expect(recorded.info).toEqual(['Deleted the conversation from the crew: 17 items removed across 1 turn.']);
+    expect(recorded.infoDetails[0]).toContain('agent messages: 9');
     expect(recorded.infoDetails[0]).toContain('Not removed:');
     expect(recorded.infoDetails[0]).toContain('logs and backups');
   });

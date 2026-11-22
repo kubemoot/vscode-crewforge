@@ -6,7 +6,7 @@ import { canAnswer } from '../k8s/crewState';
 import type { KubeTransport } from '../k8s/request';
 import { listKind, type KubemootKind } from '../source/live';
 import { provenanceOf } from '../source/provenance';
-import { badge, buttons, escape, note, section, SELECT_CONTEXT_BUTTON, table, readyTone, type ButtonSpec } from './html';
+import { badge, buttons, escape, moment, note, section, SELECT_CONTEXT_BUTTON, table, readyTone, type ButtonSpec } from './html';
 
 /** One deployed crew as the overview lists it. */
 export interface OverviewRow {
@@ -88,7 +88,7 @@ function rowCells(r: OverviewRow): string[] {
     escape(agents),
     escape(r.chartVersion ?? ''),
     escape(r.channel),
-    escape(r.lastDeploy ?? ''),
+    escape(moment(r.lastDeploy) ?? ''),
     escape(r.active ?? ''),
     r.problems ? badge(String(r.problems), 'bad') : '',
     escape(r.sourceOpen ? 'open' : ''),

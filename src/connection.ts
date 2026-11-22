@@ -16,7 +16,7 @@ export interface Connection {
   /** The namespace the kubeconfig's context sets, as `kubectl config set-context --namespace` does. */
   namespace?: string;
   /**
-   * A client for a crew's discussion gateway, reached over a port-forward so the request
+   * A client for a crew's gateway, reached over a port-forward so the request
    * carries the caller's Kubernetes token. Close it with the chat that uses it.
    */
   gateway?: (namespace: string, crew: string) => GatewayTransport;

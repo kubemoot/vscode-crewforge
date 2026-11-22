@@ -183,7 +183,7 @@ describe('ChatSession', () => {
     await session.send('q');
     const answer = session.view.conversation.messages[1];
     expect(answer).toMatchObject({ role: 'assistant', content: 'partial' });
-    expect(answer.problems).toEqual(['k8s failed: the MCP server did not answer', "The crew's discussion gateway reported an error: consumer lost"]);
+    expect(answer.problems).toEqual(['k8s failed: the MCP server did not answer', "The crew's gateway reported an error: consumer lost"]);
     expect(saved[0].messages[1].problems).toEqual(answer.problems);
   });
 
@@ -208,7 +208,7 @@ describe('ChatSession', () => {
     );
     await session.send('q');
     expect(session.view.conversation.messages.slice(1)).toMatchObject([
-      { role: 'system', content: "The crew's discussion gateway reported an error: boom", problems: ['k8s failed'] },
+      { role: 'system', content: "The crew's gateway reported an error: boom", problems: ['k8s failed'] },
     ]);
   });
 

@@ -27,7 +27,7 @@ const STARTING = new Map([
 const WORKING = new Map<string, (card: AgentCard) => string>([
   ['triaging', (c) => `queued${where(c)}...`],
   ['evaluating', (c) => `analyzing${where(c)}...`],
-  ['waiting', (c) => `waiting for a GPU with room for ${c.model ?? 'its model'}...`],
+  ['waiting', (c) => `waiting for an accelerator with room for ${c.model ?? 'its model'}...`],
 ]);
 
 /** The statuses of an agent still at work on the turn. */
@@ -43,8 +43,8 @@ const VERDICTS = new Map([
 
 /** Why an agent stood aside because it could not run, in plain words. */
 const STAND_ASIDE_REASONS = new Map([
-  ['gpu-busy', 'stood aside: every GPU was busy, so it could not run'],
-  ['model-too-large', 'stood aside: no GPU in this cluster can hold its model'],
+  ['gpu-busy', 'stood aside: every accelerator was busy, so it could not run'],
+  ['model-too-large', 'stood aside: no accelerator in this cluster can hold its model'],
 ]);
 
 function where(card: AgentCard): string {

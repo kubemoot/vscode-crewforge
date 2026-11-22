@@ -143,13 +143,13 @@
       },
       {
         "command": "crewforge.showDrift",
-        "title": "Compare Source with Live (normalized diff)",
+        "title": "Compare Source with Live",
         "category": "CrewForge",
         "icon": "$(diff)"
       },
       {
         "command": "crewforge.deploySource",
-        "title": "Deploy with a Channel... (Helm, bundle, or Flux)",
+        "title": "Deploy with a Channel...",
         "category": "CrewForge",
         "icon": "$(cloud-upload)"
       },
@@ -161,7 +161,7 @@
       },
       {
         "command": "crewforge.applyResource",
-        "title": "Apply Only This Object (kubectl apply)",
+        "title": "Apply This Object",
         "category": "CrewForge",
         "icon": "$(arrow-up)"
       },
@@ -173,7 +173,7 @@
       },
       {
         "command": "crewforge.createCrew",
-        "title": "Create Crew (kmctl create)",
+        "title": "Create Crew...",
         "category": "CrewForge",
         "icon": "$(add)"
       },
@@ -185,7 +185,7 @@
       },
       {
         "command": "crewforge.lintCrew",
-        "title": "Lint (helm lint and schema check)",
+        "title": "Lint",
         "category": "CrewForge",
         "icon": "$(checklist)"
       },
@@ -214,7 +214,7 @@
       },
       {
         "command": "crewforge.deployRevision",
-        "title": "Deploy a Git Revision (Roll Back or Forward)",
+        "title": "Deploy a Git Revision...",
         "category": "CrewForge",
         "icon": "$(history)"
       },
@@ -231,7 +231,7 @@
       },
       {
         "command": "crewforge.followRollout",
-        "title": "Follow Flux Rollout (GitOps channel)",
+        "title": "Follow Flux Rollout",
         "category": "CrewForge",
         "icon": "$(eye)"
       },
@@ -249,7 +249,7 @@
       },
       {
         "command": "crewforge.showSourceYaml",
-        "title": "Show Source YAML (as rendered)",
+        "title": "Show Source YAML",
         "category": "CrewForge",
         "icon": "$(file-code)"
       },
@@ -261,7 +261,7 @@
       },
       {
         "command": "crewforge.deleteSource",
-        "title": "Delete Source... (move folder to trash)",
+        "title": "Delete Source...",
         "category": "CrewForge",
         "icon": "$(trash)"
       },
@@ -303,7 +303,7 @@
       },
       {
         "command": "crewforge.addScenario",
-        "title": "Add Fitness Scenario... (ADL or prose file)",
+        "title": "Add Fitness Scenario...",
         "category": "CrewForge",
         "icon": "$(add)"
       },
@@ -315,13 +315,13 @@
       },
       {
         "command": "crewforge.deleteScenario",
-        "title": "Delete Fitness Scenario... (to trash, or out of its suite)",
+        "title": "Delete Fitness Scenario...",
         "category": "CrewForge",
         "icon": "$(trash)"
       },
       {
         "command": "crewforge.runScenario",
-        "title": "Run This Scenario Only (one iteration)",
+        "title": "Run This Scenario",
         "category": "CrewForge",
         "icon": "$(play)"
       },
@@ -387,7 +387,7 @@
       },
       {
         "command": "crewforge.removeFromSource",
-        "title": "Remove from Source... (file to trash, or its document out of the file)",
+        "title": "Remove from Source...",
         "category": "CrewForge"
       },
       {
@@ -404,13 +404,13 @@
       },
       {
         "command": "crewforge.runDeployedFitness",
-        "title": "Run All Deployed Scenarios (one iteration)",
+        "title": "Run All Scenarios",
         "category": "CrewForge",
         "icon": "$(run-all)"
       },
       {
         "command": "crewforge.runDeployedScenario",
-        "title": "Run This Scenario Only (one iteration)",
+        "title": "Run This Scenario",
         "category": "CrewForge",
         "icon": "$(play)"
       },
@@ -439,7 +439,7 @@
       },
       {
         "command": "crewforge.runScenarioBatch",
-        "title": "Run Scenarios... (pick a batch)",
+        "title": "Run Scenarios...",
         "category": "CrewForge",
         "icon": "$(checklist)"
       },
@@ -1184,7 +1184,7 @@
         "crewforge.dashboardUrl": {
           "type": "string",
           "default": "",
-          "markdownDescription": "URL of the Kubemoot dashboard for this cluster, opened in your browser from:\n\n- **Powered by Kubemoot** in a chat\n- **Open this turn in the Kubemoot dashboard** under a crew's answer (shown only when this is set)\n- **Open in Kubemoot dashboard** and **Open XLSX** on the fitness dashboard\n\nCrewForge itself never reads the dashboard; it reads the cluster through the Kubernetes API. With a `kubectl port-forward` to the dashboard service, use its local address, for example `http://localhost:8080/dashboard`."
+          "markdownDescription": "URL of the Kubemoot dashboard for this cluster, opened in your browser from:\n\n- **Powered by Kubemoot** in a chat\n- **Open in the Moot** under a crew's answer (shown only when this is set)\n- **Open in Kubemoot dashboard** and **Open XLSX** on the fitness dashboard\n\nCrewForge itself never reads the dashboard; it reads the cluster through the Kubernetes API. With a `kubectl port-forward` to the dashboard service, use its local address, for example `http://localhost:8080/dashboard`."
         }
       }
     }

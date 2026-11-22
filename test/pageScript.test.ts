@@ -44,6 +44,24 @@ describe('the dashboard page script', () => {
     ]);
   });
 
+  it('closes a menu when an entry is chosen, when the page is clicked elsewhere, and on Escape, and reports the entry', () => {
+    deliver({ type: 'render', html: '<details class="menu" id="m" open><summary id="s">More</summary><div><button class="menu-item" data-action="lint" id="item"><span id="itemInner">Lint</span></button><p id="gap">x</p></div></details><p id="away">away</p>' });
+    const menu = document.getElementById('m') as HTMLDetailsElement;
+    document.getElementById('gap')!.click();
+    expect(menu.open).toBe(true);
+    document.getElementById('itemInner')!.click();
+    expect(menu.open).toBe(false);
+    expect(sent.at(-1)).toEqual({ type: 'action', action: 'lint', arg: undefined });
+    menu.open = true;
+    document.getElementById('away')!.click();
+    expect(menu.open).toBe(false);
+    menu.open = true;
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'x' }));
+    expect(menu.open).toBe(true);
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    expect(menu.open).toBe(false);
+  });
+
   it('shows the read under way, and hides the line once the read is done', () => {
     const status = document.getElementById('status')!;
     deliver({ type: 'status', text: 'Still reading from kind-dev...' });

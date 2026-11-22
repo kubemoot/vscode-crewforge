@@ -84,9 +84,9 @@ describe('the chat page', () => {
     post(newConversation('ctx', 'team-a', 'lab-ops'));
     expect($('title').textContent).toBe('lab-ops');
     expect($('where').textContent).toContain('team-a');
-    expect($('messages').textContent).toContain('Discuss with the lab-ops crew');
+    expect($('messages').textContent).toContain('Ask the lab-ops crew');
     expect(($('copy') as HTMLButtonElement).hidden).toBe(true);
-    expect(shown.at(-1)).toContain('Discuss with the lab-ops crew');
+    expect(shown.at(-1)).toContain('Ask the lab-ops crew');
   });
 
   it("titles the page with the crew's display name, its technical name beside it and on hover", () => {
@@ -95,7 +95,7 @@ describe('the chat page', () => {
     expect($('title').textContent).toBe('Lab-Ops Crew');
     expect($('title').title).toBe('lab-ops');
     expect($('where').textContent).toBe('lab-ops · team-a · ctx');
-    expect($('messages').textContent).toContain('Discuss with Lab-Ops Crew');
+    expect($('messages').textContent).toContain('Ask Lab-Ops Crew');
   });
 
   it('renders the answer as Markdown, shows raw HTML as text, and links only web URLs', () => {
@@ -179,7 +179,7 @@ describe('the chat page', () => {
     [{ state: 'not-ready', reason: 'The crew is not ready: phase Pending' }],
     [{ state: 'error', reason: 'The crew is in an error state: Agent a is Failed' }],
     [{ state: 'unreachable', reason: "Can't reach the cluster: connect ECONNREFUSED" }],
-    [{ state: 'unreachable', reason: "Can't reach the crew's discussion gateway" }],
+    [{ state: 'unreachable', reason: "Can't reach the crew's gateway" }],
   ] as const)('blocks sending with the reason beside the input: %o', (blocked) => {
     const c = newConversation('ctx', 'team-a', 'lab-ops');
     availability = blocked;
@@ -312,12 +312,41 @@ describe('the chat page', () => {
     c.messages.push({ role: 'user', content: 'q', timestamp: c.startedAt });
     post(c);
     expect(header.map((b) => b.hidden)).toEqual([false, false, false, false]);
-    expect(header.map((b) => b.getAttribute('aria-label'))).toEqual(['Rename conversation', 'Delete conversation from this computer', 'Copy conversation as Markdown', 'Save conversation as Markdown']);
+    expect(header.map((b) => b.textContent)).toEqual(['Rename...', 'Delete from this computer...', 'Copy as Markdown', 'Save as Markdown...']);
     $('rename').click();
     $('delete').click();
     expect(sent.slice(1)).toEqual([{ type: 'rename' }, { type: 'delete' }]);
     post(c, { busy: true });
     expect(header.map((b) => b.disabled)).toEqual([true, true, false, false]);
+  });
+
+  it('keeps the conversation actions in one menu that shows once there is something to act on, and closes it after a choice, a click elsewhere, or Escape', () => {
+    const menu = $('menu') as HTMLDetailsElement;
+    const c = newConversation('ctx', 'team-a', 'lab-ops');
+    post(c);
+    expect(menu.hidden).toBe(true);
+    c.messages.push({ role: 'user', content: 'q', timestamp: c.startedAt });
+    post(c);
+    expect(menu.hidden).toBe(false);
+    expect(document.querySelectorAll('.header-actions, .chat-header > button')).toHaveLength(0);
+    menu.open = true;
+    $('copy').click();
+    expect(menu.open).toBe(false);
+    menu.open = true;
+    $('messages').click();
+    expect(menu.open).toBe(false);
+    menu.open = true;
+    menu.querySelector<HTMLElement>('.menu-list')!.click();
+    expect(menu.open).toBe(true);
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    expect(menu.open).toBe(false);
+    menu.open = true;
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'a' }));
+    expect(menu.open).toBe(true);
+    const known = newConversation('ctx', 'team-a', 'lab-ops');
+    known.conversationId = 'conv-1';
+    post(known);
+    expect(menu.hidden).toBe(false);
   });
 
   it('offers stop, pause, resume and delete on the crew only for a conversation the crew knows', () => {
@@ -328,7 +357,8 @@ describe('the chat page', () => {
     c.conversationId = 'conv-1';
     post(c);
     expect(buttons.map((b) => b.hidden)).toEqual([false, false, false, false]);
-    expect(buttons.map((b) => b.getAttribute('aria-label'))).toEqual([
+    expect(buttons.map((b) => b.textContent)).toEqual(['Stop', 'Pause', 'Resume', 'Delete from the crew...']);
+    expect(buttons.map((b) => b.title)).toEqual([
       'Stop the conversation on the crew',
       'Pause the conversation on the crew',
       'Resume the conversation on the crew',
@@ -349,9 +379,11 @@ describe('the chat page', () => {
     post(c, {}, [meta('old-1', 'conv-1'), meta('old-2')]);
     const items = [...$('history').querySelectorAll('.discussion-item')];
     expect(items[0].querySelectorAll('.conv-action')).toHaveLength(4);
+    expect(items[0].querySelectorAll('details.menu')).toHaveLength(1);
     expect(items[1].querySelectorAll('.conv-action')).toHaveLength(0);
     const pause = items[0].querySelector<HTMLButtonElement>('[data-conv-action="pause"]')!;
-    expect(pause.title).toBe('Pause on the crew');
+    expect(pause.title).toBe('Pause the conversation on the crew');
+    expect(pause.textContent).toBe('Pause');
     pause.click();
     items[0].querySelector<HTMLButtonElement>('[data-conv-action="erase"]')!.click();
     expect(sent.slice(1)).toEqual([
@@ -376,7 +408,7 @@ describe('the chat page', () => {
     expect($('note').textContent).toBe('The crew has something new in this conversation.');
     links = { agents: [], dashboard: true };
     post(c, {}, history);
-    expect($('note').textContent).toBe('The crew has something new in this conversation. Read it in the Kubemoot dashboard.');
+    expect($('note').textContent).toBe('The crew has something new in this conversation. Read it under Conversations in the Kubemoot dashboard.');
     post(c, { busy: true }, history);
     expect($('note').textContent).toBe('The crew is answering');
   });
@@ -409,7 +441,7 @@ describe('the chat page', () => {
     const shown = [...$('messages').querySelectorAll('.finding-card')].map((el) => [el.className, el.querySelector('.finding-summary')?.textContent]);
     expect(shown).toEqual([
       ['finding-card finding-problem', 'failed: tool error'],
-      ['finding-card finding-problem', 'stood aside: no GPU in this cluster can hold its model'],
+      ['finding-card finding-problem', 'stood aside: no accelerator in this cluster can hold its model'],
       ['finding-card', 'agrees: ok'],
     ]);
   });
@@ -531,14 +563,14 @@ describe('the chat page', () => {
     });
     post(c);
     const details = $('messages').querySelector('details.turn-agents')!;
-    expect(details.querySelector('summary')?.textContent).toBe('2 agents took part');
+    expect(details.querySelector('summary')?.textContent).toBe('The Moot: 2 agents');
     expect(details.querySelectorAll('.finding-card.finding-problem')).toHaveLength(1);
     expect(details.textContent).toContain('<b>x</b>');
     (details.querySelector('button.finding-agent') as HTMLElement).click();
     expect(sent.at(-1)).toEqual({ type: 'openAgentSource', agent: 'node-watcher' });
     c.messages[1].agents = [{ agent: 'solo', text: 'agrees', problem: false }];
     post(c);
-    expect($('messages').querySelector('details.turn-agents summary')?.textContent).toBe('1 agent took part');
+    expect($('messages').querySelector('details.turn-agents summary')?.textContent).toBe('The Moot: 1 agent');
   });
 
   it('offers Open in Dashboard on a turn with a thread, only when the dashboard is set', () => {
@@ -557,7 +589,7 @@ describe('the chat page', () => {
     post(c);
     const buttons = [...$('messages').querySelectorAll<HTMLElement>('[data-action="dashboard"]')];
     expect(buttons.map((b) => b.dataset.index)).toEqual(['1', '3']);
-    expect(buttons[0].getAttribute('aria-label')).toBe('Open this turn in the Kubemoot dashboard');
+    expect(buttons[0].getAttribute('aria-label')).toBe('Open in the Moot');
     buttons[1].click();
     expect(sent.at(-1)).toEqual({ type: 'openTurnInDashboard', index: 3 });
   });

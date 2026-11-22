@@ -43,7 +43,7 @@ describe('resolveTarget', () => {
   it('fails clearly for a missing Service, a Service without a selector, an unknown port name, and no port 80', async () => {
     const t = new FakeTransport();
     t.responses.push(new KubeError('Not found', 404));
-    await expect(resolveTarget(t, 'ns', 'c')).rejects.toThrow(/no discussion service c-discussion in namespace ns/);
+    await expect(resolveTarget(t, 'ns', 'c')).rejects.toThrow(/no gateway service c-discussion in namespace ns/);
     t.responses.push(service(8080, {}));
     await expect(resolveTarget(t, 'ns', 'c')).rejects.toThrow(/selects no pods/);
     t.responses.push(service('nope'), JSON.stringify({ items: [pod('a', true)] }));

@@ -5,7 +5,7 @@ import { ConnectionError, KubeClient, KubeError, type KubeTransport } from '../k
 import { listenForward, type LocalForward, type PodTunnel } from './forward';
 import { resolveTarget } from './target';
 
-/** A transport to one crew's discussion gateway that can be closed when the chat is. */
+/** A transport to one crew's gateway that can be closed when the chat is. */
 export interface GatewayTransport extends KubeTransport {
   close(): Promise<void>;
 }
@@ -137,7 +137,7 @@ export interface GatewayContext {
  */
 export function explainGateway(err: unknown, where: GatewayContext): unknown {
   if (err instanceof ConnectionError) {
-    return new ConnectionError(`The connection to the discussion gateway of crew ${where.crew} (through a port-forward in context ${where.context}) failed or was cut. ${err.detail ?? ''}`.trim(), err.detail);
+    return new ConnectionError(`The connection to the gateway of crew ${where.crew} (through a port-forward in context ${where.context}) failed or was cut. ${err.detail ?? ''}`.trim(), err.detail);
   }
   if (!(err instanceof KubeError) || err.status === undefined) return err;
   const message = refusalMessage(err, where);
@@ -171,7 +171,7 @@ export interface GatewayParts {
 const realParts: GatewayParts = { tunnel: (config) => new PortForward(config) };
 
 /**
- * A client for one crew's discussion gateway, reached over a port-forward to its pod (the
+ * A client for one crew's gateway, reached over a port-forward to its pod (the
  * API server's service proxy strips the `Authorization` header). The forward opens on first
  * use and closes with `close()`. Every request carries the caller's Kubernetes token, which a
  * crew that sets `spec.discussion.access` uses to know who is asking and a crew that sets
@@ -248,7 +248,7 @@ export class GatewayClient implements GatewayTransport {
 /** A refusal to read the Service or its pods, said as what the port-forward needs. */
 function explainForward(err: unknown, namespace: string): unknown {
   if (err instanceof KubeError && err.status === 403) {
-    return new KubeError(`Your account may not reach the crew's discussion gateway. The port-forward needs get on services, list on pods, and create on pods/portforward in ${namespace}.`, 403, err.detail);
+    return new KubeError(`Your account may not reach the crew's gateway. The port-forward needs get on services, list on pods, and create on pods/portforward in ${namespace}.`, 403, err.detail);
   }
   return err;
 }

@@ -12,7 +12,7 @@ import { unreachableReason } from '../views/errors';
  */
 export type CrewAvailability = { state: 'ready' } | { state: 'not-ready' | 'error' | 'unreachable'; reason: string };
 
-/** A crew's availability from its Crew, its agents, and whether its discussion gateway has a running endpoint. */
+/** A crew's availability from its Crew, its agents, and whether its gateway has a running endpoint. */
 export function availabilityOf(r: CrewReadiness & { gateway?: boolean }): CrewAvailability {
   if (!r.crew) return { state: 'not-ready', reason: 'The crew is not deployed here any more' };
   const error = failedReason(r.crew, r.agents);
@@ -21,7 +21,7 @@ export function availabilityOf(r: CrewReadiness & { gateway?: boolean }): CrewAv
   if (!answer.ok) return { state: 'not-ready', reason: answer.kind === 'capacity' ? answer.reason : `The crew is not ready: ${answer.reason}` };
   const notReady = agentsReason(r.agents);
   if (notReady) return { state: 'not-ready', reason: `The crew is not ready: ${notReady}` };
-  if (r.gateway === false) return { state: 'unreachable', reason: "Can't reach the crew's discussion gateway" };
+  if (r.gateway === false) return { state: 'unreachable', reason: "Can't reach the crew's gateway" };
   return { state: 'ready' };
 }
 
@@ -38,7 +38,7 @@ export function unreachable(err: unknown): CrewAvailability {
 
 /**
  * Reads a crew's availability from the cluster: its Crew, its Agents, and the endpoints
- * of its discussion gateway Service (`<crew>-discussion`). An account that may not read
+ * of its gateway Service (`<crew>-discussion`). An account that may not read
  * Agents or Endpoints is judged on what it can read.
  */
 export async function readAvailability(client: KubeTransport, kinds: Map<string, KubemootKind>, namespace: string, crew: string): Promise<CrewAvailability> {

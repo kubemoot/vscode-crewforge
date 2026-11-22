@@ -124,7 +124,7 @@ describe('explainGateway', () => {
   });
 });
 
-/** A gateway that records each request's headers and answers like the discussion gateway. */
+/** A gateway that records each request's headers and answers like the gateway. */
 interface Seen {
   method: string;
   url: string;
@@ -261,7 +261,7 @@ describe('GatewayClient', () => {
     const gw = new GatewayClient(api, withToken(), 'team-a', 'demo', NONE, { tunnel: () => new DirectTunnel(0) });
     await expect(gw.request('GET', '/x')).rejects.toThrow(/port-forward needs get on services, list on pods, and create on pods\/portforward in team-a/);
     api.responses.push(new KubeError('missing', 404));
-    await expect(gw.request('GET', '/x')).rejects.toThrow(/no discussion service demo-discussion/);
+    await expect(gw.request('GET', '/x')).rejects.toThrow(/no gateway service demo-discussion/);
   });
 
   it('rejects a malformed service account setting before opening anything', async () => {

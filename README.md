@@ -41,6 +41,10 @@ CrewForge says so and names the command.
    Desk", with its Kubernetes name beside it.
 2. Choose **Ask** on a deployed crew. A chat opens; type a question and press Enter. Each
    agent reports as it works, then the crew's answer follows, with how long it took.
+   Under the answer, **The Moot** folds open to show what each agent said. The **...**
+   menu in the chat header stops, pauses, resumes, renames, copies, saves, and deletes the
+   conversation. With `crewforge.dashboardUrl` set, **Open in the Moot** under an answer
+   shows the agents' deliberation in the Kubemoot dashboard.
 3. Expand a crew to see every part of it: Agents, Prompts, Skills, Models, RAG Sources,
    MCP Servers, Tools, Policies, Notifications, Fitness, and Deployment. Objects the crew
    shares with others, such as a cluster's ModelServer, are marked *shared*. A crew that
@@ -80,7 +84,7 @@ CrewForge says so and names the command.
 
 Right-click a deployed crew and choose **Open Crew Memory** to see what the crew has
 learned, read-only. The facts are grouped by topic, each with its value, the role that
-learned it, when, and the thread it was learned in when the export records one. Entries the
+learned it, and when; hover the time to see the Moot it was learned in, when the export records one. Entries the
 export left out (a fact that holds a credential is never exported as memory) show as counts
 with the reason, never their text. **Refresh** reads again; **Export to Folder...** saves the
 crew's OMPI export as `<crew>-memory-ompi.zip` in a folder you pick.
@@ -101,7 +105,7 @@ namespace or any other kind of object; the operator owns cleanup.
 
 ### Asking a crew that knows who is asking
 
-**Ask** reaches the crew's discussion gateway over a port-forward to its pod, the way `kubectl
+**Ask** reaches the crew's gateway over a port-forward to its pod, the way `kubectl
 port-forward` does, and sends your kubeconfig's bearer token with each request. (The API server's
 service proxy would strip it.) A crew that sets `spec.discussion.access` uses the token to know
 who you are and keeps each conversation for the caller that started it; a crew that sets nothing
@@ -119,17 +123,17 @@ conversation is not yours (404).
 ### Stopping, pausing, resuming and deleting a conversation
 
 A chat with a crew that has answered at least once can act on the conversation on the crew
-itself, through the same gateway connection and token as **Ask**. The chat header and each saved
-conversation in the list (on hover or focus) have four buttons:
+itself, through the same gateway connection and token as **Ask**. The **...** menu in the chat
+header, and the one on each saved conversation in the list (on hover or focus), offer:
 
-- **Stop**, **Pause** and **Resume** send the control to the conversation's running discussions.
+- **Stop**, **Pause** and **Resume** send the control to the conversation's running turns.
   A conversation with nothing running answers 409, and CrewForge says so.
 - **Delete from the crew** asks first, then removes the conversation from every place the crew
-  keeps it (history, discussion messages, workspace, scheduled reminders, learned memory facts)
+  keeps it (history, the agents' messages, workspace, scheduled reminders, learned memory facts)
   and shows what it removed in each store and what it cannot remove (logs and backups). A
   conversation that is still running offers **Stop and delete**. A delete that could not clear
   every store says which, and repeating it removes what is left. The copy on your computer stays;
-  **Delete conversation from this computer** in the header removes that one.
+  **Delete from this computer...** in the header menu removes that one.
 
 The owner of a conversation acts without a reason. For another caller's conversation the gateway
 needs the `kubemoot-conversation-controller` role and a reason: CrewForge asks for one (1 to 200

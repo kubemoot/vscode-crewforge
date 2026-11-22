@@ -95,9 +95,9 @@ const nameQuestion = (kind: string, value?: (c: DefineContext) => string): Quest
 
 const ROLES: PickItem[] = [
   { label: 'tooler', description: 'calls MCP tools and reports what it finds', value: 'tooler' },
-  { label: 'researcher', description: 'gives advisory input; does not settle a discussion', value: 'researcher' },
+  { label: 'researcher', description: 'gives advisory input; does not settle the Moot', value: 'researcher' },
   { label: 'analyst', description: 'reasons over what the toolers gathered', value: 'analyst' },
-  { label: 'coordinator', description: 'runs the discussion and writes the answer', value: 'coordinator' },
+  { label: 'coordinator', description: 'runs the Moot and writes the answer', value: 'coordinator' },
 ];
 
 /** The tools the source's agents already enable, as choices for a new agent. */
@@ -115,7 +115,7 @@ const AGENT: KindDefinition = {
   section: 'agents',
   questions: [
     nameQuestion('Agent'),
-    { key: 'role', type: 'pick', title: "The agent's discussion role", items: () => ROLES },
+    { key: 'role', type: 'pick', title: "The agent's role in the Moot", items: () => ROLES },
     { key: 'capabilities', type: 'text', title: 'Capabilities', prompt: 'What the agent asks the scheduler for, comma-separated; never a model name. Example: tool-calling, kubernetes', value: () => 'tool-calling', check: tokenList('capability') },
     { key: 'promptRefs', type: 'pickMany', title: 'PromptModules the agent composes', items: (c) => names(c, 'PromptModule').sort(byCodeUnits) },
     { key: 'tools', type: 'text', title: 'Tools', prompt: toolsPrompt, value: () => '', check: tokenList('tool name', true) },

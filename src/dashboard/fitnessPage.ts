@@ -1,6 +1,7 @@
 import { runControls, shownPhase, type SuiteControls } from '../fitness/controls';
+import { META_SEPARATOR } from '../webview/render';
 import { isRunning, runSummary, scenarioResults, scenarioResultsFromStatus, type FitnessRun, type JudgeScore, type ScenarioResult, type SuiteJudge } from '../fitness/fitness';
-import { badge, between, buttons, duration, escape, facts, note, section, SELECT_CONTEXT_BUTTON, table, type ButtonSpec, type Shown } from './html';
+import { badge, between, buttons, duration, escape, facts, moment, note, section, SELECT_CONTEXT_BUTTON, table, type ButtonSpec, type Shown } from './html';
 
 /** What the fitness dashboard reads for one deployment. */
 export interface FitnessView {
@@ -44,7 +45,7 @@ function runsSection(v: FitnessView): string {
     escape(r.kind === 'CrewFitnessSuite' ? 'suite' : 'single'),
     phaseBadge(r),
     escape(progressText(r)),
-    escape(r.startedAt ?? r.createdAt),
+    escape(moment(r.startedAt ?? r.createdAt)),
     escape(between(r.startedAt ?? r.createdAt, r.completedAt) ?? ''),
   ]);
   return section('Runs', table(['Run', 'Kind', 'Phase', 'Progress', 'Started', 'Duration'], rows, 'No fitness runs yet.'));
@@ -61,9 +62,9 @@ function progressText(r: FitnessRun): string {
 }
 
 function runSection(v: FitnessView, r: FitnessRun): string {
-  const progress = r.iterationsTotal ? `<progress max="${r.iterationsTotal}" value="${r.iterationsCompleted ?? 0}"></progress>` : '';
-  const body = [facts(runFacts(r)), progress, buttons(runButtons(v, r)), r.kind === 'CrewFitnessSuite' ? suiteDetail(v, r) : singleDetail(r)].join('');
-  return section(`Run ${r.name}`, body);
+  const progress = r.iterationsTotal && isRunning(r) ? `<progress max="${r.iterationsTotal}" value="${r.iterationsCompleted ?? 0}"></progress>` : '';
+  const body = [result(r), progress, buttons(runButtons(v, r)), r.kind === 'CrewFitnessSuite' ? suiteDetail(v, r) : singleDetail(r), facts(runFacts(r))].join('');
+  return section(r.name, body);
 }
 
 function runButtons(v: FitnessView, r: FitnessRun): ButtonSpec[] {
@@ -77,16 +78,19 @@ function runButtons(v: FitnessView, r: FitnessRun): ButtonSpec[] {
   return specs;
 }
 
+/** The result of a run on one line, the first thing the section shows: its phase, how many passed, failed and errored, and how long it took. */
+function result(r: FitnessRun): string {
+  const counts = r.passed === undefined ? '' : `${r.passed ?? 0} passed, ${r.failed ?? 0} failed, ${r.errored ?? 0} errored`;
+  const took = duration(r.durationMs) ?? between(r.startedAt, r.completedAt);
+  const line = [counts, isRunning(r) ? progressText(r) : '', took].filter(Boolean).join(META_SEPARATOR);
+  return `<p class="summary">${phaseBadge(r)} ${escape(line)}</p>`;
+}
+
+/** What the result line leaves out: when the run started and finished, and why it failed. */
 function runFacts(r: FitnessRun): [string, Shown][] {
   return [
-    ['Phase', shownPhase(r)],
-    ['Progress', progressText(r)],
-    ['Passed / failed / errored', r.passed === undefined ? undefined : `${r.passed ?? 0} / ${r.failed ?? 0} / ${r.errored ?? 0}`],
-    ['Started', r.startedAt ?? r.createdAt],
-    ['Completed', r.completedAt],
-    ['Duration', duration(r.durationMs) ?? between(r.startedAt, r.completedAt)],
-    ['Run id', r.runId],
-    ['Results workbook', r.artifact && `${r.artifact.bucket}/${r.artifact.objectKey}`],
+    ['Started', moment(r.startedAt ?? r.createdAt)],
+    ['Completed', moment(r.completedAt)],
     ['Error', r.error],
   ];
 }

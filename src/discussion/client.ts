@@ -51,10 +51,10 @@ export async function ask(
   try {
     parsed = JSON.parse(body) as { conversationId?: unknown; requestedAt?: unknown };
   } catch {
-    throw new Error(`The discussion gateway answered with something that is not JSON: ${body.slice(0, 200)}`);
+    throw new Error(`The gateway answered with something that is not JSON: ${body.slice(0, 200)}`);
   }
   if (typeof parsed.conversationId !== 'string' || !parsed.conversationId) {
-    throw new Error(`The discussion gateway returned no conversationId: ${body.slice(0, 200)}`);
+    throw new Error(`The gateway returned no conversationId: ${body.slice(0, 200)}`);
   }
   const requestedAt = typeof parsed.requestedAt === 'string' && parsed.requestedAt ? parsed.requestedAt : undefined;
   return { conversationId: parsed.conversationId, requestedAt };
@@ -222,7 +222,7 @@ export class Watchdog {
 
   start(): void {
     this.first = setTimeout(
-      () => this.fire('No response from the crew. Its discussion gateway may be unreachable, or no agent answered in time.'),
+      () => this.fire('No response from the crew. Its gateway may be unreachable, or no agent answered in time.'),
       this.timing.firstEventMs,
     );
     this.max = setTimeout(
@@ -236,7 +236,7 @@ export class Watchdog {
     this.first = undefined;
     if (this.idle) clearTimeout(this.idle);
     this.idle = setTimeout(
-      () => this.fire('The discussion went quiet without a final answer. Agents may have stood aside, or the coordinator did not synthesize.'),
+      () => this.fire('The crew went quiet without a final answer. Agents may have stood aside, or the coordinator did not synthesize.'),
       this.timing.idleMs,
     );
   }

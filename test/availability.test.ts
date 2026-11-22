@@ -33,7 +33,7 @@ describe('availabilityOf', () => {
     expect(availabilityOf({ crew: crew({ ready: false, phase: 'Pending' }) })).toEqual({ state: 'not-ready', reason: 'The crew is not ready: waiting for the crew to reconcile' });
     expect(availabilityOf({ crew: crew({ ready: false, phase: 'Pending', message: 'waiting for models' }) })).toEqual({ state: 'not-ready', reason: 'The crew is not ready: waiting for the crew to reconcile: waiting for models' });
     expect(availabilityOf({ crew: crew(), agents: [agent('a', false), agent('b', false, undefined as never)] })).toEqual({ state: 'not-ready', reason: 'The crew is not ready: no agent is ready yet' });
-    expect(availabilityOf({ crew: crew(), gateway: false })).toEqual({ state: 'unreachable', reason: "Can't reach the crew's discussion gateway" });
+    expect(availabilityOf({ crew: crew(), gateway: false })).toEqual({ state: 'unreachable', reason: "Can't reach the crew's gateway" });
   });
 });
 

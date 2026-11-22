@@ -238,7 +238,7 @@ export class ChatPanel {
     if (choice?.file) await vscode.commands.executeCommand('vscode.open', vscode.Uri.file(choice.file), { selection: new vscode.Range(choice.line, 0, choice.line, 0) });
   }
 
-  /** Opens the dashboard at the thread of the turn message `index` ends. */
+  /** Opens the Moot of the turn message `index` ends, in the dashboard. */
   private async openTurnInDashboard(index: unknown): Promise<void> {
     const message = typeof index === 'number' ? this.session.view.conversation.messages[index] : undefined;
     const url = dashboardUrl();
@@ -452,7 +452,7 @@ export class ChatPanel {
   <aside class="discussion-sidebar" id="sidebar">
     <div class="sidebar-header"><h2>Conversations</h2><button class="new-chat-btn" id="new" title="New conversation">+</button></div>
     <div class="discussion-list" id="history"></div>
-    <footer class="sidebar-footer"><p class="powered-by" title="AI can make mistakes. Verify important info.">Powered by <a href="#" id="dashboard">Kubemoot</a></p></footer>
+    <footer class="sidebar-footer"><p class="powered-by" title="AI can make mistakes. Verify important info.">Powered by <a href="#" id="dashboard" title="Open the Kubemoot dashboard">Kubemoot</a></p></footer>
   </aside>
   <div class="sidebar-resizer" id="resizer" title="Drag to resize"></div>
   <div class="chat-container">
@@ -461,16 +461,19 @@ export class ChatPanel {
         <button class="toggle-sidebar-btn" id="toggle" title="Show or hide conversations">&#9776;</button>
         <h1 id="title"></h1><span class="crew-where" id="where"></span>
       </div>
-      <div class="header-actions">
-        <button class="export-btn" id="conv-stop" title="Stop the conversation on the crew" aria-label="Stop the conversation on the crew" hidden>${icons.halt}</button>
-        <button class="export-btn" id="conv-pause" title="Pause the conversation on the crew" aria-label="Pause the conversation on the crew" hidden>${icons.pause}</button>
-        <button class="export-btn" id="conv-resume" title="Resume the conversation on the crew" aria-label="Resume the conversation on the crew" hidden>${icons.resume}</button>
-        <button class="export-btn" id="conv-erase" title="Delete the conversation from the crew" aria-label="Delete the conversation from the crew" hidden>${icons.eraseCrew}</button>
-        <button class="export-btn" id="rename" title="Rename conversation" aria-label="Rename conversation" hidden>${icons.edit}</button>
-        <button class="export-btn" id="delete" title="Delete conversation from this computer" aria-label="Delete conversation from this computer" hidden>${icons.trash}</button>
-        <button class="export-btn" id="copy" title="Copy conversation as Markdown" aria-label="Copy conversation as Markdown" hidden>${icons.copy}</button>
-        <button class="export-btn" id="export" title="Save conversation as Markdown" aria-label="Save conversation as Markdown" hidden>${icons.download}</button>
-      </div>
+      <details class="menu" id="menu" hidden>
+        <summary class="export-btn" title="Conversation actions" aria-label="Conversation actions">${icons.more}</summary>
+        <div class="menu-list" role="menu">
+          <button type="button" class="menu-item" id="conv-stop" role="menuitem" title="Stop the conversation on the crew" hidden>Stop</button>
+          <button type="button" class="menu-item" id="conv-pause" role="menuitem" title="Pause the conversation on the crew" hidden>Pause</button>
+          <button type="button" class="menu-item" id="conv-resume" role="menuitem" title="Resume the conversation on the crew" hidden>Resume</button>
+          <button type="button" class="menu-item" id="rename" role="menuitem" title="Give the conversation a name" hidden>Rename...</button>
+          <button type="button" class="menu-item" id="copy" role="menuitem" title="Copy the conversation as Markdown" hidden>Copy as Markdown</button>
+          <button type="button" class="menu-item" id="export" role="menuitem" title="Save the conversation as a Markdown file" hidden>Save as Markdown...</button>
+          <button type="button" class="menu-item" id="delete" role="menuitem" title="Delete the saved copy on this computer; the crew keeps its own" hidden>Delete from this computer...</button>
+          <button type="button" class="menu-item danger" id="conv-erase" role="menuitem" title="Delete the conversation from the crew" hidden>Delete from the crew...</button>
+        </div>
+      </details>
     </header>
     <div class="messages" id="messages"></div>
     <p class="input-note" id="note" role="status" hidden></p>
@@ -502,12 +505,12 @@ function panelKey(context: string, crew: Pick<CrewSummary, 'namespace' | 'name'>
 }
 
 /**
- * The dashboard's Discussions page for one thread: the base URL from the setting, then
- * `/discussions` with the thread, namespace, and crew as query parameters.
+ * The dashboard's Moot page for one thread: the base URL from the setting, then `/moot`
+ * with the thread, namespace, and crew as query parameters.
  */
 export function dashboardThreadUrl(base: string, crew: Pick<CrewSummary, 'namespace' | 'name'>, threadId: string): string {
   const query = new URLSearchParams({ thread: threadId, namespace: crew.namespace, crew: crew.name });
-  return `${trimEnd(base, '/')}/discussions?${query.toString()}`;
+  return `${trimEnd(base, '/')}/moot?${query.toString()}`;
 }
 
 /** Opens the Kubemoot dashboard in the default browser, or the setting that names it when unset. */

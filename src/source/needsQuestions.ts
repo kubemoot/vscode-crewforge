@@ -48,7 +48,7 @@ const ANOTHER = 'another phase';
 async function askPhase(policy: Manifest): Promise<string | undefined> {
   const items = phasesOf(policy).map((p) => ({ label: p, description: describeNeeds(needsOf(ruleFor(policy, p))), value: p }));
   items.push({ label: 'Another phase...', description: "a phase of the policy's archetype", value: ANOTHER });
-  const choice = await vscode.window.showQuickPick(items, { title: 'Edit Scheduling Needs: phase', placeHolder: 'The discussion phase whose model needs to state' });
+  const choice = await vscode.window.showQuickPick(items, { title: 'Edit Scheduling Needs: phase', placeHolder: 'The Moot phase whose model needs to state' });
   if (choice?.value !== ANOTHER) return choice?.value;
   const typed = await vscode.window.showInputBox({ title: 'Edit Scheduling Needs: phase', prompt: "A phase of the policy's MootArchetype, such as synthesis.", validateInput: phaseProblem });
   return typed?.trim();
