@@ -1,16 +1,43 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { actionBar, moment, type ButtonSpec } from '../src/dashboard/html';
+import { formatTime } from '../src/webview/render';
 import { renderFitnessPage, type FitnessView } from '../src/dashboard/fitnessPage';
 import { renderMemoryPage } from '../src/dashboard/memoryPage';
 import type { FitnessRun } from '../src/fitness/fitness';
 
 const spec = (action: string, over: Partial<ButtonSpec> = {}): ButtonSpec => ({ action, label: action, title: `${action} title`, ...over });
 
-describe('moment', () => {
-  it('shows an ISO time without seconds or fractions, and leaves anything else as it is', () => {
-    expect(moment('2026-11-22T04:15:35.076Z')).toBe('2026-11-22 04:15Z');
-    expect(moment('2026-11-20T10:00:00Z')).toBe('2026-11-20 10:00Z');
-    expect(moment('last Tuesday')).toBe('last Tuesday');
+describe('times', () => {
+  const NOW = Date.parse('2026-11-22T20:00:00Z');
+  const original = process.env.TZ;
+  afterEach(() => {
+    if (original === undefined) delete process.env.TZ;
+    else process.env.TZ = original;
+  });
+
+  it('writes a time in the time zone and locale of the person, with the exact value in the tooltip', () => {
+    process.env.TZ = 'America/New_York';
+    expect(formatTime('2026-11-20T15:00:00Z', NOW, 'en-US')).toBe('Nov 20, 10:00 AM');
+    expect(formatTime('2026-11-22T15:00:00Z', NOW, 'en-US')).toBe('10:00 AM');
+    expect(formatTime('2025-03-02T15:00:00Z', NOW, 'en-US')).toBe('Mar 2, 2025, 10:00 AM');
+    expect(moment('2026-11-20T15:00:00.123Z', NOW, 'en-US')?.html).toBe('<time datetime="2026-11-20T15:00:00.123Z" title="2026-11-20T15:00:00.123Z">Nov 20, 10:00 AM</time>');
+  });
+
+  it('follows the zone: the same instant reads differently in Tokyo, and today follows it', () => {
+    process.env.TZ = 'Asia/Tokyo';
+    expect(formatTime('2026-11-20T15:00:00Z', NOW, 'en-US')).toBe('Nov 21, 12:00 AM');
+    expect(formatTime('2026-11-22T15:00:00Z', NOW, 'en-US')).toBe('12:00 AM');
+  });
+
+  it('follows the locale', () => {
+    process.env.TZ = 'America/New_York';
+    expect(formatTime('2026-11-20T15:00:00Z', NOW, 'de-DE')).toContain('10:00');
+    expect(formatTime('2026-11-20T15:00:00Z', NOW, 'de-DE')).not.toContain('AM');
+  });
+
+  it('shows text that is not a time as it is, escaped, and nothing for nothing', () => {
+    expect(moment('last <b>Tuesday</b>')?.html).toBe('last &lt;b&gt;Tuesday&lt;/b&gt;');
+    expect(formatTime('not a date')).toBe('');
     expect(moment('')).toBeUndefined();
     expect(moment(undefined)).toBeUndefined();
   });
@@ -49,7 +76,7 @@ describe('the fitness run section', () => {
     expect(html).toContain('<h2>s1</h2><p class="summary"><span class="badge good">Completed</span> 3 passed, 1 failed, 0 errored · 10 min 0 s</p>');
     expect(html).not.toContain('a1b2');
     expect(html).not.toContain('b/k');
-    expect(html).toContain('<dt>Started</dt><dd>2026-11-22 04:15Z</dd>');
+    expect(html).toContain('<dt>Started</dt><dd><time datetime="2026-11-22T04:15:35.076Z"');
   });
 
   it('shows progress while running, and the bar only then', () => {

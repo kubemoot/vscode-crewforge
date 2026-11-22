@@ -505,12 +505,14 @@ function panelKey(context: string, crew: Pick<CrewSummary, 'namespace' | 'name'>
 }
 
 /**
- * The dashboard's Moot page for one thread: the base URL from the setting, then `/moot`
- * with the thread, namespace, and crew as query parameters.
+ * The dashboard's Moot page for one thread: the base URL from the setting, then `/discussions`
+ * with the thread, namespace, and crew as query parameters. The dashboard that renamed the
+ * page to /moot redirects /discussions there and keeps the query; an older one serves it, so
+ * the link works with both.
  */
 export function dashboardThreadUrl(base: string, crew: Pick<CrewSummary, 'namespace' | 'name'>, threadId: string): string {
   const query = new URLSearchParams({ thread: threadId, namespace: crew.namespace, crew: crew.name });
-  return `${trimEnd(base, '/')}/moot?${query.toString()}`;
+  return `${trimEnd(base, '/')}/discussions?${query.toString()}`;
 }
 
 /** Opens the Kubemoot dashboard in the default browser, or the setting that names it when unset. */

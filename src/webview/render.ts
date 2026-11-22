@@ -15,9 +15,19 @@ export function isWebLink(href: string): boolean {
   return /^(https?:|mailto:)/i.test(href.trim());
 }
 
-export function formatTime(iso: string): string {
+/**
+ * A time as the person's locale writes it, in the person's time zone: the time alone for
+ * today ("10:00 AM"), the day and time for another day this year ("Nov 20, 10:00 AM"), with
+ * the year for an earlier year. Empty when `iso` is not a time.
+ */
+export function formatTime(iso: string, now = Date.now(), locale?: string): string {
   const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? '' : d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  if (Number.isNaN(d.getTime())) return '';
+  const today = new Date(now);
+  const clock: Intl.DateTimeFormatOptions = { hour: 'numeric', minute: '2-digit' };
+  if (d.toDateString() === today.toDateString()) return d.toLocaleTimeString(locale, clock);
+  const day: Intl.DateTimeFormatOptions = d.getFullYear() === today.getFullYear() ? { month: 'short', day: 'numeric' } : { year: 'numeric', month: 'short', day: 'numeric' };
+  return d.toLocaleString(locale, { ...day, ...clock });
 }
 
 /** What separates the parts of a meta line: a middle dot with a space either side. */
