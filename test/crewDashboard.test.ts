@@ -180,7 +180,7 @@ describe('renderCrewPage', () => {
   it('shows a deployed crew: status, deployment times, agents by role, conditions, and conversations', async () => {
     const v = await vitals();
     const html = renderCrewPage(v);
-    for (const text of ['<h1>demo <span class="badge good">Ready</span></h1>', 'crew-demo in lab', 'Chart version differs: source 0.2.2, deployed 0.46.0-rc.0', '/w/demo', 'Helm chart', '2026-09-29 10:00Z', 'me@example.com', '1 coordinator, 1 tooler', 'AgentsReady', 'Which nodes?', 'Agent k8s failed', 'qwen-8b (qwen3:8b), bare']) {
+    for (const text of ['<h1>demo <span class="badge good">Ready</span></h1>', 'crew-demo in lab', 'Chart version differs: source 0.2.2, deployed 0.46.0-rc.0', '/w/demo', 'Helm chart', 'datetime="2026-09-29T10:00:00Z"', 'me@example.com', '1 coordinator, 1 tooler', 'AgentsReady', 'Which nodes?', 'Agent k8s failed', 'qwen-8b (qwen3:8b), bare']) {
       expect(html).toContain(text);
     }
     expect(enabled(v)).toEqual(['deploy', 'redeploy', 'undeploy', 'ask', 'fitness', 'fitnessDashboard', 'lint', 'yaml', 'refresh']);

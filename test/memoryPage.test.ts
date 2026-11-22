@@ -24,8 +24,8 @@ describe('renderMemoryPage', () => {
     expect(html).toContain('cluster (2)');
     expect(html).toContain('preferences (1)');
     expect(html).toContain('coordinator');
-    expect(html).toContain('2026-11-18 10:00Z');
-    expect(html).toContain('<span title="Learned in the Moot thread-abc">2026-11-18 10:00Z</span>');
+    expect(html).toContain('datetime="2026-11-18T10:00:00Z"');
+    expect(html).toContain('<span title="Learned in the Moot thread-abc"><time datetime="2026-11-18T10:00:00Z" title="2026-11-18T10:00:00Z">');
     expect(html).not.toContain('<th>Thread</th>');
     expect(html).toContain(`3 facts${META_SEPARATOR}read-only${META_SEPARATOR}exported`);
     expect(html).toContain('title="crew-demo/demo, OMPI protocol');

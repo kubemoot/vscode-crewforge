@@ -3,7 +3,7 @@ import { agentProblems, cardText } from '../src/discussion/cardText';
 import type { CrewSummary } from '../src/k8s/crews';
 import { agentCount, crewAbout, crewDescription, crewTooltip, groupByNamespace } from '../src/views/treeModel';
 import { formatDuration } from '../src/text';
-import { escapeHtml, formatAgo, htmlAttribute, isWebLink, META_SEPARATOR, metaLine } from '../src/webview/render';
+import { escapeHtml, formatAgo, formatTime, htmlAttribute, isWebLink, META_SEPARATOR, metaLine } from '../src/webview/render';
 
 const crew = (name: string, namespace: string, extra: Partial<CrewSummary> = {}): CrewSummary => ({ name, namespace, ready: true, phase: 'Ready', ...extra });
 
@@ -172,7 +172,7 @@ describe('render helpers', () => {
 
   it('writes the meta line as time then duration, leaving out what is unknown', () => {
     const at = '2026-09-27T15:36:00Z';
-    const time = new Date(at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const time = formatTime(at);
     expect(metaLine(at, 42_000)).toBe(`${time}${META_SEPARATOR}42 s`);
     expect(META_SEPARATOR).toBe(' \u00b7 ');
     expect(metaLine(at)).toBe(time);

@@ -59,7 +59,8 @@ export function renderMemoryPage(view: MemoryView): string {
   const { manifest } = view.parsed;
   const count = `${view.parsed.facts.length} ${view.parsed.facts.length === 1 ? 'fact' : 'facts'}`;
   const detail = `${view.namespace}/${view.crew}, OMPI protocol ${manifest.protocolVersion || 'unknown'}, read through context ${view.context}`;
-  const line = [count, 'read-only', `exported ${moment(manifest.exportedAt) ?? 'at an unknown time'}`].join(META_SEPARATOR);
-  const meta = `<p class="muted" title="${escape(detail)}">${escape(line)}</p>`;
+  const exported = moment(manifest.exportedAt) ?? 'at an unknown time';
+  const line = [escape(count), 'read-only', `exported ${escape(exported)}`].join(META_SEPARATOR);
+  const meta = `<p class="muted" title="${escape(detail)}">${line}</p>`;
   return head + actions + meta + topics(view.parsed) + section('Left out', leftOutSection(view.parsed, view.report));
 }

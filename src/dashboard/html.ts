@@ -1,11 +1,17 @@
 import { SELECT_CONTEXT } from '../views/errors';
-import { escapeHtml } from '../webview/render';
+import { escapeHtml, formatTime } from '../webview/render';
 
-/** A value a page shows as text. */
-export type Shown = string | number | boolean | undefined | null;
+/** Markup built by this module, already escaped: a value a page shows as it is. */
+export class Html {
+  constructor(readonly html: string) {}
+}
 
-/** Escapes a value for HTML text or an attribute; undefined and null become empty. */
+/** A value a page shows as text, or markup this module built. */
+export type Shown = string | number | boolean | undefined | null | Html;
+
+/** Escapes a value for HTML text or an attribute; undefined and null become empty, and built markup stays as it is. */
 export function escape(value: Shown): string {
+  if (value instanceof Html) return value.html;
   return value === undefined || value === null ? '' : escapeHtml(String(value));
 }
 
@@ -54,11 +60,14 @@ export function actionBar(specs: ButtonSpec[]): string {
   return `<div class="actions">${main.map((b) => button(b)).join('')}${menu}</div>`;
 }
 
-/** A time as people read it: "2026-11-20 10:00Z", without seconds or fractions. Text that is not an ISO time is returned as it is. */
-export function moment(iso: string | undefined): string | undefined {
+/**
+ * A time as the person reads it: in their time zone and locale ("Nov 20, 10:00 AM", or
+ * "10:00 AM" today), with the exact value as given in its tooltip. Text that is not a time is shown as it is.
+ */
+export function moment(iso: string | undefined, now = Date.now(), locale?: string): Html | undefined {
   if (!iso) return undefined;
-  const m = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})(?::\d{2}(?:\.\d+)?)?Z$/.exec(iso);
-  return m ? `${m[1]} ${m[2]}Z` : iso;
+  const shown = formatTime(iso, now, locale);
+  return new Html(shown ? `<time datetime="${escape(iso)}" title="${escape(iso)}">${escape(shown)}</time>` : escape(iso));
 }
 
 /** A titled section. `body` is HTML already escaped. */
