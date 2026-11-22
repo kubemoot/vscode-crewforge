@@ -35,10 +35,10 @@ describe('pngSize', () => {
 });
 
 describe('the Marketplace and Open VSX listing fields', () => {
-  it('names the extension kubemoot.crewforge, shown as CrewForge', () => {
+  it('names the extension kubemoot.crewforge, shown as CrewForge for Kubemoot', () => {
     expect(manifest.publisher).toBe('kubemoot');
     expect(manifest.name).toBe('crewforge');
-    expect(manifest.displayName).toBe('CrewForge');
+    expect(manifest.displayName).toBe('CrewForge for Kubemoot');
     expect(manifest.description.length).toBeGreaterThan(20);
     expect(manifest.description.length).toBeLessThanOrEqual(200);
   });

@@ -30,6 +30,7 @@ import { resetFake } from './vscodeFake';
 const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8')) as {
   contributes: {
     commands: { command: string; title: string; category?: string; icon?: string }[];
+    viewsContainers: { activitybar: { id: string; title: string }[] };
     views: Record<string, { id: string; name: string }[]>;
     menus: Record<string, { command: string; when?: string; group?: string }[]>;
   };
@@ -73,6 +74,10 @@ describe('the definitions', () => {
 });
 
 describe('the commands and views in package.json', () => {
+  it('titles the activity bar container, its tooltip and side bar header, with the full product name', () => {
+    expect(manifest.contributes.viewsContainers.activitybar.map((c) => c.title)).toEqual(['CrewForge for Kubemoot']);
+  });
+
   it('gives every command a title with a category', () => {
     for (const c of manifest.contributes.commands) {
       expect(c.title.trim(), c.command).not.toBe('');
