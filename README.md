@@ -80,6 +80,27 @@ CrewForge says so and names the command.
    **Run Fitness on the Crew**, and **Redeploy from Source** after each edit. A deployed crew carries its fitness scenarios: its
    Fitness group runs all of them, a batch you pick, or one.
 
+### Right-click menus
+
+Every item in Crew Sources and Deployed Crews has the standard editor actions, in groups
+with dividers: open and view, crew actions, edit, copy, reveal, and destructive actions
+last. A test walks `package.json` and fails when an action has no group, a group is out of
+order, or an item lacks an expected action.
+
+| Item | Open and view | Crew actions | Copy | Reveal |
+| --- | --- | --- | --- | --- |
+| Crew source | Open the Crew Dashboard, Open Chart.yaml (or the Crew manifest), Open in Integrated Terminal | Deploy, Redeploy, Deploy with a Channel, Ask (only when the crew is deployed and Ready), Run Fitness, Lint | Copy Name, Copy Path, Copy Relative Path | Reveal in Explorer View, Reveal in File Explorer, Open in Source Control |
+| File or folder of a source (the **Files** group) | Open, Compare with Live | | Copy Name, Copy Path, Copy Relative Path | Reveal in Explorer View, Reveal in File Explorer, Open in Source Control |
+| Declared object or scenario | Open the Source File | Run Scenario | Copy Name, Copy Path, Copy Relative Path | Reveal in Explorer View, Reveal in File Explorer |
+| Deployment | Open the Crew Dashboard, Open in Kubemoot Dashboard | Redeploy, Deploy a Git Revision, Run Fitness, Follow Flux Rollout | Copy Name, Copy Namespace/Name | |
+| Deployed crew | Dashboards, memory, source file, live YAML | Ask, Redeploy, Deploy a Git Revision, Run Fitness | Copy Name, Copy Namespace/Name, Copy as YAML | Reveal its source |
+| Agent, PromptModule, Model and other objects | Open in Kubemoot Dashboard, Open the Source File, live YAML | | Copy Name, Copy Namespace/Name, Copy as YAML | Reveal its source |
+| Fitness run | Open in Kubemoot Dashboard, live YAML | Pause, Resume | Copy Name, Copy Namespace/Name, Copy as YAML | |
+
+**Open in Kubemoot Dashboard** shows only when `crewforge.dashboardUrl` is set. A crew
+source expands to its real files and folders; they take the editor's file icons and Git
+markers, and open in the normal editor.
+
 ### Tooltips
 
 Every view, tree item, command, status bar item, page heading, table column, and button says

@@ -137,7 +137,7 @@ describe('CrewForge views and commands in a real VS Code', () => {
     const models = await api.crews.getChildren(sections[3]);
     const shared = models.map((n) => api.crews.getTreeItem(n)).find((i) => i.label === 'big');
     assert.match(String(shared?.description), /^Model · shared · qwen3:32b/);
-    assert.equal(shared?.contextValue, 'liveObject-shared');
+    assert.equal(shared?.contextValue, 'liveObject-Model-shared');
     const tools = await api.crews.getChildren(sections[6]);
     const pods = tools.find((n) => api.crews.getTreeItem(n).label === 'pods_list');
     assert.ok(pods, 'pods_list is listed');

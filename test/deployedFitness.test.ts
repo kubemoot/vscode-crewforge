@@ -131,18 +131,18 @@ describe('the live Fitness group', () => {
     const pods = memberItem(members[0]);
     expect(pods).toMatchObject({ contextValue: 'liveScenario', description: 'scenario', command: { command: 'crewforge.showDeployedScenario' } });
     expect(String(pods.tooltip)).toContain('Runs from here use this deployed script, not the workspace source.');
-    expect(memberItem(members[1]).contextValue).toBe('liveObject-run-pause-stop');
-    expect(memberItem(members[2]).contextValue).toBe('liveObject-run');
+    expect(memberItem(members[1]).contextValue).toBe('liveObject-CrewFitnessSuite-run-pause-stop');
+    expect(memberItem(members[2]).contextValue).toBe('liveObject-CrewFitnessSuite-run');
     const d1 = details([], [suiteRun('only', 'Succeeded')]);
     expect(sectionItem({ ...section, details: d1 }).description).toBe('0 scenarios · 1 run');
   });
 
   it('marks a paused suite resumable, and a single-scenario CrewFitness stoppable', () => {
-    expect(memberItem({ kind: 'member', crew, view: fitnessRunView({ kind: 'CrewFitnessSuite', name: 'p', object: suiteRun('p', 'Paused', { suspend: true }), reason: 'r' }) }).contextValue).toBe('liveObject-run-resume-stop');
+    expect(memberItem({ kind: 'member', crew, view: fitnessRunView({ kind: 'CrewFitnessSuite', name: 'p', object: suiteRun('p', 'Paused', { suspend: true }), reason: 'r' }) }).contextValue).toBe('liveObject-CrewFitnessSuite-run-resume-stop');
     const single = obj('CrewFitness', 'one', 'crew-test', { crewRef: 'test' });
     single.metadata.annotations = { 'crewforge.kubemoot.ai/single-scenario': 'true' };
     (single as { status?: unknown }).status = { phase: 'Running' };
-    expect(memberItem({ kind: 'member', crew, view: fitnessRunView({ kind: 'CrewFitness', name: 'one', object: single, reason: 'r' }) }).contextValue).toBe('liveObject-run-stop');
+    expect(memberItem({ kind: 'member', crew, view: fitnessRunView({ kind: 'CrewFitness', name: 'one', object: single, reason: 'r' }) }).contextValue).toBe('liveObject-CrewFitness-run-stop');
     expect(fitnessRunView({ kind: 'CrewFitness', name: 'gone', reason: 'r' }).run).toBeUndefined();
     expect(scenarioView(scenario).scenario).toBe(scenario);
   });

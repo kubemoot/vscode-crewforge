@@ -76,6 +76,8 @@ export class TreeItem {
   tooltip?: string;
   iconPath?: unknown;
   contextValue?: string;
+  resourceUri?: Uri;
+  id?: string;
   command?: { command: string; title: string; arguments?: unknown[] };
   constructor(
     public label: string,

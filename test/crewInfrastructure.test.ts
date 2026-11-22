@@ -46,9 +46,9 @@ describe('a live crew with its infrastructure', () => {
       'ollama|ModelServer · shared · ollama · http://ollama:11434',
     ]);
     const [big, mine, server] = leaves(d, 'models').map(memberItem);
-    expect(big.contextValue).toBe('liveObject-shared');
+    expect(big.contextValue).toBe('liveObject-Model-shared');
     expect(big.tooltip).toContain('Shared: owned by crew other. CrewForge shows it read-only.');
-    expect(mine).toMatchObject({ contextValue: 'liveObject', command: { command: 'crewforge.showLiveYaml' } });
+    expect(mine).toMatchObject({ contextValue: 'liveObject-Model', command: { command: 'crewforge.showLiveYaml' } });
     expect(mine.tooltip).toContain('Capabilities: tool-calling');
     expect((mine.iconPath as ThemeIcon).id).toBe('pass-filled');
     expect(server.tooltip).toContain('ModelServer kubemoot/ollama');

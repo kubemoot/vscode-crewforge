@@ -120,13 +120,13 @@ function runContext(run: FitnessRun): string {
   return `-run${can.pause ? '-pause' : ''}${can.resume ? '-resume' : ''}${can.stop ? '-stop' : ''}`;
 }
 
-/** The context value of a leaf: a live object, a shared one, a fitness run, a scenario, or a tool; none for a fact without an object. */
+/** The context value of a leaf: a live object by its kind, a fitness run, a scenario, or a tool; none for a fact without an object. */
 function memberContext(view: MemberView): string | undefined {
   if (view.tool) return 'tool';
   if (view.scenario) return 'liveScenario';
-  if (view.run) return `liveObject${runContext(view.run)}`;
+  if (view.run) return `liveObject-${view.run.kind}${runContext(view.run)}`;
   if (!view.ref) return undefined;
-  return view.shared ? 'liveObject-shared' : 'liveObject';
+  return `liveObject-${view.ref.kind}${view.shared ? '-shared' : ''}`;
 }
 
 export function memberItem(node: Extract<DetailNode, { kind: 'member' }>): vscode.TreeItem {

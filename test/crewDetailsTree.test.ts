@@ -65,7 +65,7 @@ describe('crew sections', () => {
     expect((agents[0].iconPath as ThemeIcon).id).toBe('pass-filled');
     expect((agents[1].iconPath as ThemeIcon).id).toBe('circle-large-outline');
     expect(agents[0].command?.command).toBe('crewforge.showLiveYaml');
-    expect(agents[0].contextValue).toBe('liveObject');
+    expect(agents[0].contextValue).toBe('liveObject-Agent');
     expect((agents[0].command?.arguments?.[0] as Member).view.ref).toEqual({ kind: 'Agent', name: 'coordinator', namespace: 'team-a' });
     expect(agents[1].tooltip).toContain('PromptModules: rules, shared, gone');
 

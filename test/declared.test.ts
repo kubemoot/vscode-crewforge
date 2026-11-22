@@ -332,7 +332,7 @@ describe('Crew Sources declarations', () => {
     const [source] = await provider.getChildren();
     expect(provider.getTreeItem(source)).toMatchObject({ id: `source:${ROOT}` });
     const children = await provider.getChildren(source);
-    expect(children.map((c) => provider.getTreeItem(c).label)).toEqual(['demo', 'Agents', 'Prompts', 'Skills', 'Models', 'RAG Sources', 'MCP Servers', 'Tools', 'Policies', 'Notifications', 'Fitness Scenarios', 'Not deployed in lab']);
+    expect(children.map((c) => provider.getTreeItem(c).label)).toEqual(['demo', 'Agents', 'Prompts', 'Skills', 'Models', 'RAG Sources', 'MCP Servers', 'Tools', 'Policies', 'Notifications', 'Fitness Scenarios', 'Not deployed in lab', 'Files']);
     const crew = provider.getTreeItem(children[0]);
     expect(crew.command).toMatchObject({ command: 'vscode.open', arguments: [{ fsPath: `${ROOT}/templates/crew.yaml` }, { selection: { startLine: 0 } }] });
     expect(crew.tooltip).toContain(`${ROOT}/templates/crew.yaml:1`);
@@ -368,7 +368,7 @@ describe('Crew Sources declarations', () => {
     const [source] = await provider.getChildren();
     const children = await provider.getChildren(source);
     const labels = children.map((c) => provider.getTreeItem(c));
-    expect(labels.map((i) => i.label)).toEqual(['demo', 'Agents', 'Prompts', 'Skills', 'Models', 'RAG Sources', 'MCP Servers', 'Tools', 'Policies', 'Notifications', 'Fitness Scenarios', 'Not deployed in lab']);
+    expect(labels.map((i) => i.label)).toEqual(['demo', 'Agents', 'Prompts', 'Skills', 'Models', 'RAG Sources', 'MCP Servers', 'Tools', 'Policies', 'Notifications', 'Fitness Scenarios', 'Not deployed in lab', 'Files']);
     expect(labels[1]).toMatchObject({ description: 'none', collapsibleState: 0 });
     expect(labels[6]).toMatchObject({ description: 'none', tooltip: expect.stringContaining('MCPServers') });
     const failing = { ...deps(bare, []), readYamlFiles: async () => Promise.reject(new Error('disk gone')) };

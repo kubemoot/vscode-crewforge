@@ -96,10 +96,10 @@ class Devtools {
   }
 
   /** The box of the element with this text inside `scope`. */
-  async boxOfText(scope: string, text: string): Promise<Rect> {
+  async boxOfText(scope: string, text: string, nth = 0): Promise<Rect> {
     const rect = await this.evaluate<Rect | null>(`(() => {
       const root = document.querySelector(${JSON.stringify(scope)});
-      const found = [...(root ? root.querySelectorAll('*') : [])].find((e) => e.children.length === 0 && e.textContent.trim() === ${JSON.stringify(text)});
+      const found = [...(root ? root.querySelectorAll('*') : [])].filter((e) => e.children.length === 0 && e.textContent.trim() === ${JSON.stringify(text)})[${nth}];
       if (!found) return null;
       const b = found.getBoundingClientRect();
       return { x: b.left, y: b.top, width: b.width, height: b.height };
@@ -194,8 +194,8 @@ async function openTab(api: CrewForgeApi, key: string, tab: string, words: strin
 }
 
 /** Right-clicks `label` in the Explorer and captures the side bar with the menu it opens. */
-async function contextMenu(dev: Devtools, name: string, label: string): Promise<void> {
-  const at = await dev.boxOfText('.part.sidebar', label);
+async function contextMenu(dev: Devtools, name: string, label: string, nth = 0): Promise<void> {
+  const at = await dev.boxOfText('.part.sidebar', label, nth);
   await dev.click(at.x + at.width / 2, at.y + at.height / 2, 'right');
   await until('the context menu', () => dev.evaluate<boolean>(`document.querySelector('${MENU}') !== null`));
   await sleep(500);
@@ -266,6 +266,20 @@ async function unreachable(api: CrewForgeApi, dev: Devtools): Promise<void> {
   await dev.shoot('unreachable', await dev.box(SIDEBAR));
 }
 
+/** The right-click menus of a crew source, a deployed crew, and a fitness run, as one picture each. */
+async function treeMenus(api: CrewForgeApi, dev: Devtools, source: Awaited<ReturnType<CrewForgeApi['sources']['getChildren']>>[number], live: NonNullable<ReturnType<CrewForgeApi['crews']['nodeFor']>>): Promise<void> {
+  await vscode.commands.executeCommand('workbench.actions.treeView.crewforge.crews.collapseAll');
+  await vscode.commands.executeCommand('workbench.actions.treeView.crewforge.sources.collapseAll');
+  await api.crewsView.reveal(await api.crews.sectionNode(live.crew, 'fitness'), { expand: true, select: false, focus: false });
+  await clearNotifications();
+  await sleep(2000);
+  const label = (item: { label?: unknown }) => String((item.label as { label?: string } | undefined)?.label ?? item.label);
+  const run = (await api.crews.getChildren(await api.crews.sectionNode(live.crew, 'fitness'))).find((n) => api.crews.getTreeItem(n).contextValue?.startsWith('liveObject'));
+  await contextMenu(dev, 'menu-deployed-crew', label(api.crews.getTreeItem(live)));
+  if (run) await contextMenu(dev, 'menu-fitness-run', label(api.crews.getTreeItem(run)));
+  await contextMenu(dev, 'menu-crew-source', label(api.sources.getTreeItem(source)), 1);
+}
+
 export async function run(): Promise<void> {
   const api = await crewforge();
   const dev = await Devtools.connect();
@@ -283,6 +297,10 @@ export async function run(): Promise<void> {
   await clearNotifications();
   await sleep(2500);
   await dev.shoot('views', await dev.box(SIDEBAR));
+  if (process.env.CREWFORGE_SHOTS_ONLY === 'menus') {
+    await treeMenus(api, dev, source, live);
+    return;
+  }
 
   await vscode.commands.executeCommand('workbench.actions.treeView.crewforge.crews.collapseAll');
   await vscode.commands.executeCommand('workbench.actions.treeView.crewforge.sources.collapseAll');

@@ -448,6 +448,71 @@
         "title": "Run Selected Scenarios as One Batch",
         "category": "CrewForge",
         "icon": "$(run-all)"
+      },
+      {
+        "command": "crewforge.openChartFile",
+        "title": "Open Chart.yaml",
+        "category": "CrewForge"
+      },
+      {
+        "command": "crewforge.openSourceFile",
+        "title": "Open the Source File",
+        "category": "CrewForge"
+      },
+      {
+        "command": "crewforge.openInTerminal",
+        "title": "Open in Integrated Terminal",
+        "category": "CrewForge"
+      },
+      {
+        "command": "crewforge.revealInExplorerView",
+        "title": "Reveal in Explorer View",
+        "category": "CrewForge"
+      },
+      {
+        "command": "crewforge.revealInOS",
+        "title": "Reveal in File Explorer",
+        "category": "CrewForge"
+      },
+      {
+        "command": "crewforge.copyName",
+        "title": "Copy Name",
+        "category": "CrewForge"
+      },
+      {
+        "command": "crewforge.copyNamespacedName",
+        "title": "Copy Namespace/Name",
+        "category": "CrewForge"
+      },
+      {
+        "command": "crewforge.copyYaml",
+        "title": "Copy as YAML",
+        "category": "CrewForge"
+      },
+      {
+        "command": "crewforge.copyPath",
+        "title": "Copy Path",
+        "category": "CrewForge"
+      },
+      {
+        "command": "crewforge.copyRelativePath",
+        "title": "Copy Relative Path",
+        "category": "CrewForge"
+      },
+      {
+        "command": "crewforge.openInDashboard",
+        "title": "Open in Kubemoot Dashboard",
+        "category": "CrewForge"
+      },
+      {
+        "command": "crewforge.openInSourceControl",
+        "title": "Open in Source Control",
+        "category": "CrewForge"
+      },
+      {
+        "command": "crewforge.diffFileWithLive",
+        "title": "Compare with Live",
+        "category": "CrewForge"
       }
     ],
     "menus": {
@@ -509,7 +574,7 @@
       "view/item/context": [
         {
           "command": "crewforge.deployToNamespace",
-          "when": "view == crewforge.sources && viewItem =~ /^source-(helm|bundle)(-running)?$/",
+          "when": "view == crewforge.sources && viewItem =~ /^source-(helm|bundle)(-ready)?(-running)?$/",
           "group": "inline@1"
         },
         {
@@ -519,43 +584,103 @@
         },
         {
           "command": "crewforge.askSource",
-          "when": "view == crewforge.sources && viewItem =~ /^source-/",
+          "when": "view == crewforge.sources && viewItem =~ /^source-(helm|bundle)-ready/",
           "group": "inline@2"
+        },
+        {
+          "command": "crewforge.openCrewDashboard",
+          "when": "view == crewforge.sources && viewItem =~ /^source-/",
+          "group": "1_open@1"
+        },
+        {
+          "command": "crewforge.openChartFile",
+          "when": "view == crewforge.sources && viewItem =~ /^source-helm/",
+          "group": "1_open@2"
+        },
+        {
+          "command": "crewforge.openSourceFile",
+          "when": "view == crewforge.sources && viewItem =~ /^source-bundle/",
+          "group": "1_open@2"
+        },
+        {
+          "command": "crewforge.openInTerminal",
+          "when": "view == crewforge.sources && viewItem =~ /^source-/",
+          "group": "1_open@3"
         },
         {
           "command": "crewforge.deployToNamespace",
           "when": "view == crewforge.sources && viewItem =~ /^source-/",
-          "group": "loop@1"
+          "group": "2_crew@1"
         },
         {
-          "command": "crewforge.askSource",
+          "command": "crewforge.redeploy",
           "when": "view == crewforge.sources && viewItem =~ /^source-/",
-          "group": "loop@2"
-        },
-        {
-          "command": "crewforge.runFitness",
-          "when": "view == crewforge.sources && viewItem =~ /^source-(?!.*-running$)/",
-          "group": "loop@3"
-        },
-        {
-          "command": "crewforge.lintCrew",
-          "when": "view == crewforge.sources && viewItem =~ /^source-/",
-          "group": "loop@4"
-        },
-        {
-          "command": "crewforge.askCrew",
-          "when": "view == crewforge.crews && viewItem =~ /^crew(-flux)?(-running)?$/",
-          "group": "inline"
-        },
-        {
-          "command": "crewforge.showDrift",
-          "when": "view == crewforge.sources && viewItem =~ /^resource-/",
-          "group": "inline"
+          "group": "2_crew@2"
         },
         {
           "command": "crewforge.deploySource",
           "when": "view == crewforge.sources && viewItem =~ /^source-/",
-          "group": "deploy@1"
+          "group": "2_crew@3"
+        },
+        {
+          "command": "crewforge.askSource",
+          "when": "view == crewforge.sources && viewItem =~ /^source-(helm|bundle)-ready/",
+          "group": "2_crew@4"
+        },
+        {
+          "command": "crewforge.runFitness",
+          "when": "view == crewforge.sources && viewItem =~ /^source-(?!.*-running$)/",
+          "group": "2_crew@5"
+        },
+        {
+          "command": "crewforge.lintCrew",
+          "when": "view == crewforge.sources && viewItem =~ /^source-/",
+          "group": "2_crew@6"
+        },
+        {
+          "command": "crewforge.renameCrew",
+          "when": "view == crewforge.sources && viewItem =~ /^source-/",
+          "group": "3_edit@1"
+        },
+        {
+          "command": "crewforge.copyName",
+          "when": "view == crewforge.sources && viewItem =~ /^source-/",
+          "group": "5_copy@1"
+        },
+        {
+          "command": "crewforge.copyPath",
+          "when": "view == crewforge.sources && viewItem =~ /^source-/",
+          "group": "5_copy@2"
+        },
+        {
+          "command": "crewforge.copyRelativePath",
+          "when": "view == crewforge.sources && viewItem =~ /^source-/",
+          "group": "5_copy@3"
+        },
+        {
+          "command": "crewforge.revealInExplorerView",
+          "when": "view == crewforge.sources && viewItem =~ /^source-/",
+          "group": "6_reveal@1"
+        },
+        {
+          "command": "crewforge.revealInOS",
+          "when": "view == crewforge.sources && viewItem =~ /^source-/",
+          "group": "6_reveal@2"
+        },
+        {
+          "command": "crewforge.openInSourceControl",
+          "when": "view == crewforge.sources && viewItem =~ /^source-/",
+          "group": "6_reveal@3"
+        },
+        {
+          "command": "crewforge.removeDeployment",
+          "when": "view == crewforge.sources && viewItem =~ /^source-/",
+          "group": "9_delete@1"
+        },
+        {
+          "command": "crewforge.deleteSource",
+          "when": "view == crewforge.sources && viewItem =~ /^source-/",
+          "group": "9_delete@2"
         },
         {
           "command": "crewforge.updateDeployment",
@@ -563,9 +688,59 @@
           "group": "inline@1"
         },
         {
+          "command": "crewforge.followRollout",
+          "when": "view == crewforge.sources && viewItem =~ /^deployment-flux(-running)?$/",
+          "group": "inline@2"
+        },
+        {
+          "command": "crewforge.openCrewDashboard",
+          "when": "view == crewforge.sources && viewItem =~ /^deployment-/",
+          "group": "1_open@1"
+        },
+        {
+          "command": "crewforge.openInDashboard",
+          "when": "view == crewforge.sources && viewItem =~ /^deployment-/ && config.crewforge.dashboardUrl != ''",
+          "group": "1_open@2"
+        },
+        {
+          "command": "crewforge.updateDeployment",
+          "when": "view == crewforge.sources && viewItem =~ /^deployment-/",
+          "group": "2_crew@1"
+        },
+        {
+          "command": "crewforge.deployRevision",
+          "when": "view == crewforge.sources && viewItem =~ /^deployment-/",
+          "group": "2_crew@2"
+        },
+        {
+          "command": "crewforge.runFitness",
+          "when": "view == crewforge.sources && viewItem =~ /^deployment-(?!.*-running$)/",
+          "group": "2_crew@3"
+        },
+        {
+          "command": "crewforge.followRollout",
+          "when": "view == crewforge.sources && viewItem =~ /^deployment-flux(-running)?$/",
+          "group": "2_crew@4"
+        },
+        {
+          "command": "crewforge.copyName",
+          "when": "view == crewforge.sources && viewItem =~ /^deployment-/",
+          "group": "5_copy@1"
+        },
+        {
+          "command": "crewforge.copyNamespacedName",
+          "when": "view == crewforge.sources && viewItem =~ /^deployment-/",
+          "group": "5_copy@2"
+        },
+        {
           "command": "crewforge.removeDeployment",
           "when": "view == crewforge.sources && viewItem =~ /^deployment-(helm|bundle)(-running)?$/",
-          "group": "deploy@9"
+          "group": "9_delete@1"
+        },
+        {
+          "command": "crewforge.showDrift",
+          "when": "view == crewforge.sources && viewItem =~ /^resource-/",
+          "group": "inline@1"
         },
         {
           "command": "crewforge.applyResource",
@@ -573,169 +748,104 @@
           "group": "inline@2"
         },
         {
-          "command": "crewforge.deployRevision",
-          "when": "view == crewforge.sources && viewItem =~ /^deployment-/",
-          "group": "deploy@2"
-        },
-        {
-          "command": "crewforge.runFitness",
-          "when": "view == crewforge.sources && viewItem == fitness",
-          "group": "inline"
-        },
-        {
-          "command": "crewforge.runFitness",
-          "when": "view == crewforge.sources && viewItem =~ /^deployment-(?!.*-running$)/",
-          "group": "deploy@3"
-        },
-        {
-          "command": "crewforge.followRollout",
-          "when": "view == crewforge.sources && viewItem =~ /^deployment-flux(-running)?$/",
-          "group": "inline@2"
-        },
-        {
-          "command": "crewforge.showLiveYaml",
-          "when": "view == crewforge.crews && viewItem =~ /^liveObject/",
-          "group": "inline"
-        },
-        {
-          "command": "crewforge.showLiveYaml",
-          "when": "view == crewforge.crews && viewItem =~ /^crew(-flux)?(-running)?$/",
-          "group": "yaml@1"
-        },
-        {
-          "command": "crewforge.showCrewBundleYaml",
-          "when": "view == crewforge.crews && viewItem =~ /^crew(-flux)?(-running)?$/",
-          "group": "yaml@2"
-        },
-        {
-          "command": "crewforge.updateDeployment",
-          "when": "view == crewforge.crews && viewItem =~ /^crew(-flux)?(-running)?$/",
-          "group": "lifecycle@1"
-        },
-        {
-          "command": "crewforge.deployRevision",
-          "when": "view == crewforge.crews && viewItem =~ /^crew(-flux)?(-running)?$/",
-          "group": "lifecycle@2"
-        },
-        {
-          "command": "crewforge.runFitness",
-          "when": "view == crewforge.crews && viewItem =~ /^crew(-flux)?$/",
-          "group": "lifecycle@3"
-        },
-        {
-          "command": "crewforge.followRollout",
-          "when": "view == crewforge.crews && viewItem =~ /^crew-flux(-running)?$/",
-          "group": "lifecycle@4"
-        },
-        {
-          "command": "crewforge.removeDeployment",
-          "when": "view == crewforge.crews && viewItem =~ /^crew(-running)?$/",
-          "group": "lifecycle@9"
+          "command": "crewforge.showDrift",
+          "when": "view == crewforge.sources && viewItem =~ /^resource-/",
+          "group": "1_open@1"
         },
         {
           "command": "crewforge.showSourceYaml",
           "when": "view == crewforge.sources && viewItem =~ /^resource-/",
-          "group": "yaml@1"
+          "group": "1_open@2"
         },
         {
           "command": "crewforge.showLiveYaml",
           "when": "view == crewforge.sources && viewItem =~ /^resource-(in-sync|changed|extra)$/",
-          "group": "yaml@2"
+          "group": "1_open@3"
         },
         {
           "command": "crewforge.showLiveYamlRaw",
           "when": "view == crewforge.sources && viewItem =~ /^resource-(in-sync|changed|extra)$/",
-          "group": "yaml@3"
+          "group": "1_open@4"
         },
         {
-          "command": "crewforge.showDrift",
+          "command": "crewforge.applyResource",
+          "when": "view == crewforge.sources && viewItem =~ /^resource-(changed|missing)$/",
+          "group": "2_crew@1"
+        },
+        {
+          "command": "crewforge.copyName",
           "when": "view == crewforge.sources && viewItem =~ /^resource-/",
-          "group": "yaml@0"
+          "group": "5_copy@1"
         },
         {
-          "command": "crewforge.showLiveYamlRaw",
-          "when": "view == crewforge.crews && (viewItem =~ /^liveObject/ || viewItem =~ /^crew(-flux)?(-running)?$/)",
-          "group": "yaml@3"
+          "command": "crewforge.copyNamespacedName",
+          "when": "view == crewforge.sources && viewItem =~ /^resource-/",
+          "group": "5_copy@2"
         },
         {
-          "command": "crewforge.redeploy",
-          "when": "view == crewforge.sources && viewItem =~ /^source-/",
-          "group": "loop@1"
+          "command": "crewforge.copyYaml",
+          "when": "view == crewforge.sources && viewItem =~ /^resource-(in-sync|changed|extra)$/",
+          "group": "5_copy@3"
         },
         {
-          "command": "crewforge.removeDeployment",
-          "when": "view == crewforge.sources && viewItem =~ /^source-/",
-          "group": "deploy@9"
-        },
-        {
-          "command": "crewforge.renameCrew",
-          "when": "view == crewforge.sources && viewItem =~ /^source-/",
-          "group": "source@1"
-        },
-        {
-          "command": "crewforge.deleteSource",
-          "when": "view == crewforge.sources && viewItem =~ /^source-/",
-          "group": "source@9"
-        },
-        {
-          "command": "crewforge.openCrewDashboard",
-          "when": "view == crewforge.sources && viewItem =~ /^source-/",
-          "group": "dashboard@0"
-        },
-        {
-          "command": "crewforge.openCrewDashboard",
-          "when": "view == crewforge.crews && viewItem =~ /^crew/",
-          "group": "dashboard@0"
+          "command": "crewforge.runFitness",
+          "when": "view == crewforge.sources && viewItem == fitness",
+          "group": "inline@1"
         },
         {
           "command": "crewforge.openFitnessDashboard",
-          "when": "view == crewforge.sources && viewItem =~ /^(fitness|run)/",
-          "group": "dashboard@1"
+          "when": "view == crewforge.sources && viewItem =~ /^fitness/",
+          "group": "1_open@1"
+        },
+        {
+          "command": "crewforge.openInDashboard",
+          "when": "view == crewforge.sources && viewItem =~ /^fitness/ && config.crewforge.dashboardUrl != ''",
+          "group": "1_open@2"
+        },
+        {
+          "command": "crewforge.runFitness",
+          "when": "view == crewforge.sources && viewItem =~ /^fitness$/",
+          "group": "2_crew@1"
+        },
+        {
+          "command": "crewforge.runScenarioBatch",
+          "when": "view == crewforge.sources && viewItem =~ /^fitness/",
+          "group": "2_crew@2"
+        },
+        {
+          "command": "crewforge.addScenario",
+          "when": "view == crewforge.sources && viewItem =~ /^fitness/",
+          "group": "3_edit@1"
         },
         {
           "command": "crewforge.openFitnessDashboard",
-          "when": "view == crewforge.crews && viewItem =~ /^crew/",
-          "group": "dashboard@1"
+          "when": "view == crewforge.sources && viewItem == run",
+          "group": "1_open@1"
         },
         {
-          "command": "crewforge.openCrewMemory",
-          "when": "view == crewforge.crews && viewItem =~ /^crew/",
-          "group": "dashboard@2"
+          "command": "crewforge.openInDashboard",
+          "when": "view == crewforge.sources && viewItem == run && config.crewforge.dashboardUrl != ''",
+          "group": "1_open@2"
         },
         {
-          "command": "crewforge.addScenario",
-          "when": "view == crewforge.sources && viewItem =~ /^(fitness|declSection-fitness)/",
-          "group": "scenario@1"
+          "command": "crewforge.copyName",
+          "when": "view == crewforge.sources && viewItem == run",
+          "group": "5_copy@1"
         },
         {
-          "command": "crewforge.addScenario",
-          "when": "view == crewforge.sources && viewItem == declSection-fitness",
-          "group": "inline"
+          "command": "crewforge.copyNamespacedName",
+          "when": "view == crewforge.sources && viewItem == run",
+          "group": "5_copy@2"
         },
         {
-          "command": "crewforge.runScenario",
-          "when": "view == crewforge.sources && viewItem == declared-scenario",
-          "group": "inline"
-        },
-        {
-          "command": "crewforge.runScenario",
-          "when": "view == crewforge.sources && viewItem == declared-scenario",
-          "group": "scenario@1"
-        },
-        {
-          "command": "crewforge.renameScenario",
-          "when": "view == crewforge.sources && viewItem == declared-scenario",
-          "group": "scenario@2"
-        },
-        {
-          "command": "crewforge.deleteScenario",
-          "when": "view == crewforge.sources && viewItem == declared-scenario",
-          "group": "scenario@9"
+          "command": "crewforge.copyYaml",
+          "when": "view == crewforge.sources && viewItem == run",
+          "group": "5_copy@3"
         },
         {
           "command": "crewforge.addAgent",
           "when": "view == crewforge.sources && viewItem == declSection-agents",
-          "group": "define@1"
+          "group": "3_edit@1"
         },
         {
           "command": "crewforge.addAgent",
@@ -745,7 +855,7 @@
         {
           "command": "crewforge.addPromptModule",
           "when": "view == crewforge.sources && viewItem == declSection-prompts",
-          "group": "define@1"
+          "group": "3_edit@1"
         },
         {
           "command": "crewforge.addPromptModule",
@@ -755,7 +865,7 @@
         {
           "command": "crewforge.addSkill",
           "when": "view == crewforge.sources && viewItem == declSection-skills",
-          "group": "define@1"
+          "group": "3_edit@1"
         },
         {
           "command": "crewforge.addSkill",
@@ -765,7 +875,7 @@
         {
           "command": "crewforge.editSchedulingNeeds",
           "when": "view == crewforge.sources && viewItem == declSection-models",
-          "group": "define@1"
+          "group": "3_edit@1"
         },
         {
           "command": "crewforge.editSchedulingNeeds",
@@ -775,17 +885,27 @@
         {
           "command": "crewforge.addModel",
           "when": "view == crewforge.sources && viewItem == declSection-models",
-          "group": "define@2"
+          "group": "3_edit@2"
+        },
+        {
+          "command": "crewforge.addCrewSchedulingPolicy",
+          "when": "view == crewforge.sources && viewItem == declSection-policies",
+          "group": "3_edit@1"
+        },
+        {
+          "command": "crewforge.addCrewSchedulingPolicy",
+          "when": "view == crewforge.sources && viewItem == declSection-policies",
+          "group": "inline"
         },
         {
           "command": "crewforge.editSchedulingNeeds",
           "when": "view == crewforge.sources && viewItem == declSection-policies",
-          "group": "define@2"
+          "group": "3_edit@2"
         },
         {
           "command": "crewforge.addRAGSource",
           "when": "view == crewforge.sources && viewItem == declSection-rag",
-          "group": "define@1"
+          "group": "3_edit@1"
         },
         {
           "command": "crewforge.addRAGSource",
@@ -795,47 +915,272 @@
         {
           "command": "crewforge.addEmbeddingModel",
           "when": "view == crewforge.sources && viewItem == declSection-rag",
-          "group": "define@1"
+          "group": "3_edit@1"
         },
         {
           "command": "crewforge.addMCPServer",
           "when": "view == crewforge.sources && viewItem == declSection-mcp",
-          "group": "define@1"
+          "group": "3_edit@1"
         },
         {
           "command": "crewforge.addMCPServer",
           "when": "view == crewforge.sources && viewItem == declSection-mcp",
-          "group": "inline"
-        },
-        {
-          "command": "crewforge.addCrewSchedulingPolicy",
-          "when": "view == crewforge.sources && viewItem == declSection-policies",
-          "group": "define@1"
-        },
-        {
-          "command": "crewforge.addCrewSchedulingPolicy",
-          "when": "view == crewforge.sources && viewItem == declSection-policies",
           "group": "inline"
         },
         {
           "command": "crewforge.addNotificationSink",
           "when": "view == crewforge.sources && viewItem == declSection-notifications",
-          "group": "define@1"
+          "group": "3_edit@1"
         },
         {
           "command": "crewforge.addNotificationSink",
           "when": "view == crewforge.sources && viewItem == declSection-notifications",
           "group": "inline"
+        },
+        {
+          "command": "crewforge.addScenario",
+          "when": "view == crewforge.sources && viewItem == declSection-fitness",
+          "group": "inline"
+        },
+        {
+          "command": "crewforge.addScenario",
+          "when": "view == crewforge.sources && viewItem == declSection-fitness",
+          "group": "3_edit@1"
+        },
+        {
+          "command": "crewforge.runScenarioBatch",
+          "when": "view == crewforge.sources && viewItem == declSection-fitness",
+          "group": "2_crew@2"
+        },
+        {
+          "command": "crewforge.runScenario",
+          "when": "view == crewforge.sources && viewItem == declared-scenario",
+          "group": "inline"
+        },
+        {
+          "command": "crewforge.openSourceFile",
+          "when": "view == crewforge.sources && viewItem =~ /^declared-(scenario|object|file)$/",
+          "group": "1_open@1"
+        },
+        {
+          "command": "crewforge.runSelectedScenarios",
+          "when": "view == crewforge.sources && viewItem == declared-scenario && listMultiSelection",
+          "group": "2_crew@0"
+        },
+        {
+          "command": "crewforge.runScenario",
+          "when": "view == crewforge.sources && viewItem == declared-scenario",
+          "group": "2_crew@1"
+        },
+        {
+          "command": "crewforge.renameScenario",
+          "when": "view == crewforge.sources && viewItem == declared-scenario",
+          "group": "3_edit@1"
+        },
+        {
+          "command": "crewforge.copyName",
+          "when": "view == crewforge.sources && viewItem =~ /^declared/",
+          "group": "5_copy@1"
+        },
+        {
+          "command": "crewforge.copyPath",
+          "when": "view == crewforge.sources && viewItem =~ /^declared-(scenario|object|file)$/",
+          "group": "5_copy@2"
+        },
+        {
+          "command": "crewforge.copyRelativePath",
+          "when": "view == crewforge.sources && viewItem =~ /^declared-(scenario|object|file)$/",
+          "group": "5_copy@3"
+        },
+        {
+          "command": "crewforge.revealInExplorerView",
+          "when": "view == crewforge.sources && viewItem =~ /^declared-(scenario|object|file)$/",
+          "group": "6_reveal@1"
+        },
+        {
+          "command": "crewforge.revealInOS",
+          "when": "view == crewforge.sources && viewItem =~ /^declared-(scenario|object|file)$/",
+          "group": "6_reveal@2"
+        },
+        {
+          "command": "crewforge.deleteScenario",
+          "when": "view == crewforge.sources && viewItem == declared-scenario",
+          "group": "9_delete@1"
         },
         {
           "command": "crewforge.removeFromSource",
           "when": "view == crewforge.sources && viewItem == declared-object",
-          "group": "define@9"
+          "group": "9_delete@1"
         },
         {
-          "command": "crewforge.showToolDetails",
-          "when": "view == crewforge.crews && viewItem == tool",
+          "command": "crewforge.openSourceFile",
+          "when": "view == crewforge.sources && viewItem == sourceFile",
+          "group": "1_open@1"
+        },
+        {
+          "command": "crewforge.diffFileWithLive",
+          "when": "view == crewforge.sources && viewItem == sourceFile",
+          "group": "1_open@2"
+        },
+        {
+          "command": "crewforge.openInTerminal",
+          "when": "view == crewforge.sources && viewItem =~ /^source(Folder|Files)$/",
+          "group": "1_open@3"
+        },
+        {
+          "command": "crewforge.copyName",
+          "when": "view == crewforge.sources && viewItem =~ /^source(File|Folder)$/",
+          "group": "5_copy@1"
+        },
+        {
+          "command": "crewforge.copyPath",
+          "when": "view == crewforge.sources && viewItem =~ /^source(File|Folder)$/",
+          "group": "5_copy@2"
+        },
+        {
+          "command": "crewforge.copyRelativePath",
+          "when": "view == crewforge.sources && viewItem =~ /^source(File|Folder)$/",
+          "group": "5_copy@3"
+        },
+        {
+          "command": "crewforge.revealInExplorerView",
+          "when": "view == crewforge.sources && viewItem =~ /^source(File|Folder|Files)$/",
+          "group": "6_reveal@1"
+        },
+        {
+          "command": "crewforge.revealInOS",
+          "when": "view == crewforge.sources && viewItem =~ /^source(File|Folder|Files)$/",
+          "group": "6_reveal@2"
+        },
+        {
+          "command": "crewforge.openInSourceControl",
+          "when": "view == crewforge.sources && viewItem =~ /^source(File|Folder|Files)$/",
+          "group": "6_reveal@3"
+        },
+        {
+          "command": "crewforge.copyPath",
+          "when": "view == crewforge.sources && viewItem == sourceFiles",
+          "group": "5_copy@2"
+        },
+        {
+          "command": "crewforge.copyRelativePath",
+          "when": "view == crewforge.sources && viewItem == sourceFiles",
+          "group": "5_copy@3"
+        },
+        {
+          "command": "crewforge.showConnectionInfo",
+          "when": "view == crewforge.crews && viewItem == connection",
+          "group": "1_open@1"
+        },
+        {
+          "command": "crewforge.openCrewsOverview",
+          "when": "view == crewforge.crews && viewItem == connection",
+          "group": "1_open@2"
+        },
+        {
+          "command": "crewforge.copyName",
+          "when": "view == crewforge.crews && viewItem == namespace",
+          "group": "5_copy@1"
+        },
+        {
+          "command": "crewforge.askCrew",
+          "when": "view == crewforge.crews && viewItem =~ /^crew(-flux)?(-running)?$/",
           "group": "inline"
+        },
+        {
+          "command": "crewforge.openCrewDashboard",
+          "when": "view == crewforge.crews && viewItem =~ /^crew(-flux)?(-running)?$/",
+          "group": "1_open@1"
+        },
+        {
+          "command": "crewforge.openInDashboard",
+          "when": "view == crewforge.crews && viewItem =~ /^crew(-flux)?(-running)?$/ && config.crewforge.dashboardUrl != ''",
+          "group": "1_open@2"
+        },
+        {
+          "command": "crewforge.openFitnessDashboard",
+          "when": "view == crewforge.crews && viewItem =~ /^crew(-flux)?(-running)?$/",
+          "group": "1_open@3"
+        },
+        {
+          "command": "crewforge.openCrewMemory",
+          "when": "view == crewforge.crews && viewItem =~ /^crew(-flux)?(-running)?$/",
+          "group": "1_open@4"
+        },
+        {
+          "command": "crewforge.openSourceFile",
+          "when": "view == crewforge.crews && viewItem =~ /^crew(-flux)?(-running)?$/",
+          "group": "1_open@5"
+        },
+        {
+          "command": "crewforge.showLiveYaml",
+          "when": "view == crewforge.crews && viewItem =~ /^crew(-flux)?(-running)?$/",
+          "group": "1_view@1"
+        },
+        {
+          "command": "crewforge.showCrewBundleYaml",
+          "when": "view == crewforge.crews && viewItem =~ /^crew(-flux)?(-running)?$/",
+          "group": "1_view@2"
+        },
+        {
+          "command": "crewforge.showLiveYamlRaw",
+          "when": "view == crewforge.crews && viewItem =~ /^crew(-flux)?(-running)?$/",
+          "group": "1_view@3"
+        },
+        {
+          "command": "crewforge.askCrew",
+          "when": "view == crewforge.crews && viewItem =~ /^crew(-flux)?(-running)?$/",
+          "group": "2_crew@1"
+        },
+        {
+          "command": "crewforge.updateDeployment",
+          "when": "view == crewforge.crews && viewItem =~ /^crew(-flux)?(-running)?$/",
+          "group": "2_crew@2"
+        },
+        {
+          "command": "crewforge.deployRevision",
+          "when": "view == crewforge.crews && viewItem =~ /^crew(-flux)?(-running)?$/",
+          "group": "2_crew@3"
+        },
+        {
+          "command": "crewforge.runFitness",
+          "when": "view == crewforge.crews && viewItem =~ /^crew(-flux)?$/",
+          "group": "2_crew@4"
+        },
+        {
+          "command": "crewforge.followRollout",
+          "when": "view == crewforge.crews && viewItem =~ /^crew-flux(-running)?$/",
+          "group": "2_crew@5"
+        },
+        {
+          "command": "crewforge.copyName",
+          "when": "view == crewforge.crews && viewItem =~ /^crew(-flux)?(-running)?$/",
+          "group": "5_copy@1"
+        },
+        {
+          "command": "crewforge.copyNamespacedName",
+          "when": "view == crewforge.crews && viewItem =~ /^crew(-flux)?(-running)?$/",
+          "group": "5_copy@2"
+        },
+        {
+          "command": "crewforge.copyYaml",
+          "when": "view == crewforge.crews && viewItem =~ /^crew(-flux)?(-running)?$/",
+          "group": "5_copy@3"
+        },
+        {
+          "command": "crewforge.revealInExplorerView",
+          "when": "view == crewforge.crews && viewItem =~ /^crew(-flux)?(-running)?$/",
+          "group": "6_reveal@1"
+        },
+        {
+          "command": "crewforge.revealInOS",
+          "when": "view == crewforge.crews && viewItem =~ /^crew(-flux)?(-running)?$/",
+          "group": "6_reveal@2"
+        },
+        {
+          "command": "crewforge.removeDeployment",
+          "when": "view == crewforge.crews && viewItem =~ /^crew(-running)?$/",
+          "group": "9_delete@1"
         },
         {
           "command": "crewforge.runDeployedFitness",
@@ -845,22 +1190,37 @@
         {
           "command": "crewforge.runDeployedFitness",
           "when": "view == crewforge.crews && viewItem == crewSection-fitness",
-          "group": "fitness@1"
+          "group": "2_crew@1"
         },
         {
-          "command": "crewforge.runDeployedScenario",
-          "when": "view == crewforge.crews && viewItem == liveScenario",
+          "command": "crewforge.runScenarioBatch",
+          "when": "view == crewforge.crews && viewItem == crewSection-fitness",
+          "group": "2_crew@2"
+        },
+        {
+          "command": "crewforge.showLiveYaml",
+          "when": "view == crewforge.crews && viewItem =~ /^liveObject/",
           "group": "inline"
         },
         {
-          "command": "crewforge.runDeployedScenario",
-          "when": "view == crewforge.crews && viewItem == liveScenario",
-          "group": "fitness@1"
+          "command": "crewforge.openInDashboard",
+          "when": "view == crewforge.crews && viewItem =~ /^liveObject-(Agent|PromptModule|Model|ModelServer|EmbeddingModel|RAGSource|MCPServer|MCPGateway|CrewFitness|CrewFitnessSuite)(-|$)/ && config.crewforge.dashboardUrl != ''",
+          "group": "1_open@1"
         },
         {
-          "command": "crewforge.showDeployedScenario",
-          "when": "view == crewforge.crews && viewItem == liveScenario",
-          "group": "fitness@2"
+          "command": "crewforge.openSourceFile",
+          "when": "view == crewforge.crews && viewItem =~ /^liveObject-(Agent|PromptModule|Skill|Model|EmbeddingModel|RAGSource|MCPServer|CrewSchedulingPolicy|NotificationSink|CrewFitness|CrewFitnessSuite)$/",
+          "group": "1_open@2"
+        },
+        {
+          "command": "crewforge.showLiveYaml",
+          "when": "view == crewforge.crews && viewItem =~ /^liveObject/",
+          "group": "1_view@1"
+        },
+        {
+          "command": "crewforge.showLiveYamlRaw",
+          "when": "view == crewforge.crews && viewItem =~ /^liveObject/",
+          "group": "1_view@2"
         },
         {
           "command": "crewforge.pauseRun",
@@ -878,24 +1238,89 @@
           "group": "inline"
         },
         {
-          "command": "crewforge.runScenarioBatch",
-          "when": "view == crewforge.crews && viewItem == crewSection-fitness",
-          "group": "fitness@2"
+          "command": "crewforge.pauseRun",
+          "when": "view == crewforge.crews && viewItem =~ /-run.*-pause/",
+          "group": "2_crew@1"
         },
         {
-          "command": "crewforge.runScenarioBatch",
-          "when": "view == crewforge.sources && viewItem =~ /^(fitness|declSection-fitness)/",
-          "group": "fitness@2"
+          "command": "crewforge.resumeRun",
+          "when": "view == crewforge.crews && viewItem =~ /-run.*-resume/",
+          "group": "2_crew@1"
+        },
+        {
+          "command": "crewforge.copyName",
+          "when": "view == crewforge.crews && viewItem =~ /^liveObject/",
+          "group": "5_copy@1"
+        },
+        {
+          "command": "crewforge.copyNamespacedName",
+          "when": "view == crewforge.crews && viewItem =~ /^liveObject/",
+          "group": "5_copy@2"
+        },
+        {
+          "command": "crewforge.copyYaml",
+          "when": "view == crewforge.crews && viewItem =~ /^liveObject/",
+          "group": "5_copy@3"
+        },
+        {
+          "command": "crewforge.revealInExplorerView",
+          "when": "view == crewforge.crews && viewItem =~ /^liveObject-(Agent|PromptModule|Skill|Model|EmbeddingModel|RAGSource|MCPServer|CrewSchedulingPolicy|NotificationSink|CrewFitness|CrewFitnessSuite)$/",
+          "group": "6_reveal@1"
+        },
+        {
+          "command": "crewforge.revealInOS",
+          "when": "view == crewforge.crews && viewItem =~ /^liveObject-(Agent|PromptModule|Skill|Model|EmbeddingModel|RAGSource|MCPServer|CrewSchedulingPolicy|NotificationSink|CrewFitness|CrewFitnessSuite)$/",
+          "group": "6_reveal@2"
+        },
+        {
+          "command": "crewforge.stopRun",
+          "when": "view == crewforge.crews && viewItem =~ /-run.*-stop/",
+          "group": "9_delete@1"
+        },
+        {
+          "command": "crewforge.runDeployedScenario",
+          "when": "view == crewforge.crews && viewItem == liveScenario",
+          "group": "inline"
+        },
+        {
+          "command": "crewforge.showDeployedScenario",
+          "when": "view == crewforge.crews && viewItem == liveScenario",
+          "group": "1_open@1"
         },
         {
           "command": "crewforge.runSelectedScenarios",
           "when": "view == crewforge.crews && viewItem == liveScenario && listMultiSelection",
-          "group": "fitness@0"
+          "group": "2_crew@0"
         },
         {
-          "command": "crewforge.runSelectedScenarios",
-          "when": "view == crewforge.sources && viewItem == declared-scenario && listMultiSelection",
-          "group": "fitness@0"
+          "command": "crewforge.runDeployedScenario",
+          "when": "view == crewforge.crews && viewItem == liveScenario",
+          "group": "2_crew@1"
+        },
+        {
+          "command": "crewforge.copyName",
+          "when": "view == crewforge.crews && viewItem == liveScenario",
+          "group": "5_copy@1"
+        },
+        {
+          "command": "crewforge.copyNamespacedName",
+          "when": "view == crewforge.crews && viewItem == liveScenario",
+          "group": "5_copy@2"
+        },
+        {
+          "command": "crewforge.showToolDetails",
+          "when": "view == crewforge.crews && viewItem == tool",
+          "group": "inline"
+        },
+        {
+          "command": "crewforge.showToolDetails",
+          "when": "view == crewforge.crews && viewItem == tool",
+          "group": "1_open@1"
+        },
+        {
+          "command": "crewforge.copyName",
+          "when": "view == crewforge.crews && viewItem == tool",
+          "group": "5_copy@1"
         }
       ],
       "editor/context": [
@@ -1093,6 +1518,58 @@
         {
           "command": "crewforge.runSelectedScenarios",
           "when": "false"
+        },
+        {
+          "command": "crewforge.openChartFile",
+          "when": "false"
+        },
+        {
+          "command": "crewforge.openSourceFile",
+          "when": "false"
+        },
+        {
+          "command": "crewforge.openInTerminal",
+          "when": "false"
+        },
+        {
+          "command": "crewforge.revealInExplorerView",
+          "when": "false"
+        },
+        {
+          "command": "crewforge.revealInOS",
+          "when": "false"
+        },
+        {
+          "command": "crewforge.copyName",
+          "when": "false"
+        },
+        {
+          "command": "crewforge.copyNamespacedName",
+          "when": "false"
+        },
+        {
+          "command": "crewforge.copyYaml",
+          "when": "false"
+        },
+        {
+          "command": "crewforge.copyPath",
+          "when": "false"
+        },
+        {
+          "command": "crewforge.copyRelativePath",
+          "when": "false"
+        },
+        {
+          "command": "crewforge.openInDashboard",
+          "when": "false"
+        },
+        {
+          "command": "crewforge.openInSourceControl",
+          "when": "false"
+        },
+        {
+          "command": "crewforge.diffFileWithLive",
+          "when": "false"
         }
       ],
       "explorer/context": [
@@ -1164,7 +1641,9 @@
         },
         "crewforge.tokenAudiences": {
           "type": "array",
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "default": [],
           "markdownDescription": "Audiences the minted token is bound to, for a crew that lists `tokenAudiences` in `spec.discussion.access`. Used only with `crewforge.tokenServiceAccount`."
         },

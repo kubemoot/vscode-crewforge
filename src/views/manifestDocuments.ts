@@ -70,10 +70,20 @@ export class ManifestDocuments implements vscode.TextDocumentContentProvider {
     if (choice === OPEN_SOURCE) await vscode.commands.executeCommand('vscode.open', vscode.Uri.file(at.file), { selection: new vscode.Range(at.line, 0, at.line, 0) });
   }
 
-  private put(path: string, text: string, view: ResourceView): vscode.Uri {
+  /**
+   * Opens the diff editor on a source file: the live objects it declares on the left, as a
+   * read-only document, and the file itself on the right, so it can be edited there.
+   */
+  async showFileDiff(file: string, liveText: string, namespace: string): Promise<void> {
+    const name = file.split(/[\\/]/).pop() ?? file;
+    const live = this.put(`/live-file/${namespace}/${name}`, `${NORMALIZED_NOTE}\n${liveText}`);
+    await vscode.commands.executeCommand('vscode.diff', live, vscode.Uri.file(file), `${name}: live in ${namespace} vs file`);
+  }
+
+  private put(path: string, text: string, view?: ResourceView): vscode.Uri {
     const uri = vscode.Uri.parse(`${MANIFEST_SCHEME}:${path}`);
     this.texts.set(uri.toString(), text);
-    this.views.set(uri.toString(), view);
+    if (view) this.views.set(uri.toString(), view);
     this.changed.fire(uri);
     return uri;
   }

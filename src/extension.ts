@@ -2,7 +2,7 @@ import { VIEW_DESCRIPTIONS } from './definitions';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
-import { connect, type Connection } from './connection';
+import { connect, dashboardBase, yamlFormat, type Connection } from './connection';
 import { loadKubeconfig } from './k8s/kubeconfig';
 import type { CrewSummary } from './k8s/crews';
 import { canAnswer } from './k8s/crewState';
@@ -33,7 +33,7 @@ import { SourceFitness } from './fitness/sourceFitness';
 import { readDeployedScenarios } from './fitness/deployed';
 import { registerScenarioCommands } from './fitness/scenarioCommands';
 import { ScenarioFiles } from './fitness/scenarios';
-import { LoopMemory } from './loop/state';
+import { LoopMemory, redeployTarget } from './loop/state';
 import { SourceService } from './source/service';
 import { SourceWatcher } from './source/watcher';
 import { IGNORED_GLOB } from './source/ignored';
@@ -47,6 +47,8 @@ import { CrewCodeLens } from './views/codeLens';
 import { SourceTreeProvider, type SourceNode } from './views/sourceTree';
 import { YamlCommands, type YamlTarget } from './views/yamlCommands';
 import { showError } from './views/notify';
+import { liveTextForFile } from './views/fileDiff';
+import { ContextCommands, registerContextCommands } from './views/contextCommands';
 
 const REFRESH_MS = 30_000;
 
@@ -268,6 +270,21 @@ export function activate(context: vscode.ExtensionContext): CrewForgeApi {
       }),
     ),
     vscode.commands.registerCommand('crewforge.showConnectionInfo', () => guard(() => dashboards.showConnection())),
+    ...registerContextCommands(
+      new ContextCommands({
+        entryForCrew: (crew) => sourceForCrew(crew, sources.known),
+        located: (entry) => service.located(entry),
+        yamlOf: (ref) => liveDocuments.yamlText(ref),
+        dashboardBase,
+        liveForFile: async (entry, file) => {
+          const target = redeployTarget(sources.deploymentsOf(entry.source.root));
+          const text = target?.drift && liveTextForFile(file, await service.located(entry, target.deployment.namespace), target.drift, yamlFormat());
+          return text && target ? { text, namespace: target.deployment.namespace } : undefined;
+        },
+        showFileDiff: (file, text, namespace) => documents.showFileDiff(file, text, namespace),
+      }),
+      guard,
+    ),
     ...registerScenarioCommands({ files: new ScenarioFiles(), runScenario: (node) => sourceFitness.runOne(node), reload: () => sources.reload(), guard }),
     sourcesView,
     new SourceWatcher(() => sources.known.map((e) => e.source.root), () => sources.reload()),

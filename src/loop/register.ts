@@ -50,7 +50,7 @@ export function registerLoop(context: vscode.ExtensionContext, parts: LoopParts)
   const activeFile = () => vscode.window.activeTextEditor?.document.uri.fsPath;
   sources.stateOf = (root) => {
     const state = states.get(root);
-    return state && { text: stateText(state), changed: state.kind === 'changed' };
+    return state && { text: stateText(state), changed: state.kind === 'changed', ready: 'deployment' in state && state.deployment.deployment.crew.ready };
   };
   const command = (id: string, run: (target?: LoopTarget) => Promise<unknown>) =>
     vscode.commands.registerCommand(id, (target?: LoopTarget) =>

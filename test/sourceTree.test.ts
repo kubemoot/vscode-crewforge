@@ -107,7 +107,7 @@ describe('SourceTreeProvider', () => {
   });
 
   /** A source's children below what it declares: its deployments, or why there are none. */
-  const live = async (tree: SourceTreeProvider, source: SourceNode) => (await tree.getChildren(source)).filter((n) => n.kind !== 'declared' && n.kind !== 'declSection');
+  const live = async (tree: SourceTreeProvider, source: SourceNode) => (await tree.getChildren(source)).filter((n) => n.kind !== 'declared' && n.kind !== 'declSection' && n.kind !== 'files');
 
   /** A provider whose connection is the fake cluster instead of a kubeconfig. */
   function provider(d: SourceDeps = deps()): SourceTreeProvider {

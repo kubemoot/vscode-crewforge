@@ -70,6 +70,11 @@ export class LiveDocuments implements vscode.TextDocumentContentProvider {
     }
   }
 
+  /** The clean YAML of one live object, as Show Live YAML shows it, read now. */
+  yamlText(ref: ObjectRef): Promise<string> {
+    return this.render({ kind: 'object', ref });
+  }
+
   /** What an open live document shows, so a command on it can show the same object another way. */
   targetOf(uri: vscode.Uri): LiveTarget | undefined {
     return this.targets.get(uri.toString());

@@ -1,3 +1,4 @@
+import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { TERMS, withTerm } from '../definitions';
 import { connect, namespaceScope, type Connection } from '../connection';
@@ -13,6 +14,7 @@ import { locationOf } from '../source/render';
 import { sourceOf, sourceTitle, type SourceEntry, type SourceService } from '../source/service';
 import { errorItems, errorText, type MessageNode } from './errors';
 import { ReadingNotice } from './readingNotice';
+import { fileItem, listDir, type ListDir } from './sourceFiles';
 
 export type SourceNode =
   | { kind: 'source'; entry: SourceEntry }
@@ -22,6 +24,8 @@ export type SourceNode =
   | { kind: 'run'; entry: SourceEntry; deployment: Deployment; run: FitnessRun }
   | { kind: 'declSection'; entry: SourceEntry; section: DeclaredSection; items: DeclaredItem[] }
   | { kind: 'declared'; entry: SourceEntry; item: DeclaredItem }
+  | { kind: 'files'; entry: SourceEntry }
+  | { kind: 'file'; entry: SourceEntry; path: string; folder: boolean }
   | MessageNode;
 
 export type DeploymentNode = Extract<SourceNode, { kind: 'deployment' }>;
@@ -30,6 +34,8 @@ export type DeploymentNode = Extract<SourceNode, { kind: 'deployment' }>;
 export interface SourceState {
   text: string;
   changed: boolean;
+  /** Deployed and Ready, so the crew can be asked. */
+  ready?: boolean;
 }
 
 /** The Crew Sources view: crew charts and bundles in the workspace, where each is deployed, and how each deployment differs from its source. */
@@ -53,6 +59,8 @@ export class SourceTreeProvider implements vscode.TreeDataProvider<SourceNode> {
   private fresh?: SourceNode[];
   /** Where each source stands, by folder, shown on its line; set by the inner loop. */
   stateOf: (root: string) => SourceState | undefined = () => undefined;
+  /** Reads a folder of a source for its Files group; replaced in tests. */
+  listDir: ListDir = listDir;
   /** Whether a crew has a fitness run in progress, by namespace and crew; its items then hide Run Fitness. */
   fitnessBusy: (namespace: string, crew: string) => boolean = () => false;
   /** Shows a line above the view's items, such as "Still reading from lab...", or clears it; set to the view's message. */
@@ -131,6 +139,8 @@ export class SourceTreeProvider implements vscode.TreeDataProvider<SourceNode> {
     if (node.kind === 'source') return this.loadSource(node.entry);
     if (node.kind === 'deployment') return deploymentChildren(node);
     if (node.kind === 'fitness') return this.loadRuns(node);
+    if (node.kind === 'files') return this.filesIn(node.entry, node.entry.source.root);
+    if (node.kind === 'file') return node.folder ? this.filesIn(node.entry, node.path) : [];
     if (node.kind === 'declSection') return node.items.map((item) => ({ kind: 'declared', entry: node.entry, item }));
     return [];
   }
@@ -181,6 +191,10 @@ export class SourceTreeProvider implements vscode.TreeDataProvider<SourceNode> {
         return declSectionItem(node);
       case 'declared':
         return declaredItem(node.item, node.entry.source.root);
+      case 'files':
+        return filesItem(node);
+      case 'file':
+        return fileItem(node.path, node.folder);
       default:
         return messageItem(node);
     }
@@ -218,7 +232,16 @@ export class SourceTreeProvider implements vscode.TreeDataProvider<SourceNode> {
   private async loadSource(entry: SourceEntry): Promise<SourceNode[]> {
     if (entry.error) return errorNodes(entry.error, entry.errorAt);
     const [declared, deployments] = await Promise.all([this.loadDeclarations(entry), this.loadDeployments(entry)]);
-    return [...declared, ...deployments];
+    return [...declared, ...deployments, { kind: 'files', entry }];
+  }
+
+  /** The real files and folders of a folder of a source. */
+  private async filesIn(entry: SourceEntry, dir: string): Promise<SourceNode[]> {
+    try {
+      return (await this.listDir(dir)).map((e): SourceNode => ({ kind: 'file', entry, path: path.join(dir, e.name), folder: e.folder }));
+    } catch (err) {
+      return errorNodes(err);
+    }
   }
 
   private async loadDeclarations(entry: SourceEntry): Promise<SourceNode[]> {
@@ -357,10 +380,11 @@ function declaredItem(declared: DeclaredItem, root: string): vscode.TreeItem {
   return item;
 }
 
-/** A scenario has its own menu; an object the source declares in a file can be removed from it. */
+/** A scenario has its own menu; an object the source declares in a file can be removed from it; any other item with a file has the file's actions. */
 function declaredContext(declared: DeclaredItem): string {
   if (declared.scenario) return 'declared-scenario';
-  return declared.object && declared.file ? 'declared-object' : 'declared';
+  if (declared.object && declared.file) return 'declared-object';
+  return declared.file ? 'declared-file' : 'declared';
 }
 
 /** The command that opens a file with the cursor at the start of a line. */
@@ -390,7 +414,7 @@ function sourceItem(node: Extract<SourceNode, { kind: 'source' }>, state: Source
   item.description = state ? `${state.text} · ${what}` : what;
   item.tooltip = sourceTooltip(entry);
   item.iconPath = new vscode.ThemeIcon(entry.source.kind === 'helm' ? 'package' : 'files');
-  item.contextValue = `source-${entry.source.kind}${state?.changed ? '-changed' : ''}${running(busy)}`;
+  item.contextValue = `source-${entry.source.kind}${state?.ready ? '-ready' : ''}${state?.changed ? '-changed' : ''}${running(busy)}`;
   item.command = { command: 'crewforge.openCrewDashboard', title: 'Open Dashboard', arguments: [node] };
   return item;
 }
@@ -435,6 +459,15 @@ function resourceItem(node: Extract<SourceNode, { kind: 'resource' }>): vscode.T
   item.iconPath = new vscode.ThemeIcon(icon, new vscode.ThemeColor(color));
   item.contextValue = `resource-${drift.state}`;
   item.command = { command: 'crewforge.showDrift', title: 'Compare with Live', arguments: [node] };
+  return item;
+}
+
+function filesItem(node: Extract<SourceNode, { kind: 'files' }>): vscode.TreeItem {
+  const item = new vscode.TreeItem('Files', vscode.TreeItemCollapsibleState.Collapsed);
+  item.id = `files:${node.entry.source.root}`;
+  item.iconPath = new vscode.ThemeIcon('folder');
+  item.tooltip = 'The files and folders of the source on disk. They open in the normal editor, with the editor\'s Git markers and Source Control.';
+  item.contextValue = 'sourceFiles';
   return item;
 }
 

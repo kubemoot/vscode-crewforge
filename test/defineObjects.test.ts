@@ -127,7 +127,7 @@ describe('the Add <Kind> commands in the manifest', () => {
       const id = `crewforge.add${kind}`;
       expect(pkg.contributes.commands.some((c) => c.command === id), id).toBe(true);
       const when = `view == crewforge.sources && viewItem == declSection-${d.section}`;
-      expect(menu.some((m) => m.command === id && m.when === when && m.group === (d.advanced ? 'define@2' : 'define@1')), id).toBe(true);
+      expect(menu.some((m) => m.command === id && m.when === when && m.group === (d.advanced ? '3_edit@2' : '3_edit@1')), id).toBe(true);
       if (d.advanced) expect(menu.some((m) => m.command === id && m.group === 'inline'), id).toBe(false);
     }
     for (const section of new Set(Object.values(DEFINITIONS).map((d) => d.section))) {
@@ -139,9 +139,9 @@ describe('the Add <Kind> commands in the manifest', () => {
     const pkg = JSON.parse(fixture('../../package.json')) as { contributes: { commands: { command: string; title: string }[]; menus: Record<string, { command: string; when?: string; group?: string }[]> } };
     const menu = pkg.contributes.menus['view/item/context'].filter((m) => m.command === 'crewforge.editSchedulingNeeds');
     expect(menu.map((m) => `${m.when}|${m.group}`)).toEqual([
-      'view == crewforge.sources && viewItem == declSection-models|define@1',
+      'view == crewforge.sources && viewItem == declSection-models|3_edit@1',
       'view == crewforge.sources && viewItem == declSection-models|inline',
-      'view == crewforge.sources && viewItem == declSection-policies|define@2',
+      'view == crewforge.sources && viewItem == declSection-policies|3_edit@2',
     ]);
     expect(pkg.contributes.commands.find((c) => c.command === 'crewforge.addModel')?.title).toBe('Add Crew-Local Model (Advanced)...');
     expect(pkg.contributes.menus.commandPalette.find((m) => m.command === 'crewforge.editSchedulingNeeds')?.when).toBe('false');
