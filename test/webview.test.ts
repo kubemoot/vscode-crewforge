@@ -58,9 +58,11 @@ let availability: StateMessage['availability'];
 
 /** The conversations the host says have something new; a test changes it before posting. */
 let fresh: string[] = [];
+/** The conversations the host says CrewForge paused; a test changes it before posting. */
+let paused: string[] = [];
 
 function stateMessage(conversation: Conversation, extra: Partial<StateMessage['view']> = {}, history: StateMessage['history'] = []): StateMessage {
-  return { type: 'state', view: { conversation, busy: false, ...extra }, crewTitle: conversation.crewName, history, about: '2 agents', links, availability, fresh };
+  return { type: 'state', view: { conversation, busy: false, ...extra }, crewTitle: conversation.crewName, history, about: '2 agents', links, availability, fresh, paused };
 }
 
 /** Delivers a message as VS Code's host frame does: with the page's own origin. */
@@ -72,6 +74,7 @@ const $ = (id: string) => document.getElementById(id)!;
 
 beforeEach(async () => {
   fresh = [];
+  paused = [];
   await loadPage();
 });
 afterEach(() => {
@@ -351,42 +354,78 @@ describe('the chat page', () => {
     expect(menu.hidden).toBe(false);
   });
 
-  it('offers stop, pause, resume and delete on the crew only for a conversation the crew knows', () => {
+  /** Which of the header's conversation actions show: stop, pause, resume, delete from the crew. */
+  const shownControls = () => ['conv-stop', 'conv-pause', 'conv-resume', 'conv-erase'].map((id) => !($(id) as HTMLButtonElement).hidden);
+
+  it('offers nothing to control on the crew for a conversation the crew does not know', () => {
     const c = newConversation('ctx', 'team-a', 'lab-ops');
-    const buttons = ['conv-stop', 'conv-pause', 'conv-resume', 'conv-erase'].map((id) => $(id) as HTMLButtonElement);
     post(c);
-    expect(buttons.map((b) => b.hidden)).toEqual([true, true, true, true]);
+    expect(shownControls()).toEqual([false, false, false, false]);
+    post(c, { busy: true });
+    expect(shownControls()).toEqual([false, false, false, false]);
+  });
+
+  it('offers only delete from the crew for a finished conversation', () => {
+    const c = newConversation('ctx', 'team-a', 'lab-ops');
     c.conversationId = 'conv-1';
     post(c);
-    expect(buttons.map((b) => b.hidden)).toEqual([false, false, false, false]);
+    expect(shownControls()).toEqual([false, false, false, true]);
+  });
+
+  it('offers Stop and Pause while a turn runs', () => {
+    const c = newConversation('ctx', 'team-a', 'lab-ops');
+    c.conversationId = 'conv-1';
+    post(c, { busy: true });
+    expect(shownControls()).toEqual([true, true, false, true]);
+  });
+
+  it('offers Resume and Stop once the conversation is paused, even when its turn still runs', () => {
+    const c = newConversation('ctx', 'team-a', 'lab-ops');
+    c.conversationId = 'conv-1';
+    paused = ['conv-1'];
+    post(c, { busy: true });
+    expect(shownControls()).toEqual([true, false, true, true]);
+    post(c);
+    expect(shownControls()).toEqual([true, false, true, true]);
+  });
+
+  it('sends the action of each control to the host, with its label and tooltip', () => {
+    const c = newConversation('ctx', 'team-a', 'lab-ops');
+    c.conversationId = 'conv-1';
+    post(c, { busy: true });
+    const buttons = ['conv-stop', 'conv-pause', 'conv-resume', 'conv-erase'].map((id) => $(id) as HTMLButtonElement);
     expect(buttons.map((b) => b.textContent)).toEqual(['Stop', 'Pause', 'Resume', 'Delete from the crew...']);
     expect(buttons.map((b) => b.title)).toEqual([CHAT.stop, CHAT.pause, CHAT.resume, CHAT.erase].map(iconTip));
     for (const b of buttons) b.click();
+    expect(sent.slice(1).map((m) => (m as { action: string }).action)).toEqual(['stop', 'pause', 'resume', 'erase']);
+  });
+
+  it('puts on each saved conversation the crew knows only the actions its state allows, and opens it only from its title', () => {
+    const c = newConversation('ctx', 'team-a', 'lab-ops');
+    const meta = (id: string, conversationId?: string) => ({ id, title: id, startedAt: c.startedAt, crewName: 'lab-ops', namespace: 'team-a', context: 'ctx', ...(conversationId ? { conversationId } : {}) });
+    const actions = (item: Element) => [...item.querySelectorAll<HTMLElement>('.conv-action')].map((b) => b.dataset.convAction);
+    paused = ['conv-2'];
+    post(c, {}, [meta('old-1', 'conv-1'), meta('old-2', 'conv-2'), meta('old-3')]);
+    const items = [...$('history').querySelectorAll('.discussion-item')];
+    expect(actions(items[0])).toEqual(['erase']);
+    expect(actions(items[1])).toEqual(['resume', 'stop', 'erase']);
+    expect(items[2].querySelectorAll('details.menu')).toHaveLength(0);
+    const resume = items[1].querySelector<HTMLButtonElement>('[data-conv-action="resume"]')!;
+    expect(resume.title).toBe(iconTip(CHAT.resume));
+    resume.click();
+    items[0].querySelector<HTMLButtonElement>('[data-conv-action="erase"]')!.click();
     expect(sent.slice(1)).toEqual([
-      { type: 'conversationAction', action: 'stop' },
-      { type: 'conversationAction', action: 'pause' },
-      { type: 'conversationAction', action: 'resume' },
-      { type: 'conversationAction', action: 'erase' },
+      { type: 'conversationAction', action: 'resume', id: 'old-2' },
+      { type: 'conversationAction', action: 'erase', id: 'old-1' },
     ]);
   });
 
-  it('puts the same four actions on each saved conversation the crew knows, and opens it only from its title', () => {
+  it('offers Stop and Pause on the saved conversation whose turn runs now', () => {
     const c = newConversation('ctx', 'team-a', 'lab-ops');
-    const meta = (id: string, conversationId?: string) => ({ id, title: id, startedAt: c.startedAt, crewName: 'lab-ops', namespace: 'team-a', context: 'ctx', ...(conversationId ? { conversationId } : {}) });
-    post(c, {}, [meta('old-1', 'conv-1'), meta('old-2')]);
-    const items = [...$('history').querySelectorAll('.discussion-item')];
-    expect(items[0].querySelectorAll('.conv-action')).toHaveLength(4);
-    expect(items[0].querySelectorAll('details.menu')).toHaveLength(1);
-    expect(items[1].querySelectorAll('.conv-action')).toHaveLength(0);
-    const pause = items[0].querySelector<HTMLButtonElement>('[data-conv-action="pause"]')!;
-    expect(pause.title).toBe(iconTip(CHAT.pause));
-    expect(pause.textContent).toBe('Pause');
-    pause.click();
-    items[0].querySelector<HTMLButtonElement>('[data-conv-action="erase"]')!.click();
-    expect(sent.slice(1)).toEqual([
-      { type: 'conversationAction', action: 'pause', id: 'old-1' },
-      { type: 'conversationAction', action: 'erase', id: 'old-1' },
-    ]);
+    c.conversationId = 'conv-1';
+    const history = [{ id: c.id, title: 'now', startedAt: c.startedAt, crewName: 'lab-ops', namespace: 'team-a', context: 'ctx', conversationId: 'conv-1' }];
+    post(c, { busy: true }, history);
+    expect([...$('history').querySelectorAll<HTMLElement>('.conv-action')].map((b) => b.dataset.convAction)).toEqual(['stop', 'pause', 'erase']);
   });
 
   it('marks a saved conversation the crew said has something new, and says so under the one shown', () => {

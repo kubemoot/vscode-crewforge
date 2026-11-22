@@ -1,5 +1,6 @@
 import { marked } from 'marked';
 import { cardText } from '../discussion/cardText';
+import { canControl, controlsFor, conversationState, type ConversationState } from '../discussion/conversationState';
 import { turnStatus } from '../discussion/turnStatus';
 import type { AgentCard, TurnState } from '../discussion/reducer';
 import { agentsOf, problemsOf, type AgentNote, type ChatMessage, type ConversationMeta } from '../store/conversation';
@@ -218,6 +219,7 @@ function autoGrow(): void {
 function render(): void {
   if (!state) return;
   const { conversation, busy } = state.view;
+  const paused = new Set(state.paused);
   els.title.textContent = state.crewTitle;
   els.title.title = conversationTitleTip(conversation.crewName);
   const technical = state.crewTitle === conversation.crewName ? '' : `${conversation.crewName} · `;
@@ -230,14 +232,15 @@ function render(): void {
   els.rename.disabled = busy;
   els.deleteBtn.disabled = busy;
   // The crew knows a conversation by the id its gateway gave; one that has not reached it has nothing to act on.
-  for (const { el } of els.convButtons) el.hidden = !conversation.conversationId;
-  els.history.innerHTML = renderHistory(state.history, conversation.id, new Set(state.fresh));
+  const here = conversationState(busy, paused.has(conversation.conversationId ?? ''));
+  for (const { action, el } of els.convButtons) el.hidden = !conversation.conversationId || !canControl(here, action);
+  els.history.innerHTML = renderHistory(state.history, conversation.id, new Set(state.fresh), paused, busy);
   renderMessages();
   renderSend();
   vscode.postMessage({ type: 'shown', text: shownText(document.body) });
 }
 
-function renderHistory(history: ConversationMeta[], activeId: string, fresh: Set<string>): string {
+function renderHistory(history: ConversationMeta[], activeId: string, fresh: Set<string>, paused: Set<string>, busy: boolean): string {
   if (history.length === 0) return '<div class="no-discussions"><p>No saved conversations yet</p></div>';
   return history
     .map((h) => {
@@ -247,14 +250,15 @@ function renderHistory(history: ConversationMeta[], activeId: string, fresh: Set
         <button class="discussion-btn" data-id="${escapeHtml(h.id)}"${htmlAttribute('title', openConversationTip(h.title, formatAgo(h.startedAt)))}>
           <span class="conv-title">${badge}${escapeHtml(h.title)}</span>
           <span class="conv-date">${escapeHtml(formatAgo(h.startedAt))}</span>
-        </button>${h.conversationId ? listActions(h.id) : ''}</div>`;
+        </button>${h.conversationId ? listActions(h.id, conversationState(busy && h.id === activeId, paused.has(h.conversationId))) : ''}</div>`;
     })
     .join('');
 }
 
 /** The menu of what a saved conversation on the crew can be told to do, shown on hover or focus. */
-function listActions(id: string): string {
-  const entries = LIST_ACTIONS.map(
+function listActions(id: string, here: ConversationState): string {
+  const order: ConversationActionId[] = [...controlsFor(here), 'erase'];
+  const entries = order.map((action) => LIST_ACTIONS.find((a) => a.action === action)!).map(
     (a) => `<button type="button" class="menu-item conv-action" role="menuitem"${htmlAttribute('data-conv-action', a.action)}${htmlAttribute('data-id', id)}${iconTitle(a.tip)}>${escapeHtml(a.label)}</button>`,
   );
   return `<details class="menu conv-actions"><summary${iconAttrs(CHAT.menu)}>${icons.more}</summary><div class="menu-list" role="menu">${entries.join('')}</div></details>`;

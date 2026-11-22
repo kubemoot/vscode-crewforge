@@ -16,7 +16,7 @@ import { crewAbout } from '../views/treeModel';
 import type { HostMessage, WebviewMessage } from '../webview/protocol';
 import { CHAT, CHAT_TEXT } from '../definitions';
 import { escapeHtml, htmlAttribute, iconAttrs, iconButton, iconTitle, icons, tipAttrs } from '../webview/render';
-import { ConversationActions, isConversationAction, type ConversationTarget } from './conversationActions';
+import { ConversationActions, isConversationAction, type ConversationActionId, type ConversationTarget } from './conversationActions';
 import { messageText, type PanelState } from './panelState';
 import { tabIcon } from './tabIcon';
 import type { Located } from '../source/locate';
@@ -89,6 +89,8 @@ export class ChatPanel {
   private events?: ConversationEvents;
   /** The gateway's ids of the conversations the crew said have something new, until they are opened or asked in. */
   private readonly fresh = new Set<string>();
+  /** The conversations this panel paused on the crew; the crew offers no way to read it back. */
+  private readonly paused = new Set<string>();
 
   private constructor(
     private readonly extensionUri: vscode.Uri,
@@ -297,9 +299,15 @@ export class ChatPanel {
       void vscode.window.showInformationMessage('This conversation has not reached the crew yet. Ask the crew something first.');
       return;
     }
-    await this.actions.run(action, target);
+    if (await this.actions.run(action, target)) this.recordControl(action, target.conversationId);
     this.markSeen(target.conversationId);
     await this.post(this.session.view);
+  }
+
+  /** Remembers a pause, and forgets it once the conversation is resumed, stopped, or deleted. */
+  private recordControl(action: ConversationActionId, conversationId: string): void {
+    if (action === 'pause') this.paused.add(conversationId);
+    else this.paused.delete(conversationId);
   }
 
   /** The gateway's conversation behind the one shown, or behind the saved conversation `id`. */
@@ -406,7 +414,11 @@ export class ChatPanel {
     if (this.disposed) return;
     const turnEnded = this.wasBusy && !view.busy;
     this.wasBusy = view.busy;
-    if (turnEnded) void this.readAvailability?.();
+    if (turnEnded) {
+      void this.readAvailability?.();
+      const shown = this.session.view.conversation.conversationId;
+      if (shown) this.paused.delete(shown);
+    }
     if (!view.busy) this.history = await this.store.list(this.connection.context, this.crew.namespace, this.crew.name);
     if (this.disposed) return;
     const links = { agents: [...this.agentSources.keys()], dashboard: dashboardUrl() !== '' };
@@ -419,6 +431,7 @@ export class ChatPanel {
       links,
       availability: this.availability,
       fresh: [...this.fresh],
+      paused: [...this.paused],
     };
     await this.panel.webview.postMessage(message);
   }
