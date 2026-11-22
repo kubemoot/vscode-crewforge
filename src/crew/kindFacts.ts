@@ -64,6 +64,11 @@ function sizeWord(size: string | undefined, legacy: string | undefined): string 
   return legacy && `latencyClass ${legacy} (retired)`;
 }
 
+/** The accelerator memory a Model declares in MiB: acceleratorMemoryMiB, else the deprecated alias vramMib. */
+function acceleratorMemoryMiB(o: Obj): unknown {
+  return o.spec?.acceleratorMemoryMiB ?? o.spec?.vramMib;
+}
+
 function model(o: Obj): KindFacts {
   const legacy = o.metadata.labels?.[LEGACY_LATENCY_LABEL];
   const size = modelSize(o);
@@ -79,7 +84,7 @@ function model(o: Obj): KindFacts {
       fact('latencyClass (retired; use size)', legacy),
       fact('Capabilities', caps.join(', ') || 'none labeled'),
       fact('Context length', ctx),
-      fact('VRAM (MiB)', o.spec?.vramMib),
+      fact('Accelerator memory (MiB)', acceleratorMemoryMiB(o)),
       fact('State', o.status?.state),
     ].filter((l): l is string => l !== undefined),
     icon: 'chip',

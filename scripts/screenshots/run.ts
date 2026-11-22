@@ -133,10 +133,10 @@ async function streamTurn(res: http.ServerResponse): Promise<void> {
   send({ type: 'connected' });
   send({ type: 'thread_found', threadId: 'a3c1f0e2-7d4b-4c55-9d0a-2f6e1b8c9a10' });
   await wait(500);
-  send({ type: 'phase', agent: `${CREW}-tooler-1`, status: 'triaging', gpu: 'gpu-a' });
-  send({ type: 'phase', agent: `${CREW}-tooler-2`, status: 'triaging', gpu: 'gpu-b' });
+  send({ type: 'phase', agent: `${CREW}-tooler-1`, status: 'triaging', accelerator: 'gpu-a' });
+  send({ type: 'phase', agent: `${CREW}-tooler-2`, status: 'triaging', accelerator: 'gpu-b' });
   await wait(1500);
-  send({ type: 'phase', agent: `${CREW}-tooler-1`, status: 'evaluating', gpu: 'gpu-a' });
+  send({ type: 'phase', agent: `${CREW}-tooler-1`, status: 'evaluating', accelerator: 'gpu-a' });
   await wait(1500);
   send({ type: 'finding', agent: `${CREW}-tooler-1`, signal: 'agree', summary: 'Check whether the VPN client shows a certificate or a credential error before anything else.' });
   send({ type: 'finding', agent: `${CREW}-tooler-2`, signal: 'concern', summary: 'A recent client update can break the saved profile; confirm the version.' });

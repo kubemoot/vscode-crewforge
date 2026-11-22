@@ -187,6 +187,20 @@ describe('ChatSession', () => {
     expect(saved[0].messages[1].problems).toEqual(answer.problems);
   });
 
+  it('records the accelerator of a phase signal from accelerator, else from the deprecated gpu', async () => {
+    const { t, session } = setup();
+    t.responses.push('{"conversationId":"c"}');
+    t.streams.push(
+      'data: {"type":"connected"}\n\ndata: {"type":"thread_found","threadId":"A"}\n\n' +
+        'data: {"type":"phase","agent":"a","status":"evaluating","accelerator":"rig0","gpu":"rig0"}\n\n' +
+        'data: {"type":"phase","agent":"b","status":"evaluating","gpu":"rig1"}\n\n' +
+        'data: {"type":"synthesis","content":"fine"}\n\ndata: {"type":"done"}\n\n',
+    );
+    await session.send('q');
+    const accelerators = session.view.conversation.signals.filter((s) => s.type === 'evaluating').map((s) => [s.agentName, s.data?.accelerator]);
+    expect(accelerators).toEqual([['a', 'rig0'], ['b', 'rig1']]);
+  });
+
   it('lists the agents still working when a turn is stopped, under its notice', async () => {
     const { t, session } = setup(HELD);
     t.holdOpen = true;

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { initialTurn, reduce, type TurnState } from '../src/discussion/reducer';
 import { SseParser } from '../src/discussion/sse';
-import type { DiscussionEvent } from '../src/discussion/types';
+import { acceleratorOf, type DiscussionEvent } from '../src/discussion/types';
 import { fixture } from './fakes';
 
 function fold(events: DiscussionEvent[], from: TurnState = initialTurn()): TurnState {
@@ -13,12 +13,23 @@ function events(name: string): DiscussionEvent[] {
   return [...p.push(fixture(name)), ...p.end()];
 }
 
+describe('acceleratorOf', () => {
+  it('prefers accelerator, falls back to gpu, and ignores empty names', () => {
+    expect(acceleratorOf({ accelerator: 'new', gpu: 'old' })).toBe('new');
+    expect(acceleratorOf({ gpu: 'old' })).toBe('old');
+    expect(acceleratorOf({ accelerator: '', gpu: 'old' })).toBe('old');
+    expect(acceleratorOf({ accelerator: 'new' })).toBe('new');
+    expect(acceleratorOf({ accelerator: '', gpu: '' })).toBeUndefined();
+    expect(acceleratorOf({})).toBeUndefined();
+  });
+});
+
 describe('reduce', () => {
   it('folds a recorded turn where the only agent stood aside', () => {
     const s = fold(events('turn1.sse'));
     expect(s.connected).toBe(true);
     expect(s.threadId).toBe('0f643dce-5d20-429d-9316-1e0d79e2e91f');
-    expect(s.cards).toEqual([{ agent: 'node-watcher', status: 'done', gpu: 'ollama-rig0', signal: 'stand_aside', stoodAside: true }]);
+    expect(s.cards).toEqual([{ agent: 'node-watcher', status: 'done', accelerator: 'ollama-rig0', signal: 'stand_aside', stoodAside: true }]);
     expect(s.synthesis).toMatch(/^No specialist contributed/);
     expect(s.done).toBe(true);
     expect(s.error).toBeUndefined();
@@ -28,7 +39,7 @@ describe('reduce', () => {
     const s = fold(events('turn2.sse'));
     expect(s.threadId).toBe('6e8c0b87-5bd6-45c3-b510-8923102f64b1');
     expect(s.cards).toHaveLength(1);
-    expect(s.cards[0]).toMatchObject({ agent: 'node-watcher', status: 'finding', signal: 'agree', gpu: 'ollama-rig0' });
+    expect(s.cards[0]).toMatchObject({ agent: 'node-watcher', status: 'finding', signal: 'agree', accelerator: 'ollama-rig0' });
     expect(s.cards[0].summary).toMatch(/^\[ARTIFACT key=/);
     expect(s.synthesis).toContain('Kubernetes pods');
   });
@@ -82,6 +93,15 @@ describe('reduce', () => {
     expect(fold([{ type: 'error', error: 'boom' }])).toMatchObject({ done: true, error: "The crew's gateway reported an error: boom" });
     expect(fold([{ type: 'error', content: 'from content' }]).error).toBe("The crew's gateway reported an error: from content");
     expect(fold([{ type: 'error' }]).error).toBe("The crew's gateway reported an error.");
+  });
+
+  it('reads the accelerator from accelerator, else from the deprecated gpu of an older gateway', () => {
+    const t = fold([
+      { type: 'phase', agent: 'a', status: 'evaluating', accelerator: 'new', gpu: 'stale' },
+      { type: 'phase', agent: 'b', status: 'evaluating', gpu: 'old' },
+      { type: 'phase', agent: 'c', status: 'evaluating' },
+    ]);
+    expect(t.cards.map((c) => c.accelerator)).toEqual(['new', 'old', undefined]);
   });
 
   it('keeps a reason only with the status it came with', () => {

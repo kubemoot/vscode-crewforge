@@ -6,6 +6,8 @@ export interface DiscussionEvent {
   type: EventType;
   agent?: string;
   status?: string;
+  accelerator?: string;
+  /** The deprecated old name of accelerator; read only when accelerator is absent. */
   gpu?: string;
   signal?: string;
   summary?: string;
@@ -15,7 +17,7 @@ export interface DiscussionEvent {
   stood_aside?: boolean;
   /** The model an agent is waiting for accelerator room to run. */
   model?: string;
-  /** Why an agent is waiting or stood aside, such as gpu-busy or model-too-large. */
+  /** Why an agent is waiting or stood aside, such as accelerator-busy (gpu-busy from an older gateway) or model-too-large. */
   reason?: string;
   /**
    * The SSE id the event arrived under (not part of the JSON): where a reconnecting
@@ -52,4 +54,9 @@ export function isTerminal(e: DiscussionEvent): boolean {
 export function eventErrorText(e: DiscussionEvent): string {
   const detail = e.error || e.content;
   return detail ? `The crew's gateway reported an error: ${detail}` : "The crew's gateway reported an error.";
+}
+
+/** The accelerator an event names: `accelerator`, else the deprecated `gpu` of an older gateway. */
+export function acceleratorOf(e: Pick<DiscussionEvent, 'accelerator' | 'gpu'>): string | undefined {
+  return e.accelerator || e.gpu || undefined;
 }

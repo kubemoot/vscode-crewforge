@@ -74,7 +74,7 @@ describe('cardText', () => {
   it('shows every working status the gateway sends, with the accelerator when known', () => {
     expect(cardText({ ...base, status: 'waking' })).toEqual({ text: 'starting up', working: false, problem: false });
     expect(cardText({ ...base, status: 'ready' })).toEqual({ text: 'ready', working: false, problem: false });
-    expect(cardText({ ...base, status: 'triaging', gpu: 'rig0' })).toEqual({ text: 'queued on rig0...', working: true, problem: false });
+    expect(cardText({ ...base, status: 'triaging', accelerator: 'rig0' })).toEqual({ text: 'queued on rig0...', working: true, problem: false });
     expect(cardText({ ...base, status: 'evaluating' })).toEqual({ text: 'analyzing...', working: true, problem: false });
   });
 
@@ -91,6 +91,7 @@ describe('cardText', () => {
 
   it('shows stood aside, marking it a problem only when the agent could not run', () => {
     expect(cardText({ ...base, status: 'done', stoodAside: true, signal: 'stand_aside' })).toEqual({ text: 'stood aside', working: false, problem: false });
+    expect(cardText({ ...base, status: 'done', stoodAside: true, reason: 'accelerator-busy' }).problem).toBe(true);
     expect(cardText({ ...base, status: 'done', stoodAside: true, reason: 'gpu-busy' }).problem).toBe(true);
     expect(cardText({ ...base, status: 'done', stoodAside: true, reason: 'not-relevant' })).toEqual({ text: 'stood aside', working: false, problem: false });
     expect(cardText(base).text).toBe('waiting');
@@ -115,7 +116,7 @@ describe('agentProblems', () => {
       { agent: 'quiet', status: 'done', signal: 'stand_aside', stoodAside: true },
       { agent: 'broken', status: 'finding', signal: 'failure', summary: 'tool error', stoodAside: false },
       { agent: 'crowded', status: 'done', stoodAside: true, reason: 'gpu-busy' },
-      { agent: 'slow', status: 'evaluating', gpu: 'rig0', stoodAside: false },
+      { agent: 'slow', status: 'evaluating', accelerator: 'rig0', stoodAside: false },
       { agent: 'parked', status: 'waiting', stoodAside: false },
       { agent: 'idle', status: 'ready', stoodAside: false },
       { agent: 'booting', status: 'waking', stoodAside: false },
