@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { withTerm } from '../definitions';
 import { agentLine, agentTooltip, lines, missingPromptTooltip, promptLine, promptTooltip, usersText } from '../crew/describe';
 import type { AgentInfo, CrewDetails, McpServerInfo, PromptModuleInfo, SkillInfo, ToolInfo } from '../crew/details';
 import { COUNTS, emptyLine, GROUP_ORDER, GROUPS, SHARED, sharedLine, type Group } from '../crew/groups';
@@ -132,7 +133,7 @@ export function memberItem(node: Extract<DetailNode, { kind: 'member' }>): vscod
   const { view } = node;
   const item = new vscode.TreeItem(view.label, vscode.TreeItemCollapsibleState.None);
   item.description = view.description;
-  item.tooltip = view.tooltip;
+  item.tooltip = withTerm(view.tooltip);
   item.iconPath = new vscode.ThemeIcon(view.icon, view.color ? new vscode.ThemeColor(view.color) : undefined);
   item.contextValue = memberContext(view);
   if (view.tool) item.command = { command: 'crewforge.showToolDetails', title: 'Show Tool Details', arguments: [node] };
@@ -248,5 +249,5 @@ function toolTooltip(t: ToolInfo, catalog?: ToolCatalog): string {
 /** A deployment fact; a Flux fact opens the Flux object, every other fact the Crew whose labels it came from. */
 export function factView(crew: CrewSummary, f: ProvenanceFact): MemberView {
   const target = f.flux ? { kind: f.flux.kind, name: f.flux.name, namespace: f.flux.namespace } : ref(crew, 'Crew', crew.name);
-  return { label: f.label, description: f.value, tooltip: `${f.label}: ${f.value}`, icon: f.flux ? 'git-merge' : 'tag', ref: target };
+  return { label: f.label, description: f.value, tooltip: lines(`${f.label}: ${f.value}`, 'A fact about how the crew was deployed, read from the labels and annotations CrewForge, Helm, and Flux put on it.'), icon: f.flux ? 'git-merge' : 'tag', ref: target };
 }

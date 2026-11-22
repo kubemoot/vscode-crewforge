@@ -1,3 +1,4 @@
+import { iconTip, type IconAction } from '../definitions';
 import { formatDuration } from '../text';
 
 /** Escapes text for use inside HTML element content and attribute values. */
@@ -8,6 +9,26 @@ export function escapeHtml(text: string): string {
 /** ` name="value"`, the value escaped, for appending to an element's opening tag. */
 export function htmlAttribute(name: string, value: string): string {
   return ` ${name}="${escapeHtml(value)}"`;
+}
+
+/** ` title="..."` saying what a heading, column, label or fixed text means (a screen reader reads it as the element's description); nothing when no text is given. */
+export function tipAttrs(tip: string | undefined): string {
+  return tip ? htmlAttribute('title', tip) : '';
+}
+
+/** ` title="..." aria-label="..."` of an icon-only control: the tooltip says what it does and affects, the accessible name is its short label. */
+export function iconAttrs(action: IconAction): string {
+  return `${iconTitle(action)}${htmlAttribute('aria-label', action.label)}`;
+}
+
+/** ` title="..."` alone, for a control whose visible text already names it, such as a menu item. */
+export function iconTitle(action: IconAction): string {
+  return htmlAttribute('title', iconTip(action));
+}
+
+/** An icon-only button. */
+export function iconButton(cls: string, id: string, action: IconAction, content: string, hidden = false): string {
+  return `<button type="button" class="${cls}" id="${id}"${iconAttrs(action)}${hidden ? ' hidden' : ''}>${content}</button>`;
 }
 
 /** Reports whether a link target is an http(s) or mailto URL, the only kinds rendered as links. */

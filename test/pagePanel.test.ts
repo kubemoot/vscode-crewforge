@@ -24,11 +24,11 @@ describe('html helpers', () => {
   });
 
   it('builds sections, tables, badges, notes, and banners', () => {
-    expect(section('T<', '<p>x</p>')).toBe('<section><h2>T&lt;</h2><p>x</p></section>');
+    expect(section('T<', '<p>x</p>', 'What T is')).toBe('<section><h2 title="What T is">T&lt;</h2><p>x</p></section>');
     expect(table(['H'], [], 'Nothing <here>')).toBe('<p class="muted">Nothing &lt;here&gt;</p>');
     expect(table(['H<'], [['<i>x</i>']])).toBe('<table><thead><tr><th>H&lt;</th></tr></thead><tbody><tr><td><i>x</i></td></tr></tbody></table>');
-    expect(badge('ok', 'good')).toBe('<span class="badge good">ok</span>');
-    expect(badge('x')).toBe('<span class="badge plain">x</span>');
+    expect(badge('ok', 'good', 'It is fine')).toBe('<span class="badge good" title="It is fine">ok</span>');
+    expect(badge('x', 'plain', 'An x')).toBe('<span class="badge plain" title="An x">x</span>');
     expect(note('a&b')).toBe('<p class="muted">a&amp;b</p>');
     expect(banner('!')).toBe('<p class="banner">!</p>');
   });

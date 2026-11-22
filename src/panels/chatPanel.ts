@@ -14,7 +14,8 @@ import type { ConversationStore } from '../store/conversations';
 import { exportAsMarkdown, exportFileName } from '../store/export';
 import { crewAbout } from '../views/treeModel';
 import type { HostMessage, WebviewMessage } from '../webview/protocol';
-import { escapeHtml, icons } from '../webview/render';
+import { CHAT, CHAT_TEXT } from '../definitions';
+import { escapeHtml, htmlAttribute, iconAttrs, iconButton, iconTitle, icons, tipAttrs } from '../webview/render';
 import { ConversationActions, isConversationAction, type ConversationTarget } from './conversationActions';
 import { messageText, type PanelState } from './panelState';
 import { tabIcon } from './tabIcon';
@@ -450,36 +451,36 @@ export class ChatPanel {
 <body>
 <div class="chat-layout">
   <aside class="discussion-sidebar" id="sidebar">
-    <div class="sidebar-header"><h2>Conversations</h2><button class="new-chat-btn" id="new" title="New conversation">+</button></div>
+    <div class="sidebar-header"><h2${tipAttrs(CHAT_TEXT.conversationsHeading)}>Conversations</h2>${iconButton('new-chat-btn', 'new', CHAT.newConversation, '+')}</div>
     <div class="discussion-list" id="history"></div>
-    <footer class="sidebar-footer"><p class="powered-by" title="AI can make mistakes. Verify important info.">Powered by <a href="#" id="dashboard" title="Open the Kubemoot dashboard">Kubemoot</a></p></footer>
+    <footer class="sidebar-footer"><p class="powered-by"${tipAttrs(CHAT_TEXT.powered)}>Powered by <a href="#" id="dashboard" ${iconAttrs(CHAT.openDashboard)}>Kubemoot</a></p></footer>
   </aside>
-  <div class="sidebar-resizer" id="resizer" title="Drag to resize"></div>
+  <div class="sidebar-resizer" id="resizer" role="separator" aria-orientation="vertical" tabindex="0"${iconAttrs(CHAT.resizer)}></div>
   <div class="chat-container">
     <header class="chat-header">
       <div class="header-left">
-        <button class="toggle-sidebar-btn" id="toggle" title="Show or hide conversations">&#9776;</button>
-        <h1 id="title"></h1><span class="crew-where" id="where"></span>
+        ${iconButton('toggle-sidebar-btn', 'toggle', CHAT.toggleList, '&#9776;')}
+        <h1 id="title"${tipAttrs(CHAT_TEXT.crewName)}></h1><span class="crew-where" id="where"${tipAttrs(CHAT_TEXT.where)}></span>
       </div>
       <details class="menu" id="menu" hidden>
-        <summary class="export-btn" title="Conversation actions" aria-label="Conversation actions">${icons.more}</summary>
+        <summary class="export-btn"${iconAttrs(CHAT.menu)}>${icons.more}</summary>
         <div class="menu-list" role="menu">
-          <button type="button" class="menu-item" id="conv-stop" role="menuitem" title="Stop the conversation on the crew" hidden>Stop</button>
-          <button type="button" class="menu-item" id="conv-pause" role="menuitem" title="Pause the conversation on the crew" hidden>Pause</button>
-          <button type="button" class="menu-item" id="conv-resume" role="menuitem" title="Resume the conversation on the crew" hidden>Resume</button>
-          <button type="button" class="menu-item" id="rename" role="menuitem" title="Give the conversation a name" hidden>Rename...</button>
-          <button type="button" class="menu-item" id="copy" role="menuitem" title="Copy the conversation as Markdown" hidden>Copy as Markdown</button>
-          <button type="button" class="menu-item" id="export" role="menuitem" title="Save the conversation as a Markdown file" hidden>Save as Markdown...</button>
-          <button type="button" class="menu-item" id="delete" role="menuitem" title="Delete the saved copy on this computer; the crew keeps its own" hidden>Delete from this computer...</button>
-          <button type="button" class="menu-item danger" id="conv-erase" role="menuitem" title="Delete the conversation from the crew" hidden>Delete from the crew...</button>
+          <button type="button" class="menu-item" id="conv-stop" role="menuitem"${iconTitle(CHAT.stop)} hidden>Stop</button>
+          <button type="button" class="menu-item" id="conv-pause" role="menuitem"${iconTitle(CHAT.pause)} hidden>Pause</button>
+          <button type="button" class="menu-item" id="conv-resume" role="menuitem"${iconTitle(CHAT.resume)} hidden>Resume</button>
+          <button type="button" class="menu-item" id="rename" role="menuitem"${iconTitle(CHAT.rename)} hidden>Rename...</button>
+          <button type="button" class="menu-item" id="copy" role="menuitem"${iconTitle(CHAT.copy)} hidden>Copy as Markdown</button>
+          <button type="button" class="menu-item" id="export" role="menuitem"${iconTitle(CHAT.export)} hidden>Save as Markdown...</button>
+          <button type="button" class="menu-item" id="delete" role="menuitem"${iconTitle(CHAT.delete)} hidden>Delete from this computer...</button>
+          <button type="button" class="menu-item danger" id="conv-erase" role="menuitem"${iconTitle(CHAT.erase)} hidden>Delete from the crew...</button>
         </div>
       </details>
     </header>
     <div class="messages" id="messages"></div>
     <p class="input-note" id="note" role="status" hidden></p>
     <form class="input-area" id="form">
-      <textarea id="input" rows="1" placeholder="Ask the crew a question..."></textarea>
-      <button type="submit" class="send-btn" id="send" title="Send" hidden></button>
+      <textarea id="input" rows="1" placeholder="Ask the crew a question..."${tipAttrs(CHAT_TEXT.input)}${htmlAttribute('aria-label', CHAT.question.label)}></textarea>
+      <button type="submit" class="send-btn" id="send"${iconAttrs(CHAT.send)} hidden></button>
     </form>
   </div>
 </div>
@@ -490,6 +491,7 @@ export class ChatPanel {
 }
 
 const DELETE = 'Delete';
+
 
 /** Asks which of an agent's definitions to open: the Agent, then its PromptModules in composition order. */
 async function pickPlace(agent: string, places: Located[]): Promise<Located | undefined> {

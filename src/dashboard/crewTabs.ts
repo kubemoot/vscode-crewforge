@@ -5,16 +5,17 @@ import type { Located } from '../source/locate';
 import { dumpYaml, type Manifest } from '../source/manifests';
 import { normalizedYaml } from '../source/normalize';
 import { DRIFT_STATES } from '../source/driftStates';
-import { badge, buttons, DEPLOY_TO_NAMESPACE, escape, note, OPEN_SOURCE_FOLDER, section, SELECT_CONTEXT_BUTTON, type ButtonSpec } from './html';
+import { ACTIONS, kindTerm, TAB_TIPS } from '../definitions';
+import { badge, heading, buttons, DEPLOY_TO_NAMESPACE, escape, note, OPEN_SOURCE_FOLDER, section, SELECT_CONTEXT_BUTTON, type ButtonSpec } from './html';
 
 /** The crew dashboard's tabs: the vitals, then the crew as the source declares it, as it runs, and how the two differ. */
 export type CrewTab = 'overview' | 'source' | 'live' | 'diff';
 
 export const TABS: { tab: CrewTab; label: string; title: string }[] = [
-  { tab: 'overview', label: 'Overview', title: 'Where the crew runs, its agents, and its conversations' },
-  { tab: 'source', label: 'Source', title: 'The objects the local source renders, each openable at its place' },
-  { tab: 'live', label: 'Live', title: 'The objects running in the cluster' },
-  { tab: 'diff', label: 'Diff', title: 'Each object changed, missing, or extra between source and cluster' },
+  { tab: 'overview', label: 'Overview', title: TAB_TIPS.overview },
+  { tab: 'source', label: 'Source', title: TAB_TIPS.source },
+  { tab: 'live', label: 'Live', title: TAB_TIPS.live },
+  { tab: 'diff', label: 'Diff', title: TAB_TIPS.diff },
 ];
 
 /** Whether a page argument names a tab. */
@@ -46,7 +47,7 @@ export function renderSourceTab(located: Located[] | Missing): string {
   if (!Array.isArray(located)) return missing(located);
   if (located.length === 0) return note('The source renders no objects.');
   const groups = groupBy(located.map((l, index) => ({ l, index })), ({ l }) => l.manifest.kind);
-  const body = groups.map(([kind, items]) => section(`${kind} (${items.length})`, `<ul class="objects">${items.map(({ l, index }) => sourceRow(l, index)).join('')}</ul>`));
+  const body = groups.map(([kind, items]) => section(`${kind} (${items.length})`, `<ul class="objects">${items.map(({ l, index }) => sourceRow(l, index)).join('')}</ul>`, kindTerm(kind)));
   return `${note('As the source renders them. Click an object to open its file there.')}${body.join('')}`;
 }
 
@@ -60,15 +61,16 @@ function sourceRow(l: Located, index: number): string {
 /** The Live tab: each live object's YAML, normalized unless raw is asked for, with the toggle. */
 export function renderLiveTab(objects: Manifest[] | Missing, raw: boolean): string {
   if (!Array.isArray(objects)) return missing(objects);
-  const toggle = buttons([{ action: 'raw', label: raw ? 'Show Normalized' : 'Show Raw', title: raw ? 'Leave out status and the metadata the cluster and tools add' : 'Everything the API server holds, status and all' }]);
+  const toggle = buttons([{ action: 'raw', label: raw ? 'Show Normalized' : 'Show Raw', title: raw ? ACTIONS.rawOn : ACTIONS.rawOff }]);
   if (objects.length === 0) return `${toggle}${note('No live objects of this crew.')}`;
   const what = raw ? 'Raw: everything the API server holds.' : 'Normalized: status and the metadata the cluster, Helm, Flux, the operator, and CrewForge add are left out; keys are sorted.';
-  const body = groupBy(objects, (m) => m.kind).map(([kind, items]) => section(`${kind} (${items.length})`, items.map((m) => liveObject(m, raw)).join('')));
+  const body = groupBy(objects, (m) => m.kind).map(([kind, items]) => section(`${kind} (${items.length})`, items.map((m) => liveObject(m, raw)).join(''), kindTerm(kind)));
   return `${toggle}${note(what)}${body.join('')}`;
 }
 
 function liveObject(m: Manifest, raw: boolean): string {
-  return `<details><summary>${escape(m.metadata.name)}</summary><pre class="yaml">${escape(raw ? dumpYaml(m) : normalizedYaml(m))}</pre></details>`;
+  const tip = `Show or hide the YAML of ${m.kind} ${m.metadata.name}`;
+  return `<details><summary title="${escape(tip)}">${escape(m.metadata.name)}</summary><pre class="yaml">${escape(raw ? dumpYaml(m) : normalizedYaml(m))}</pre></details>`;
 }
 
 /** The Diff tab: each object that differs, with the normalized diff inline (live, then source) and a button for the diff editor. */
@@ -82,12 +84,13 @@ export function renderDiffTab(drift: ResourceDrift[] | Missing): string {
 }
 
 function diffItem(d: ResourceDrift): string {
-  const { text: label, tone } = DRIFT_STATES[d.state];
+  const { text: label, tone, tip } = DRIFT_STATES[d.state];
   const id = `${d.kind}/${d.name}`;
-  const open = buttons([{ action: 'openDiff', arg: id, label: 'Open in Diff Editor', title: 'Compare live with source in the diff editor' }]);
+  const open = buttons([{ action: 'openDiff', arg: id, label: 'Open in Diff Editor', title: ACTIONS.openDiff }]);
   const lines = lineDiff(d.live ? normalizedYaml(d.live) : '', d.rendered ? normalizedYaml(d.rendered) : '');
   const paths = d.paths.length ? note(`Changed: ${d.paths.join(', ')}`) : '';
-  return `<section><h3>${escape(id)} ${badge(label, tone)}</h3>${paths}${open}<pre class="diff">${lines.map(diffLine).join('')}</pre></section>`;
+  const title = heading('h3', `${escape(id)} ${badge(label, tone, tip)}`, kindTerm(d.kind));
+  return `<section>${title}${paths}${open}<pre class="diff">${lines.map(diffLine).join('')}</pre></section>`;
 }
 
 function diffLine(l: DiffLine): string {

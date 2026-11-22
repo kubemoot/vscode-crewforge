@@ -82,9 +82,9 @@ describe('reading and showing capacity and retention', () => {
 
   it('badges a waiting crew as a warning in the overview and the crew page, and shows its status', () => {
     const row = { crew: parsed, channel: 'bundle', problems: 0, sourceOpen: false };
-    expect(renderOverview({ connection: { lines: [] } as never, rows: [row] })).toContain('<span class="badge warn">WaitingForCapacity</span>');
+    expect(renderOverview({ connection: { lines: [] } as never, rows: [row] })).toMatch(/<span class="badge warn"[^>]*>WaitingForCapacity<\/span>/);
     const page = renderCrewPage({ title: 'demo', name: 'demo', context: 'lab', deployment: { namespace: 'ns', crew: parsed, channel: 'bundle', linked: true }, contents: [], agents: [], models: [], conversations: { total: 0, turns: 0, active: 0, errors: [] } } as never);
-    expect(page).toContain('<span class="badge warn">WaitingForCapacity</span>');
+    expect(page).toMatch(/<span class="badge warn"[^>]*>WaitingForCapacity<\/span>/);
     expect(page).toContain('no, waiting for an accelerator: no model fits');
     expect(page).toContain('Generation observed');
   });

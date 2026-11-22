@@ -1,4 +1,5 @@
-import { actionBar, banner, escape, moment, note, section, SELECT_CONTEXT_BUTTON, table } from './html';
+import { ACTIONS, MEMORY_TOPIC, TERMS } from '../definitions';
+import { actionBar, banner, heading, escape, moment, note, section, SELECT_CONTEXT_BUTTON, table } from './html';
 import { groupByTopic, leftOutByReason, type ParsedExport, type SelectionReport } from '../memory/ompi';
 import { META_SEPARATOR } from '../webview/render';
 
@@ -30,7 +31,7 @@ function factRow(f: { key: string; value: string; learnedBy: string; learnedAt: 
 function topics(parsed: ParsedExport): string {
   if (parsed.facts.length === 0) return note('This crew has learned no facts yet.');
   return groupByTopic(parsed.facts)
-    .map((g) => section(`${g.topic || '(no topic)'} (${g.facts.length})`, table(['Key', 'Value', 'Learned by', 'When'], g.facts.map(factRow))))
+    .map((g) => section(`${g.topic || '(no topic)'} (${g.facts.length})`, table(['Key', 'Value', 'Learned by', 'When'], g.facts.map(factRow)), MEMORY_TOPIC))
     .join('');
 }
 
@@ -49,10 +50,10 @@ export function leftOutSection(parsed: ParsedExport, report: SelectionReport | u
 
 /** The memory page of one crew. Every value is escaped. */
 export function renderMemoryPage(view: MemoryView): string {
-  const head = `<h1>${escape(view.title)} memory</h1>`;
+  const head = heading('h1', `${escape(view.title)} memory`, TERMS.memory);
   const actions = actionBar([
-    { action: 'exportZip', label: 'Export...', title: 'Save the OMPI export as a zip in a folder you pick', disabled: view.parsed ? undefined : 'Nothing was read to export', primary: true },
-    { action: 'refresh', label: 'Refresh', title: 'Read the crew memory again', primary: true },
+    { action: 'exportZip', label: 'Export...', title: ACTIONS.exportMemory, disabled: view.parsed ? undefined : 'Nothing was read to export', primary: true },
+    { action: 'refresh', label: 'Refresh', title: ACTIONS.refreshMemory, primary: true },
     ...(view.contextProblem ? [{ ...SELECT_CONTEXT_BUTTON, primary: true }] : []),
   ]);
   if (view.error || !view.parsed) return head + actions + banner(view.error ?? 'The memory could not be read.');

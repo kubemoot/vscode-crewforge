@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { ABILITY_TIPS } from '../definitions';
 import { ABILITIES, isSize, SIZES } from '../crew/sizes';
 import { splitList } from '../crew/values';
 import type { Manifest } from './manifests';
@@ -58,7 +59,7 @@ async function askPhase(policy: Manifest): Promise<string | undefined> {
 async function askCapabilities(current: string[]): Promise<string[] | undefined> {
   const offered = [...new Set([...ABILITIES, ...current])];
   const chosen = await vscode.window.showQuickPick(
-    offered.map((label) => ({ label, picked: current.includes(label) })),
+    offered.map((label) => ({ label, description: ABILITY_TIPS[label], picked: current.includes(label) })),
     { title: 'Edit Scheduling Needs: required abilities', placeHolder: 'Abilities every model for this phase must have; none picked requires none', canPickMany: true },
   );
   return chosen?.map((c) => c.label);

@@ -1,3 +1,4 @@
+import { NEXT_STEPS } from '../definitions';
 import * as vscode from 'vscode';
 import { connect, type Connection } from '../connection';
 import { CREW_LABEL, toAgent } from '../crew/details';
@@ -157,7 +158,7 @@ export class DevLoop {
     if (!entry) return;
     const state = this.deps.states.get(entry.source.root) ?? (await this.refreshState(entry));
     const choice = await vscode.window.showQuickPick(
-      nextActions(state).map((id) => ({ label: LABELS[id], id })),
+      nextActions(state).map((id) => ({ label: LABELS[id], description: NEXT_STEPS[id], id })),
       { placeHolder: `${entry.crewName}: ${stateText(state)}` },
     );
     if (choice) await this.run(choice.id, entry, state);

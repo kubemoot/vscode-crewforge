@@ -1,3 +1,4 @@
+import { VIEW_DESCRIPTIONS } from './definitions';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
@@ -107,8 +108,10 @@ export function activate(context: vscode.ExtensionContext): CrewForgeApi {
   sources.onRuns = (namespace, crew, runs) => activity.record(namespace, crew, runs);
   const sourcesView = vscode.window.createTreeView('crewforge.sources', { treeDataProvider: sources, showCollapseAll: true, canSelectMany: true });
   tree.onMessage = (text) => (view.message = text);
-  tree.onScope = (scope) => (view.description = scope);
-  sources.onScope = (scope) => (sourcesView.description = scope);
+  view.description = VIEW_DESCRIPTIONS.crews;
+  sourcesView.description = VIEW_DESCRIPTIONS.sources;
+  tree.onScope = (scope) => (view.description = scope ?? VIEW_DESCRIPTIONS.crews);
+  sources.onScope = (scope) => (sourcesView.description = scope ?? VIEW_DESCRIPTIONS.sources);
   sources.onMessage = (text) => (sourcesView.message = text);
   const documents = new ManifestDocuments();
   const output = vscode.window.createOutputChannel('CrewForge');

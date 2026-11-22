@@ -1,3 +1,4 @@
+import { TERMS } from '../src/definitions';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { KubeClient } from '../src/k8s/request';
 import { DevLoop, type DevLoopDeps } from '../src/loop/devLoop';
@@ -26,7 +27,7 @@ describe('Deployed Crews', () => {
     tree.fitnessBusy = (ns, crew) => ns === 'ns' && crew === 'demo';
     const [connection, ns] = await tree.getChildren();
     const item = tree.getTreeItem(connection);
-    expect(item).toMatchObject({ label: 'lab', description: 'Crews Overview', tooltip: 'CrewForge dev\nContext: lab', contextValue: 'connection', command: { command: 'crewforge.openCrewsOverview' } });
+    expect(item).toMatchObject({ label: 'lab', description: 'Crews Overview', tooltip: `${TERMS.connection}\n\nCrewForge dev\nContext: lab`, contextValue: 'connection', command: { command: 'crewforge.openCrewsOverview' } });
     expect(tree.getParent(connection)).toBeUndefined();
     expect(await tree.getChildren(connection)).toEqual([]);
     const [crew] = await tree.getChildren(ns);

@@ -198,7 +198,7 @@ describe('the crew dashboard tabs', () => {
     await body(panel);
     await press(panel, 'tab', 'live');
     const html = (panel.webview.posted.at(-1) as { html: string }).html;
-    expect(html).toContain('<h2>Agent (1)</h2>');
+    expect(html).toMatch(/<h2[^>]*>Agent \(1\)<\/h2>/);
     expect(html).toContain('demo-coordinator');
   });
 });
@@ -215,7 +215,7 @@ describe('the Crews Overview', () => {
     expect(html).toContain('<td>1/1</td>');
     expect(html).toContain('<td>0.46.0</td>');
     expect(html).toContain('<td>open</td>');
-    expect(html).toContain('badge bad">1');
+    expect(html).toMatch(/badge bad"[^>]*>1</);
     expect(html).toContain('Deployed crews (2)');
     await press(panel, 'open', 'crew-demo/demo');
     await press(panel, 'open', 'nowhere/none');
@@ -252,7 +252,7 @@ describe('the fitness dashboard', () => {
     dashboards.openFitness({ kind: 'fitness', entry, deployment });
     const [panel] = recorded.panels;
     let html = await body(panel);
-    expect(html).toContain('<h2>s-new</h2>');
+    expect(html).toMatch(/<h2[^>]*>s-new<\/h2>/);
     expect(html).toContain('1 of 2 iterations');
     expect(parts.activity.isBusy(NS, 'demo')).toBe(true);
     await press(panel, 'pause', 's-new');
@@ -263,7 +263,7 @@ describe('the fitness dashboard', () => {
     expect(cluster.calls.filter((c) => c.method === 'PATCH').map((c) => c.body)).toEqual([{ spec: { suspend: true } }, { spec: { cancel: true } }, { spec: { suspend: false } }]);
     await press(panel, 'select', 's-old');
     html = (panel.webview.posted.at(-1) as { html: string }).html;
-    expect(html).toContain('<h2>s-old</h2>');
+    expect(html).toMatch(/<h2[^>]*>s-old<\/h2>/);
     expect(html).toContain('Judge: done, 1 scenarios scored, mean 90');
     expect(html).toContain('<td>a</td><td>1</td><td>1</td><td>0</td><td>0</td><td>2 s</td><td>90</td><td>matches</td>');
     await press(panel, 'xlsx', 's-old');
@@ -274,7 +274,7 @@ describe('the fitness dashboard', () => {
     expect(recorded.executed.at(-1)).toMatchObject({ id: 'crewforge.runFitness', args: [{ kind: 'deployment', entry }] });
     dashboards.openFitness({ kind: 'run', entry, deployment, run: { kind: 'CrewFitnessSuite', name: 's-new', namespace: NS, crew: 'demo', phase: 'Running', createdAt: '', assertions: [] } });
     expect(recorded.panels).toHaveLength(1);
-    await vi.waitFor(() => expect((panel.webview.posted.at(-1) as { html: string }).html).toContain('<h2>s-new</h2>'));
+    await vi.waitFor(() => expect((panel.webview.posted.at(-1) as { html: string }).html).toMatch(/<h2[^>]*>s-new<\/h2>/));
   });
 
   it('opens for a live crew without a source, and says why it cannot run or read', async () => {

@@ -124,7 +124,7 @@ describe('display names on the pages', () => {
 
   it('heads the crew dashboard with the display name and names the technical one beside where it runs', () => {
     const page = renderCrewPage(vitals('Homelab Health Guide'));
-    expect(page).toContain('<h1>Homelab Health Guide <span');
+    expect(page).toMatch(/<h1[^>]*>Homelab Health Guide <span/);
     expect(page).toContain('<p class="muted">test · not deployed in lab</p>');
     expect(page).toContain('Homelab Health Guide is not deployed in lab.');
     expect(renderCrewPage(vitals('test'))).toContain('<p class="muted">not deployed in lab</p>');
@@ -132,14 +132,14 @@ describe('display names on the pages', () => {
 
   it('heads the fitness dashboard with the display name', () => {
     const fitness = { crew: 'test', namespace: 'ns', runs: [], iterations: [], controls: { suspend: false, cancel: false } };
-    expect(renderFitnessPage({ ...fitness, title: 'Test & Crew' })).toContain('<h1>Fitness: Test &amp; Crew</h1><p class="muted">test · ns</p>');
-    expect(renderFitnessPage({ ...fitness, title: 'test' })).toContain('<h1>Fitness: test</h1><p class="muted">ns</p>');
+    expect(renderFitnessPage({ ...fitness, title: 'Test & Crew' })).toMatch(/<h1[^>]*>Fitness: Test &amp; Crew<\/h1><p class="muted">test · ns<\/p>/);
+    expect(renderFitnessPage({ ...fitness, title: 'test' })).toMatch(/<h1[^>]*>Fitness: test<\/h1><p class="muted">ns<\/p>/);
   });
 
   it('lists the display name in the Crews Overview, escaped, with the technical name beside it', () => {
     const connection = { context: 'lab', source: '/k', server: 'https://x' } as never;
     const html = renderOverview({ connection, rows: [{ crew: summary('test', 'ns', '<b>Guide</b>'), channel: 'helm', problems: 0, sourceOpen: false }] });
-    expect(html).toContain('title="Open the dashboard of test">&lt;b&gt;Guide&lt;/b&gt;</button> <span class="muted">test</span>');
+    expect(html).toContain('title="Open the dashboard of the test crew">&lt;b&gt;Guide&lt;/b&gt;</button> <span class="muted">test</span>');
     const plain = renderOverview({ connection, rows: [{ crew: summary('test', 'ns'), channel: 'helm', problems: 0, sourceOpen: false }] });
     expect(plain).toContain('>test</button></td>');
   });

@@ -2,11 +2,11 @@ import { connectionLines, type ConnectionInfo } from '../connectionInfo';
 import { CREW_LABEL, toAgent } from '../crew/details';
 import { titleOf } from '../crew/displayName';
 import type { CrewSummary } from '../k8s/crews';
-import { canAnswer } from '../k8s/crewState';
 import type { KubeTransport } from '../k8s/request';
 import { listKind, type KubemootKind } from '../source/live';
 import { provenanceOf } from '../source/provenance';
-import { badge, buttons, escape, moment, note, section, SELECT_CONTEXT_BUTTON, table, readyTone, type ButtonSpec } from './html';
+import { ACTIONS, HEADINGS } from '../definitions';
+import { badge, buttons, crewPhaseBadge, heading, escape, moment, note, section, SELECT_CONTEXT_BUTTON, table, type ButtonSpec } from './html';
 
 /** One deployed crew as the overview lists it. */
 export interface OverviewRow {
@@ -58,21 +58,22 @@ export function lastDeployOf(crew: CrewSummary): string | undefined {
 }
 
 export function renderOverview(v: OverviewView): string {
+  const title = heading('h1', 'Crews Overview', HEADINGS['Crews Overview']);
   const connection = `<div class="connection">${connectionLines(v.connection).map(escape).join('<br>')}</div>`;
   const select: ButtonSpec[] = v.connection.unreachable ? [{ ...SELECT_CONTEXT_BUTTON, primary: true }] : [];
   const top = buttons([
     ...select,
-    { action: 'refresh', label: 'Refresh', title: 'Read every crew again' },
-    { action: 'connection', label: 'Connection Info', title: 'Show the connection details, with Copy for a bug report' },
+    { action: 'refresh', label: 'Refresh', title: ACTIONS.refreshCrews },
+    { action: 'connection', label: 'Connection Info', title: ACTIONS.connection },
   ]);
-  if (v.connection.unreachable) return `<h1>Crews Overview</h1>${connection}${top}${note('No crews are listed until CrewForge can reach the cluster.')}`;
+  if (v.connection.unreachable) return `${title}${connection}${top}${note('No crews are listed until CrewForge can reach the cluster.')}`;
   const listError = `Cannot list the crews: ${v.error}`;
   const error = v.error ? `<p class="error">${escape(listError)}</p>` : '';
   const rows = v.rows.map(rowCells);
   const head = ['Crew', 'Namespace', 'Phase', 'Agents ready', 'Chart', 'Channel', 'Last deploy', 'Answering now', 'Recent problems', 'Local source'];
   const deployed = section(`Deployed crews (${v.rows.length})`, table(head, rows, 'No deployed crews in the namespaces this kubeconfig can see.'));
   const scope = v.scope ? note(`Showing crews from ${v.scope}.`) : '';
-  return `<h1>Crews Overview</h1>${connection}${top}${scope}${error}${deployed}`;
+  return `${title}${connection}${top}${scope}${error}${deployed}`;
 }
 
 function rowCells(r: OverviewRow): string[] {
@@ -80,17 +81,18 @@ function rowCells(r: OverviewRow): string[] {
   const agents = r.agentsTotal === undefined ? '' : `${r.agentsReady ?? 0}/${r.agentsTotal}`;
   const id = `${crew.namespace}/${crew.name}`;
   const title = titleOf(crew);
+  const openTip = `Open the dashboard of the ${crew.name} crew`;
   const technical = title === crew.name ? '' : ` <span class="muted">${escape(crew.name)}</span>`;
   return [
-    `<button type="button" class="link" data-action="open" data-arg="${escape(id)}" title="Open the dashboard of ${escape(crew.name)}">${escape(title)}</button>${technical}`,
+    `<button type="button" class="link" data-action="open" data-arg="${escape(id)}" title="${escape(openTip)}">${escape(title)}</button>${technical}`,
     escape(crew.namespace),
-    badge(crew.phase, readyTone(canAnswer(crew).ok)),
+    crewPhaseBadge(crew),
     escape(agents),
     escape(r.chartVersion ?? ''),
     escape(r.channel),
     escape(moment(r.lastDeploy) ?? ''),
     escape(r.active ?? ''),
-    r.problems ? badge(String(r.problems), 'bad') : '',
+    r.problems ? badge(String(r.problems), 'bad', 'Problems found in recent saved turns with this crew; open the crew to read them.') : '',
     escape(r.sourceOpen ? 'open' : ''),
   ];
 }

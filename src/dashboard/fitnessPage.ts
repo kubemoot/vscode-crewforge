@@ -1,7 +1,8 @@
 import { runControls, shownPhase, type SuiteControls } from '../fitness/controls';
 import { META_SEPARATOR } from '../webview/render';
 import { isRunning, runSummary, scenarioResults, scenarioResultsFromStatus, type FitnessRun, type JudgeScore, type ScenarioResult, type SuiteJudge } from '../fitness/fitness';
-import { badge, between, buttons, duration, escape, facts, moment, note, section, SELECT_CONTEXT_BUTTON, table, type ButtonSpec, type Shown } from './html';
+import { ACTIONS, HEADINGS, TERMS } from '../definitions';
+import { badge, between, buttons, heading, duration, escape, facts, moment, note, section, SELECT_CONTEXT_BUTTON, table, type ButtonSpec, type Shown } from './html';
 
 /** What the fitness dashboard reads for one deployment. */
 export interface FitnessView {
@@ -30,18 +31,19 @@ const TONE: Record<string, 'good' | 'warn' | 'bad'> = { Passed: 'good', Complete
 export function renderFitnessPage(v: FitnessView): string {
   const busy = v.runs.some(isRunning);
   const top: ButtonSpec[] = [
-    { action: 'run', label: 'Run Fitness', title: 'Run one of the crew\'s fitness definitions', disabled: busy ? 'A fitness run for this crew is in progress.' : v.cannotRun, primary: true },
-    { action: 'refresh', label: 'Refresh', title: 'Read the runs again' },
+    { action: 'run', label: 'Run Fitness', title: ACTIONS.runFitness, disabled: busy ? 'A fitness run for this crew is in progress.' : v.cannotRun, primary: true },
+    { action: 'refresh', label: 'Refresh', title: ACTIONS.refreshRuns },
     ...(v.error ? [SELECT_CONTEXT_BUTTON] : []),
   ];
   const error = v.error ? `<p class="error">${escape(v.error)}</p>` : '';
   const where = v.title === v.crew ? v.namespace : `${v.crew} · ${v.namespace}`;
-  return `<h1>Fitness: ${escape(v.title)}</h1><p class="muted">${escape(where)}</p>${error}${buttons(top)}${runsSection(v)}${v.selected ? runSection(v, v.selected) : ''}`;
+  const title = heading('h1', `Fitness: ${escape(v.title)}`, TERMS.fitness);
+  return `${title}<p class="muted">${escape(where)}</p>${error}${buttons(top)}${runsSection(v)}${v.selected ? runSection(v, v.selected) : ''}`;
 }
 
 function runsSection(v: FitnessView): string {
   const rows = v.runs.map((r) => [
-    `<button type="button" class="link" data-action="select" data-arg="${escape(r.name)}" title="Show this run">${escape(r.name)}</button>`,
+    `<button type="button" class="link" data-action="select" data-arg="${escape(r.name)}" title="${escape(ACTIONS.showRun)}">${escape(r.name)}</button>`,
     escape(r.kind === 'CrewFitnessSuite' ? 'suite' : 'single'),
     phaseBadge(r),
     escape(progressText(r)),
@@ -53,7 +55,7 @@ function runsSection(v: FitnessView): string {
 
 function phaseBadge(r: FitnessRun): string {
   const phase = shownPhase(r);
-  return badge(phase, TONE[phase] ?? 'plain');
+  return badge(phase, TONE[phase] ?? 'plain', `Where the run is: ${phase}.`);
 }
 
 function progressText(r: FitnessRun): string {
@@ -62,19 +64,19 @@ function progressText(r: FitnessRun): string {
 }
 
 function runSection(v: FitnessView, r: FitnessRun): string {
-  const progress = r.iterationsTotal && isRunning(r) ? `<progress max="${r.iterationsTotal}" value="${r.iterationsCompleted ?? 0}"></progress>` : '';
+  const progress = r.iterationsTotal && isRunning(r) ? `<progress max="${r.iterationsTotal}" value="${r.iterationsCompleted ?? 0}" title="${escape(ACTIONS.showProgress)}" aria-label="${escape(ACTIONS.showProgress)}"></progress>` : '';
   const body = [result(r), progress, buttons(runButtons(v, r)), r.kind === 'CrewFitnessSuite' ? suiteDetail(v, r) : singleDetail(r), facts(runFacts(r))].join('');
-  return section(r.name, body);
+  return section(r.name, body, `${TERMS.fitnessRun} This is ${r.name}.`);
 }
 
 function runButtons(v: FitnessView, r: FitnessRun): ButtonSpec[] {
   const controls = runControls(r, v.controls);
   const specs: ButtonSpec[] = [];
-  if (controls.pause) specs.push({ action: 'pause', arg: r.name, label: 'Pause', title: 'Pause between iterations; the running iteration finishes (spec.suspend)' });
-  if (controls.resume) specs.push({ action: 'resume', arg: r.name, label: 'Resume', title: 'Resume the paused suite' });
-  if (controls.stop) specs.push({ action: 'stop', arg: r.name, label: 'Stop', title: r.kind === 'CrewFitnessSuite' ? 'Stop the suite; it becomes Cancelled (spec.cancel)' : 'Stop this single-scenario run (deletes it)' });
-  if (r.artifact) specs.push({ action: 'xlsx', arg: r.name, label: 'Open XLSX', title: 'Download the results workbook from the Kubemoot dashboard', disabled: v.xlsxUrl ? undefined : 'Set crewforge.dashboardUrl to download the XLSX.' });
-  if (r.kind === 'CrewFitnessSuite') specs.push({ action: 'openDashboard', arg: r.name, label: 'Open in Kubemoot dashboard', title: "Open the Kubemoot dashboard's Fitness page in your browser, where this run's transcripts are", disabled: v.dashboardRunUrl ? undefined : 'Set crewforge.dashboardUrl to open the Kubemoot dashboard.' });
+  if (controls.pause) specs.push({ action: 'pause', arg: r.name, label: 'Pause', title: ACTIONS.pause });
+  if (controls.resume) specs.push({ action: 'resume', arg: r.name, label: 'Resume', title: ACTIONS.resume });
+  if (controls.stop) specs.push({ action: 'stop', arg: r.name, label: 'Stop', title: r.kind === 'CrewFitnessSuite' ? ACTIONS.stopSuite : ACTIONS.stopSingle });
+  if (r.artifact) specs.push({ action: 'xlsx', arg: r.name, label: 'Open XLSX', title: ACTIONS.xlsx, disabled: v.xlsxUrl ? undefined : 'Set crewforge.dashboardUrl to download the XLSX.' });
+  if (r.kind === 'CrewFitnessSuite') specs.push({ action: 'openDashboard', arg: r.name, label: 'Open in Kubemoot dashboard', title: ACTIONS.openRunInDashboard, disabled: v.dashboardRunUrl ? undefined : 'Set crewforge.dashboardUrl to open the Kubemoot dashboard.' });
   return specs;
 }
 
@@ -102,7 +104,7 @@ function suiteDetail(v: FitnessView, r: FitnessRun): string {
   const rows = withScoredOnly(results, scores).map((s) => scenarioRow(s, scores.get(s.scenario)));
   const where = live.length ? 'From the iterations in the cluster.' : statusNote(r);
   const judge = `Judge: ${judgeText(r)}`;
-  return `<h3>Scenarios</h3>${table(['Scenario', 'Done', 'Passed', 'Failed', 'Errored', 'Mean duration', 'Score', 'Judge reason'], rows, 'No iterations yet.')}${note(where)}<p>${escape(judge)}</p>`;
+  return `${heading('h3', 'Scenarios', HEADINGS.Scenarios)}${table(['Scenario', 'Done', 'Passed', 'Failed', 'Errored', 'Mean duration', 'Score', 'Judge reason'], rows, 'No iterations yet.')}${note(where)}<p>${escape(judge)}</p>`;
 }
 
 /** Adds a row for each judged scenario the results do not list, so no score goes unshown. */
@@ -139,6 +141,6 @@ function judgeProgress(j: SuiteJudge, scripts: number): string {
 }
 
 function singleDetail(r: FitnessRun): string {
-  const rows = r.assertions.map((a) => [a.passed ? badge('pass', 'good') : badge('fail', 'bad'), escape(a.raw), escape(a.message)]);
-  return `<h3>Assertions</h3>${table(['', 'Assertion', 'Result'], rows, isRunning(r) ? 'Running...' : 'No assertions reported.')}`;
+  const rows = r.assertions.map((a) => [a.passed ? badge('pass', 'good', 'The answer met this assertion.') : badge('fail', 'bad', 'The answer did not meet this assertion.'), escape(a.raw), escape(a.message)]);
+  return `${heading('h3', 'Assertions', HEADINGS.Assertions)}${table(['', 'Assertion', 'Result'], rows, isRunning(r) ? 'Running...' : 'No assertions reported.')}`;
 }

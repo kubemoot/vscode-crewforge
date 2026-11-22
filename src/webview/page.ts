@@ -7,6 +7,7 @@
 import type { PageHostMessage, PageMessage } from './pageProtocol';
 import { reportErrors } from './reportErrors';
 import { shownText } from './shown';
+import { enableFocusTooltips } from './tooltip';
 
 interface VsCodeApi {
   postMessage(message: PageMessage): void;
@@ -53,4 +54,5 @@ document.addEventListener('click', (event) => {
   vscode.postMessage({ type: 'action', action: target.dataset.action ?? '', arg: target.dataset.arg });
 });
 
+enableFocusTooltips(document);
 vscode.postMessage({ type: 'ready' });

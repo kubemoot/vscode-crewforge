@@ -65,7 +65,7 @@ describe('the crew dashboard tabs', () => {
   it('Source lists the rendered objects by kind, each a link to its file, and says when there is no source', async () => {
     const r = reads();
     const html = await tabBody('source', { ...base, source: entry }, r, false);
-    expect(html).toContain('<h2>Agent (1)</h2>');
+    expect(html).toMatch(/<h2[^>]*>Agent \(1\)<\/h2>/);
     expect(html).toContain('data-action="openAt" data-arg="0" title="Open /w/demo/templates/agents.yaml:5"');
     expect(html).toContain('not in a file');
     expect(renderSourceTab([])).toContain('renders no objects');
@@ -79,7 +79,7 @@ describe('the crew dashboard tabs', () => {
     const normalized = await tabBody('live', { ...base, source: entry, deployment, drift }, r, false);
     expect(normalized).toContain('Normalized:');
     expect(normalized).not.toContain('ready: true');
-    expect(normalized).toContain('<h2>Skill (1)</h2>');
+    expect(normalized).toMatch(/<h2[^>]*>Skill \(1\)<\/h2>/);
     expect(normalized).toContain('data-action="raw"');
     expect(r.calls).toEqual([]);
     const raw = await tabBody('live', { ...base, deployment }, r, true);
@@ -100,7 +100,7 @@ describe('the crew dashboard tabs', () => {
     const r = reads();
     const html = await tabBody('diff', { ...base, source: entry, deployment, drift }, r, false);
     expect(html).toContain('3 of 4 objects differ; 1 in sync.');
-    expect(html).toContain('Agent/demo-coordinator <span class="badge warn">changed in source</span>');
+    expect(html).toMatch(/Agent\/demo-coordinator <span class="badge warn"[^>]*>changed in source<\/span>/);
     expect(html).toContain('<span class="removed">-     - tool-calling</span>');
     expect(html).toContain('<span class="added">+     - reasoning</span>');
     expect(html).toContain('data-action="openDiff" data-arg="Agent/demo-coordinator"');

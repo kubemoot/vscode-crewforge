@@ -1,3 +1,4 @@
+import { ACTIONS, STATUS_TIPS, TERMS } from './definitions';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
@@ -156,7 +157,8 @@ export class ConnectionStatus implements vscode.Disposable {
     const info = await readConnectionInfo(this.connect, this.crewforge);
     this.latest = info;
     this.item.text = statusText(info);
-    this.item.tooltip = [...connectionLines(info), '', 'Click to select the Kubernetes context.'].join('\n');
+    this.item.name = 'CrewForge connection';
+    this.item.tooltip = [STATUS_TIPS.connection, '', ...connectionLines(info), '', 'Click to select the Kubernetes context.'].join('\n');
     this.item.show();
     return info;
   }
@@ -171,8 +173,8 @@ const COPY = 'Copy for a bug report';
 /** Shows the connection details in a quick pick, with Select Kubernetes Context and a Copy item for bug reports. */
 export async function showConnectionInfo(info: ConnectionInfo): Promise<void> {
   const lines = connectionLines(info);
-  const actions = [{ label: `$(server-environment) ${SELECT_CONTEXT.title}` }, { label: `$(copy) ${COPY}` }];
-  const choice = await vscode.window.showQuickPick([...lines.map((label) => ({ label })), ...actions], { title: 'CrewForge connection' });
+  const actions = [{ label: `$(server-environment) ${SELECT_CONTEXT.title}`, description: ACTIONS.selectContext }, { label: `$(copy) ${COPY}`, description: 'Put these details on the clipboard' }];
+  const choice = await vscode.window.showQuickPick([...lines.map((label) => ({ label, description: TERMS.connection })), ...actions], { title: 'CrewForge connection' });
   if (choice?.label.endsWith(COPY)) await vscode.env.clipboard.writeText(lines.join('\n'));
   if (choice?.label.endsWith(SELECT_CONTEXT.title)) await vscode.commands.executeCommand(SELECT_CONTEXT.command);
 }

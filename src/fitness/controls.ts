@@ -1,3 +1,4 @@
+import { STOP_EFFECTS } from '../definitions';
 import * as vscode from 'vscode';
 import { KubeError, type KubeTransport } from '../k8s/request';
 import { OPENAPI_PATH } from '../schema/kubemootSchema';
@@ -81,7 +82,7 @@ export class RunControls {
    * references remove its Job).
    */
   async stop(run: FitnessRun): Promise<void> {
-    const how = run.kind === 'CrewFitnessSuite' ? 'The running iteration ends and the suite becomes Cancelled; results so far are kept.' : 'The run is deleted with its results; the operator removes its Job.';
+    const how = run.kind === 'CrewFitnessSuite' ? STOP_EFFECTS.suite : STOP_EFFECTS.single;
     const answer = await vscode.window.showWarningMessage(`Stop ${run.name}?`, { modal: true, detail: how }, 'Stop');
     if (answer !== 'Stop') return;
     if (run.kind === 'CrewFitnessSuite') return this.patch(run, { spec: { cancel: true } });
