@@ -48,3 +48,8 @@ pre.memory-value { font-family: inherit; white-space: pre-wrap; word-break: brea
 .summary { margin: 0.5rem 0; }
 .focus-tip { position: fixed; z-index: 1000; max-width: 22rem; padding: 0.35rem 0.55rem; font-size: 0.85em; line-height: 1.35; color: var(--vscode-editorHoverWidget-foreground, var(--vscode-foreground)); background: var(--vscode-editorHoverWidget-background, var(--vscode-editorWidget-background)); border: 1px solid var(--vscode-editorHoverWidget-border, var(--vscode-widget-border, rgba(128, 128, 128, 0.5))); border-radius: 3px; box-shadow: 0 2px 8px var(--vscode-widget-shadow, rgba(0, 0, 0, 0.3)); pointer-events: none; }
 .btn:focus-visible, .link:focus-visible, .tab:focus-visible, summary:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: 1px; }
+.legend { margin: 0.25rem 0 0.5rem; }
+.legend > summary { list-style: none; display: inline-flex; align-items: center; justify-content: center; width: 1.1rem; height: 1.1rem; padding: 0; border: 1px solid var(--vscode-descriptionForeground); border-radius: 50%; color: var(--vscode-descriptionForeground); font: italic 700 0.7rem/1 Georgia, serif; cursor: pointer; }
+.legend > summary::-webkit-details-marker { display: none; }
+.legend[open] > summary, .legend > summary:hover { color: var(--vscode-foreground); border-color: var(--vscode-foreground); }
+.legend > p { margin: 0.35rem 0 0; max-width: 42rem; color: var(--vscode-descriptionForeground); }

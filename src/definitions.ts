@@ -5,6 +5,13 @@
  * has one definition. The terms say what the Kubemoot dashboard's page definitions say.
  * A test walks package.json, the trees, and every page and fails when one has no text.
  */
+/** What the gate and judge score columns of a fitness run mean, and why they can disagree. */
+export const GATES_LEGEND = [
+  "Gates are the scenario script's own checks (the agree floor, required and forbidden terms). An iteration passes when every gate holds.",
+  "Judge score is the judge's 0 to 100 rating of the answers against the references. It does not read the gates.",
+  'The two are independent: all gates can pass with a low score, and a gate can fail on an answer the judge liked.',
+];
+
 
 /** What a thing is in Kubemoot, by name. */
 export const TERMS = {
@@ -124,11 +131,12 @@ export const COLUMNS: Record<string, string> = {
   Duration: 'How long the run took, or has taken so far.',
   Scenario: TERMS.scenario,
   Done: 'How many iterations of the scenario have finished.',
-  Passed: 'How many iterations passed every assertion.',
-  Failed: 'How many iterations failed an assertion.',
-  Errored: 'How many iterations stopped on an error before the assertions ran.',
+  'Gates passed': "How many iterations held every gate: the scenario script's own checks, not the judge.",
+  'Gates failed': "How many iterations failed a gate. The judge's score does not change this.",
+  Errored: 'How many iterations stopped on an error before the gates ran.',
   'Mean duration': 'The average time one iteration of the scenario took.',
-  Score: "The judge's score for the scenario's answers, 0 to 100.",
+  'Judge score': "The judge's rating of the scenario's answers against the references, 0 to 100. The gates do not change it.",
+  'Failure reason': 'Why a gate failed: the first failed assertion, or the error of the iteration that could not run.',
   'Judge reason': "The judge's reason for the score.",
   Assertion: 'The check the scenario makes on the answer.',
   Result: 'Whether the check passed, and what it found.',
