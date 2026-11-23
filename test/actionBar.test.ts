@@ -73,7 +73,7 @@ describe('the fitness run section', () => {
 
   it('leads with the result on one line, and keeps the run id and the storage path out of sight', () => {
     const html = renderFitnessPage(view);
-    expect(html).toMatch(/<h2[^>]*>s1<\/h2><p class="summary"><span class="badge good"[^>]*>Completed<\/span> 3 passed, 1 failed, 0 errored · 10 min 0 s<\/p>/);
+    expect(html).toMatch(/<h2[^>]*>s1<\/h2><p class="summary"><span class="badge warn"[^>]*>Completed<\/span> 3 gates passed, 1 failed, 0 errored · 10 min 0 s<\/p>/);
     expect(html).not.toContain('a1b2');
     expect(html).not.toContain('b/k');
     expect(html).toMatch(/<dt[^>]*>Started<\/dt><dd><time datetime="2026-11-22T04:15:35.076Z"/);

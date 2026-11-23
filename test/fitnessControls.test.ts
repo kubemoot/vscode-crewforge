@@ -189,7 +189,7 @@ describe('renderFitnessPage', () => {
     expect(html).toContain('Judge: done, 2 scenarios scored, mean 43');
     expect(html).toMatch(/data-action="xlsx" data-arg="s1" title="Download/);
     expect(html).toMatch(/data-action="openDashboard" data-arg="s1" title="Open the Kubemoot dashboard/);
-    expect(html).toContain('2 passed, 0 failed, 0 errored');
+    expect(html).toContain('2 gates passed, 0 failed, 0 errored · judge score 43');
     const noUrl = renderFitnessPage(view({ runs: [done], selected: done }));
     expect(noUrl).toContain('title="Set crewforge.dashboardUrl to download the XLSX." disabled');
     expect(noUrl).toContain('title="Set crewforge.dashboardUrl to open the Kubemoot dashboard." disabled');
@@ -228,5 +228,38 @@ describe('renderFitnessPage', () => {
     expect(judgeText(judged({ judged: 1 }))).toBe('judging, 1 of 2 scenarios scored');
     expect(judgeText({ ...judged({}), scripts: undefined })).toBe('judging, 0 of 0 scenarios scored');
     expect(judgeText(judged({ phase: 'Complete', judged: 2, mean: 0 }))).toBe('done, 2 scenarios scored, mean 0');
+  });
+});
+
+describe('gates and judge score on the fitness page', () => {
+  const view = (run: FitnessRun): FitnessView => ({ crew: 'demo', title: 'demo', namespace: 'ns', runs: [run], selected: run, iterations: [], controls: { suspend: true, cancel: true } });
+  const failing = suite({ phase: 'Completed', passed: 1, failed: 1, errored: 0, scenarios: [{ name: 'a', iterations: 2, passed: 1, failed: 1, errored: 0, failureReason: 'FORBID "unable to" <x>' }], judge: { phase: 'Complete', judged: 1, total: 1, mean: 92, zeros: 0, scores: [{ scenario: 'a', score: 92 }] } });
+
+  it('labels the gate and judge columns, with a legend that opens on click', () => {
+    const html = renderFitnessPage(view(failing));
+    for (const label of ['Gates passed', 'Gates failed', 'Judge score', 'Judge reason', 'Failure reason']) expect(html).toContain(`>${label}</th>`);
+    expect(html).toContain('<details class="legend"><summary title="About gates and judge score" aria-label="About gates and judge score">i</summary>');
+    expect(html).toContain('The two are independent');
+    expect(html).toContain('1 gates passed, 1 failed, 0 errored · judge score 92');
+  });
+
+  it('shows each failed scenario its failureReason, escaped', () => {
+    expect(renderFitnessPage(view(failing))).toContain('<td>FORBID &quot;unable to&quot; &lt;x&gt;</td>');
+  });
+
+  it('tones a Completed suite with failed gates warn, and a clean one good', () => {
+    expect(renderFitnessPage(view(failing))).toMatch(/class="badge warn"[^>]*>Completed</);
+    const clean = suite({ phase: 'Completed', passed: 2, failed: 0, errored: 0 });
+    expect(renderFitnessPage(view(clean))).toMatch(/class="badge good"[^>]*>Completed</);
+    expect(renderFitnessPage(view({ ...clean, errored: 1 }))).toMatch(/class="badge warn"[^>]*>Completed</);
+  });
+
+  it('gives an Error suite a Failure line and a ToolSmokeFailed suite the condition message', () => {
+    const error = renderFitnessPage(view(suite({ phase: 'Error', error: 'spec.scripts[1] not found' })));
+    expect(error).toContain('<p class="error">Failure: spec.scripts[1] not found</p>');
+    expect(error).not.toContain('<dt>Error</dt>');
+    const smoke = renderFitnessPage(view(suite({ phase: 'ToolSmokeFailed', conditions: [{ type: 'ToolSmoke', status: 'False', message: '2 tool(s) failed the smoke' }] })));
+    expect(smoke).toContain('Failure: 2 tool(s) failed the smoke');
+    expect(renderFitnessPage(view(failing))).not.toContain('Failure:');
   });
 });

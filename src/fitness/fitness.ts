@@ -50,6 +50,8 @@ export interface SuiteScenario {
   failed: number;
   errored: number;
   meanDurationMs?: number;
+  /** Why a trial failed its gates: the first failed assertion or trial error, one line. */
+  failureReason?: string;
 }
 
 /** One fitness run of a crew, as its status reports it. */
@@ -119,6 +121,25 @@ export function isFitness(m: Manifest): boolean {
 
 export function isRunning(run: FitnessRun): boolean {
   return RUNNING.has(run.phase);
+}
+
+/** Condition type that carries a suite's tool smoke result. */
+const TOOL_SMOKE = 'ToolSmoke';
+
+/**
+ * Why a run did not execute, in the operator's words: status.error for an Error or
+ * Failed run, the ToolSmoke condition message for ToolSmokeFailed. Undefined for any
+ * other run, including a Completed suite whose gates failed (its scenarios say why).
+ */
+export function failureOf(run: FitnessRun): string | undefined {
+  if (run.phase === 'ToolSmokeFailed') return run.conditions?.find((c) => c.type === TOOL_SMOKE)?.message || run.error || undefined;
+  if (run.phase === 'Error' || run.phase === 'Failed') return run.error;
+  return undefined;
+}
+
+/** A finished run with a failed or errored gate: it completed, but not clean. */
+export function hasFailedGates(run: FitnessRun): boolean {
+  return (run.failed ?? 0) > 0 || (run.errored ?? 0) > 0;
 }
 
 interface FitnessStatus {
@@ -203,7 +224,7 @@ export function scenariosOf(raw: unknown): SuiteScenario[] | undefined {
   return raw
     .filter(isObject)
     .filter((s) => typeof s.name === 'string')
-    .map((s) => ({ name: s.name as string, iterations: count(s.iterations), passed: count(s.passed), failed: count(s.failed), errored: count(s.errored), meanDurationMs: optionalNumber(s.meanDurationMs) }));
+    .map((s) => ({ name: s.name as string, iterations: count(s.iterations), passed: count(s.passed), failed: count(s.failed), errored: count(s.errored), meanDurationMs: optionalNumber(s.meanDurationMs), failureReason: optionalText(s.failureReason) }));
 }
 
 function progressOf(status: FitnessStatus): Partial<FitnessRun> {
@@ -249,6 +270,8 @@ export interface ScenarioResult {
   running: number;
   /** The mean duration of its finished iterations. */
   meanMs?: number;
+  /** Why a gate failed, from the suite status. */
+  failureReason?: string;
 }
 
 const OUTCOME: Record<string, keyof Pick<ScenarioResult, 'passed' | 'failed' | 'errored'>> = { Passed: 'passed', Failed: 'failed', Error: 'errored', Timeout: 'errored' };
@@ -288,6 +311,7 @@ export function scenarioResultsFromStatus(scripts: string[], scenarios: SuiteSce
     const result: ScenarioResult = { scenario, done: s.iterations, passed: s.passed, failed: s.failed, errored: s.errored, running: 0 };
     const meanMs = meanDuration([s.meanDurationMs ?? 0]);
     if (meanMs !== undefined) result.meanMs = meanMs;
+    if (s.failureReason) result.failureReason = s.failureReason;
     return result;
   });
 }
@@ -341,7 +365,7 @@ export function runName(definition: string, now: Date): string {
 /** The line under a run in the tree. */
 export function runSummary(run: FitnessRun): string {
   if (run.kind === 'CrewFitnessSuite' && run.passed !== undefined) {
-    return `${run.phase || 'Pending'} · ${run.passed ?? 0} passed, ${run.failed ?? 0} failed, ${run.errored ?? 0} errored`;
+    return `${run.phase || 'Pending'} · ${gateCounts(run)}`;
   }
   if (run.assertions.length) {
     const passed = run.assertions.filter((a) => a.passed).length;
@@ -355,6 +379,7 @@ export function runReport(run: FitnessRun): string {
   const lines = [`# ${run.name}`, '', `${run.kind} of crew \`${run.crew}\` in \`${run.namespace}\``, '', `**${runSummary(run)}**`];
   if (run.createdAt) lines.push('', `Started ${run.createdAt}`);
   if (run.error) lines.push('', `Error: ${run.error}`);
+  lines.push(...outcomeNotes(run));
   if (run.assertions.length) {
     lines.push('', '| | Assertion | Result |', '|---|---|---|');
     for (const a of run.assertions) lines.push(`| ${a.passed ? 'pass' : 'FAIL'} | ${cell(a.raw)} | ${cell(a.message)} |`);
@@ -364,4 +389,18 @@ export function runReport(run: FitnessRun): string {
 
 function cell(text: string): string {
   return text.replaceAll('|', String.raw`\|`).replaceAll('\n', ' ');
+}
+
+/** The gate counts of a suite on one line: "2 gates passed, 1 failed, 0 errored". The judge's score is separate. */
+export function gateCounts(run: FitnessRun): string {
+  return `${run.passed ?? 0} gates passed, ${run.failed ?? 0} failed, ${run.errored ?? 0} errored`;
+}
+
+/** The report lines that say why a run did not pass: its failure, the judge's mean, and each scenario's failed gate. */
+function outcomeNotes(run: FitnessRun): string[] {
+  const why = failureOf(run);
+  const notes = why && why !== run.error ? [`Failure: ${why}`] : [];
+  if (run.judge?.mean !== undefined) notes.push(`Judge score: ${run.judge.mean}`);
+  for (const s of run.scenarios ?? []) if (s.failureReason) notes.push(`Gate failed in ${s.name}: ${s.failureReason}`);
+  return notes.flatMap((line) => ['', line]);
 }

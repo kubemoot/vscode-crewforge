@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { FitnessCommands } from '../src/fitness/commands';
-import { isRunning, judgeOf, listRuns, scenarioResults, scenarioResultsFromStatus, runName, runReport, runsInProgress, runSummary, scenariosOf, startRun, toRun, type FitnessRun } from '../src/fitness/fitness';
+import { failureOf, gateCounts, hasFailedGates, isRunning, judgeOf, listRuns, scenarioResults, scenarioResultsFromStatus, runName, runReport, runsInProgress, runSummary, scenariosOf, startRun, toRun, type FitnessRun } from '../src/fitness/fitness';
 import type { KubeClient } from '../src/k8s/request';
 import type { Deployment } from '../src/source/deployments';
 import type { CrewSource } from '../src/source/discover';
@@ -20,7 +20,7 @@ const assertion = (passed: boolean, raw = 'synthesis CONTAINS "Paris"') => ({ ra
 describe('runs', () => {
   it('reads status into runs and summarizes them', () => {
     const suite = toRun('CrewFitnessSuite', fitnessObj('CrewFitnessSuite', 's', 'ns', 'demo', { phase: 'Completed', passed: 2, failed: 1, errored: 0 }) as never);
-    expect(runSummary(suite)).toBe('Completed · 2 passed, 1 failed, 0 errored');
+    expect(runSummary(suite)).toBe('Completed · 2 gates passed, 1 failed, 0 errored');
     const single = toRun('CrewFitness', fitnessObj('CrewFitness', 'f', 'ns', 'demo', { phase: 'Failed', assertions: [assertion(true), assertion(false)], error: '' }) as never);
     expect(runSummary(single)).toBe('Failed · 1/2 assertions');
     expect(single.error).toBeUndefined();
@@ -28,7 +28,7 @@ describe('runs', () => {
     expect(fresh).toMatchObject({ phase: '', crew: '', namespace: '', createdAt: '', assertions: [] });
     expect(runSummary(fresh)).toBe('Pending');
     expect(runSummary({ ...suite, passed: undefined, phase: 'Running' })).toBe('Running');
-    expect(runSummary({ ...suite, phase: '', failed: undefined, errored: undefined })).toBe('Pending · 2 passed, 0 failed, 0 errored');
+    expect(runSummary({ ...suite, phase: '', failed: undefined, errored: undefined })).toBe('Pending · 2 gates passed, 0 failed, 0 errored');
     expect(isRunning(fresh)).toBe(true);
     expect(isRunning(suite)).toBe(false);
   });
@@ -286,5 +286,45 @@ describe('suite results from status', () => {
     } as never);
     expect(run.judge?.mean).toBe(90);
     expect(run.scenarios?.[0]).toMatchObject({ name: 'a', passed: 1 });
+  });
+});
+
+describe('why a run did not pass', () => {
+  const base = (over: Partial<FitnessRun>): FitnessRun => ({ kind: 'CrewFitnessSuite', name: 's', namespace: 'ns', crew: 'demo', phase: 'Completed', createdAt: '', assertions: [], ...over });
+  const smoke = { type: 'ToolSmoke', status: 'False', message: '9 tool(s) failed the smoke, no model ran' };
+
+  it('reads failureReason from status.scenarios and ignores an empty or non-text one', () => {
+    expect((scenariosOf([{ name: 'a', failureReason: 'missing "x"' }, { name: 'b', failureReason: '' }, { name: 'c', failureReason: 3 }, { name: 'd' }]) ?? []).map((s) => s.failureReason)).toEqual(['missing "x"', undefined, undefined, undefined]);
+    expect(scenarioResultsFromStatus(['a', 'b'], [{ name: 'a', iterations: 1, passed: 0, failed: 1, errored: 0, failureReason: 'gate' }])[0].failureReason).toBe('gate');
+    expect(scenarioResultsFromStatus(['a'], [{ name: 'a', iterations: 1, passed: 1, failed: 0, errored: 0 }])[0]).not.toHaveProperty('failureReason');
+  });
+
+  it('says why an Error or ToolSmokeFailed run did not execute, and nothing for the others', () => {
+    expect(failureOf(base({ phase: 'Error', error: 'bad spec' }))).toBe('bad spec');
+    expect(failureOf(base({ phase: 'Failed', error: 'boom' }))).toBe('boom');
+    expect(failureOf(base({ phase: 'ToolSmokeFailed', conditions: [{ type: 'Other', status: 'True', message: 'no' }, smoke] }))).toBe(smoke.message);
+    expect(failureOf(base({ phase: 'ToolSmokeFailed', error: 'fallback' }))).toBe('fallback');
+    expect(failureOf(base({ phase: 'ToolSmokeFailed' }))).toBeUndefined();
+    expect(failureOf(base({ phase: 'Error' }))).toBeUndefined();
+    expect(failureOf(base({ phase: 'Completed', error: 'stale', failed: 2 }))).toBeUndefined();
+  });
+
+  it('counts a Completed suite with a failed or errored gate as not clean', () => {
+    expect(hasFailedGates(base({ passed: 4, failed: 0, errored: 0 }))).toBe(false);
+    expect(hasFailedGates(base({ passed: 3, failed: 1 }))).toBe(true);
+    expect(hasFailedGates(base({ errored: 1 }))).toBe(true);
+    expect(hasFailedGates(base({}))).toBe(false);
+  });
+
+  it('labels the counts as gates', () => {
+    expect(gateCounts(base({ passed: 2, failed: 1 }))).toBe('2 gates passed, 1 failed, 0 errored');
+  });
+
+  it('puts the failure, the judge score and each failed gate in the report', () => {
+    const report = runReport(base({ phase: 'ToolSmokeFailed', conditions: [smoke], judge: { phase: 'Complete', judged: 1, total: 1, mean: 20, zeros: 0, scores: [] }, scenarios: [{ name: 'a', iterations: 1, passed: 0, failed: 1, errored: 0, failureReason: 'FORBID "x"' }] }));
+    expect(report).toContain('Failure: 9 tool(s) failed the smoke, no model ran');
+    expect(report).toContain('Judge score: 20');
+    expect(report).toContain('Gate failed in a: FORBID "x"');
+    expect(runReport(base({ phase: 'Error', error: 'bad spec' }))).not.toContain('Failure:');
   });
 });

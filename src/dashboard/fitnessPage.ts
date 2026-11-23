@@ -1,7 +1,7 @@
 import { runControls, shownPhase, type SuiteControls } from '../fitness/controls';
 import { META_SEPARATOR } from '../webview/render';
-import { isRunning, runSummary, scenarioResults, scenarioResultsFromStatus, type FitnessRun, type JudgeScore, type ScenarioResult, type SuiteJudge } from '../fitness/fitness';
-import { ACTIONS, HEADINGS, TERMS } from '../definitions';
+import { failureOf, gateCounts, hasFailedGates, isRunning, runSummary, scenarioResults, scenarioResultsFromStatus, type FitnessRun, type JudgeScore, type ScenarioResult, type SuiteJudge } from '../fitness/fitness';
+import { ACTIONS, GATES_LEGEND, HEADINGS, TERMS } from '../definitions';
 import { badge, between, buttons, heading, duration, escape, facts, moment, note, section, SELECT_CONTEXT_BUTTON, table, type ButtonSpec, type Shown } from './html';
 
 /** What the fitness dashboard reads for one deployment. */
@@ -53,9 +53,16 @@ function runsSection(v: FitnessView): string {
   return section('Runs', table(['Run', 'Kind', 'Phase', 'Progress', 'Started', 'Duration'], rows, 'No fitness runs yet.'));
 }
 
+/** A suite that Completed with a failed or errored gate is not clean, so it reads warn, not good. */
+function toneOf(r: FitnessRun, phase: string): 'good' | 'warn' | 'bad' | 'plain' {
+  if (phase === 'Completed' && hasFailedGates(r)) return 'warn';
+  return TONE[phase] ?? 'plain';
+}
+
 function phaseBadge(r: FitnessRun): string {
   const phase = shownPhase(r);
-  return badge(phase, TONE[phase] ?? 'plain', `Where the run is: ${phase}.`);
+  const unclean = phase === 'Completed' && hasFailedGates(r) ? ' It finished, but a gate failed or errored.' : '';
+  return badge(phase, toneOf(r, phase), `Where the run is: ${phase}.${unclean}`);
 }
 
 function progressText(r: FitnessRun): string {
@@ -65,7 +72,7 @@ function progressText(r: FitnessRun): string {
 
 function runSection(v: FitnessView, r: FitnessRun): string {
   const progress = r.iterationsTotal && isRunning(r) ? `<progress max="${r.iterationsTotal}" value="${r.iterationsCompleted ?? 0}" title="${escape(ACTIONS.showProgress)}" aria-label="${escape(ACTIONS.showProgress)}"></progress>` : '';
-  const body = [result(r), progress, buttons(runButtons(v, r)), r.kind === 'CrewFitnessSuite' ? suiteDetail(v, r) : singleDetail(r), facts(runFacts(r))].join('');
+  const body = [result(r), failureLine(r), progress, buttons(runButtons(v, r)), r.kind === 'CrewFitnessSuite' ? suiteDetail(v, r) : singleDetail(r), facts(runFacts(r))].join('');
   return section(r.name, body, `${TERMS.fitnessRun} This is ${r.name}.`);
 }
 
@@ -80,12 +87,19 @@ function runButtons(v: FitnessView, r: FitnessRun): ButtonSpec[] {
   return specs;
 }
 
-/** The result of a run on one line, the first thing the section shows: its phase, how many passed, failed and errored, and how long it took. */
+/** The result of a run on one line, the first thing the section shows: its phase, the gate counts, the judge's score, and how long it took. */
 function result(r: FitnessRun): string {
-  const counts = r.passed === undefined ? '' : `${r.passed ?? 0} passed, ${r.failed ?? 0} failed, ${r.errored ?? 0} errored`;
+  const counts = r.passed === undefined ? '' : gateCounts(r);
+  const score = r.judge?.mean === undefined ? '' : `judge score ${r.judge.mean}`;
   const took = duration(r.durationMs) ?? between(r.startedAt, r.completedAt);
-  const line = [counts, isRunning(r) ? progressText(r) : '', took].filter(Boolean).join(META_SEPARATOR);
+  const line = [counts, score, isRunning(r) ? progressText(r) : '', took].filter(Boolean).join(META_SEPARATOR);
   return `<p class="summary">${phaseBadge(r)} ${escape(line)}</p>`;
+}
+
+/** Why an Error or ToolSmokeFailed run did not execute, as its own line under the result. */
+function failureLine(r: FitnessRun): string {
+  const why = failureOf(r);
+  return why ? `<p class="error">Failure: ${escape(why)}</p>` : '';
 }
 
 /** What the result line leaves out: when the run started and finished, and why it failed. */
@@ -93,7 +107,7 @@ function runFacts(r: FitnessRun): [string, Shown][] {
   return [
     ['Started', moment(r.startedAt ?? r.createdAt)],
     ['Completed', moment(r.completedAt)],
-    ['Error', r.error],
+    ['Error', r.error === failureOf(r) ? undefined : r.error],
   ];
 }
 
@@ -101,10 +115,11 @@ function suiteDetail(v: FitnessView, r: FitnessRun): string {
   const live = v.iterations.map((i) => ({ scenario: i.testRef ?? i.name, status: i.phase, durationMs: i.durationMs }));
   const results = live.length ? scenarioResults(r.scripts ?? [], live) : scenarioResultsFromStatus(r.scripts ?? [], r.scenarios ?? []);
   const scores = new Map((r.judge?.scores ?? []).map((s) => [s.scenario, s]));
-  const rows = withScoredOnly(results, scores).map((s) => scenarioRow(s, scores.get(s.scenario)));
+  const reasons = new Map((r.scenarios ?? []).map((s) => [s.name, s.failureReason]));
+  const rows = withScoredOnly(results, scores).map((s) => scenarioRow(s, scores.get(s.scenario), s.failureReason ?? reasons.get(s.scenario)));
   const where = live.length ? 'From the iterations in the cluster.' : statusNote(r);
   const judge = `Judge: ${judgeText(r)}`;
-  return `${heading('h3', 'Scenarios', HEADINGS.Scenarios)}${table(['Scenario', 'Done', 'Passed', 'Failed', 'Errored', 'Mean duration', 'Score', 'Judge reason'], rows, 'No iterations yet.')}${note(where)}<p>${escape(judge)}</p>`;
+  return `${heading('h3', 'Scenarios', HEADINGS.Scenarios)}${legend()}${table(['Scenario', 'Done', 'Gates passed', 'Gates failed', 'Errored', 'Mean duration', 'Judge score', 'Judge reason', 'Failure reason'], rows, 'No iterations yet.')}${note(where)}<p>${escape(judge)}</p>`;
 }
 
 /** Adds a row for each judged scenario the results do not list, so no score goes unshown. */
@@ -114,9 +129,16 @@ function withScoredOnly(results: ScenarioResult[], scores: Map<string, JudgeScor
   return [...results, ...extra];
 }
 
-function scenarioRow(s: ScenarioResult, score?: JudgeScore): string[] {
+function scenarioRow(s: ScenarioResult, score?: JudgeScore, failure?: string): string[] {
   const running = s.running ? ` (+${s.running} running)` : '';
-  return [escape(s.scenario), escape(`${s.done}${running}`), escape(s.passed), escape(s.failed), escape(s.errored), escape(duration(s.meanMs) ?? ''), escape(score?.score ?? ''), escape(score?.reason ?? '')];
+  return [escape(s.scenario), escape(`${s.done}${running}`), escape(s.passed), escape(s.failed), escape(s.errored), escape(duration(s.meanMs) ?? ''), escape(score?.score ?? ''), escape(score?.reason ?? ''), escape(failure ?? '')];
+}
+
+/** An (i) that opens, on click, what the gate and judge score columns mean. */
+function legend(): string {
+  const label = 'About gates and judge score';
+  const lines = GATES_LEGEND.map((line) => '<p>' + escape(line) + '</p>').join('');
+  return `<details class="legend"><summary title="${escape(label)}" aria-label="${escape(label)}">i</summary>${lines}</details>`;
 }
 
 function statusNote(r: FitnessRun): string {
