@@ -203,6 +203,8 @@ export const STOP_EFFECTS = {
 
 /** What each button of a page does, by what it is for. A button's tooltip is its text; a disabled one says why instead. */
 export const ACTIONS = {
+  chooseAccount: 'Pick a ServiceAccount you may create tokens for; CrewForge mints a short-lived token for it to read the memory, and remembers the choice in the crewforge.tokenServiceAccount setting',
+  openTokenSetting: 'Open the crewforge.tokenServiceAccount setting, which names the ServiceAccount a token is minted for',
   deploy: 'Deploy to a namespace you pick (helm upgrade --install, or kubectl apply for a bundle)',
   deployShort: 'Deploy the source to a namespace you pick',
   redeploy: 'Redeploy from source to the namespace it was last deployed to (helm upgrade)',

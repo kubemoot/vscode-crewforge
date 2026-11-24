@@ -5,7 +5,8 @@ import { crewTitle } from '../crew/displayName';
 import type { CrewSummary } from '../k8s/crews';
 import { isConnectionProblem } from '../k8s/request';
 import { memoryConnection, type MemoryConnection } from '../memory/connect';
-import type { MemoryRead } from '../memory/relay';
+import { MemoryError, type MemoryRead } from '../memory/relay';
+import { mintableAccounts, TOKEN_SETTING } from '../memory/serviceAccounts';
 import { errorDetail, errorText, SELECT_CONTEXT } from '../views/errors';
 import { renderMemoryPage, type MemoryView } from './memoryPage';
 import type { PageModel } from './pagePanel';
@@ -41,26 +42,52 @@ export class MemoryDashboard implements PageModel {
     return undefined;
   }
 
+  /** The connection of the last read, to look up ServiceAccounts through. */
+  private connection?: MemoryConnection;
+
   private async read(): Promise<MemoryView> {
     const base: MemoryView = { crew: this.crew.name, title: this.view.title, namespace: this.crew.namespace, context: '' };
     try {
       const connection = this.connect();
+      this.connection = connection;
       base.context = connection.context;
       this.last = await connection.relay.read(this.crew.namespace, this.crew.name);
       return { ...base, parsed: this.last.parsed, report: this.last.report };
     } catch (err) {
       this.last = undefined;
-      return { ...base, error: errorDetail(err), contextProblem: isConnectionProblem(err) };
+      const needsToken = err instanceof MemoryError && err.needsToken;
+      return { ...base, error: needsToken ? errorText(err) : errorDetail(err), contextProblem: isConnectionProblem(err), needsToken };
     }
   }
 
   readonly actions: PageModel['actions'] = {
     refresh: async () => undefined,
     exportZip: () => this.exportZip(),
+    chooseAccount: () => this.chooseAccount(),
+    openTokenSetting: async () => {
+      await vscode.commands.executeCommand('workbench.action.openSettings', TOKEN_SETTING);
+    },
     selectContext: async () => {
       await vscode.commands.executeCommand(SELECT_CONTEXT.command);
     },
   };
+
+  /**
+   * Offers the ServiceAccounts the caller may create a token for, and keeps the one picked
+   * in the setting the chat uses too. The page reads again once the action ends.
+   */
+  private async chooseAccount(): Promise<void> {
+    const connection = this.connection;
+    if (!connection) return;
+    const found = await mintableAccounts(connection.client, [this.crew.namespace, connection.operatorNamespace]);
+    if (found.length === 0) {
+      void vscode.window.showInformationMessage(`No ServiceAccount in ${this.crew.namespace} or ${connection.operatorNamespace} lets you create tokens. Ask your cluster administrator for one, then set ${TOKEN_SETTING} to NAMESPACE/NAME.`);
+      return;
+    }
+    const picked = await vscode.window.showQuickPick(found, { placeHolder: 'Read the memory as which ServiceAccount? CrewForge mints a ten-minute token for it.' });
+    if (!picked) return;
+    await vscode.workspace.getConfiguration('crewforge').update('tokenServiceAccount', picked, vscode.ConfigurationTarget.Global);
+  }
 
   /** Asks for a folder and saves the zip as read on the page there. */
   private async exportZip(): Promise<void> {

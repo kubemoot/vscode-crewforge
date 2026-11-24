@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { readFileSync } from 'node:fs';
+import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { KubeClient } from '../src/k8s/request';
 import { ChatPanel } from '../src/panels/chatPanel';
@@ -707,5 +709,119 @@ describe('the chat page', () => {
     expect(document.body.querySelectorAll('.menu-item[title]').length).toBeGreaterThan(8);
     post(c, { busy: true, turn: { startedAt: Date.now(), connected: true, threadId: 't', done: false, cards: [{ agent: 'k8s', status: 'evaluating', stoodAside: false }, { agent: 'docs', status: 'waiting', stoodAside: false }] } }, history);
     expect(controlsWithoutTooltip(document.body)).toEqual([]);
+  });
+});
+
+/** A conversation whose answers carry a list of the agents that took part. */
+function answered(count = 2): Conversation {
+  const c = newConversation('ctx', 'team-a', 'lab-ops');
+  for (let i = 0; i < count; i++) {
+    c.messages.push(
+      { role: 'user', content: `q${i}`, timestamp: c.startedAt },
+      { role: 'assistant', content: `a${i}`, timestamp: c.startedAt, agents: [{ agent: 'node-watcher', text: 'agrees', problem: false }] },
+    );
+  }
+  return c;
+}
+
+/** Opens or closes a details element the way a click does: the property changes and `toggle` fires. */
+function toggle(details: HTMLDetailsElement, open: boolean): void {
+  details.open = open;
+  details.dispatchEvent(new Event('toggle'));
+}
+
+describe('the list of agents that took part', () => {
+  it('stays open across the host posting state again, and closes only when the person closes it', () => {
+    const c = answered();
+    post(c);
+    const [first, second] = [...$('messages').querySelectorAll<HTMLDetailsElement>('details.turn-agents')];
+    expect(first.open).toBe(false);
+    toggle(second, true);
+    for (let i = 0; i < 3; i++) post(c);
+    const again = [...$('messages').querySelectorAll<HTMLDetailsElement>('details.turn-agents')];
+    expect(again.map((d) => d.open)).toEqual([false, true]);
+    toggle(again[1], false);
+    post(c);
+    expect($('messages').querySelectorAll('details.turn-agents[open]')).toHaveLength(0);
+  });
+
+  it('starts closed again in another conversation', () => {
+    const c = answered(1);
+    post(c);
+    toggle($('messages').querySelector<HTMLDetailsElement>('details.turn-agents')!, true);
+    post(answered(1));
+    expect($('messages').querySelector('details.turn-agents')?.hasAttribute('open')).toBe(false);
+  });
+
+  it('shows a name as plain text, not as a link, when the crew source is not open', () => {
+    post(answered(1));
+    const name = $('messages').querySelector('.finding-agent')!;
+    expect(name.tagName).toBe('SPAN');
+    const css = readFileSync(path.join(__dirname, '..', 'media', 'chat.css'), 'utf8');
+    expect(css).toMatch(/^\.finding-agent \{[^}]*color: var\(--color-text\)/m);
+    expect(css).toMatch(/^button\.finding-agent \{[^}]*textLink-foreground/m);
+  });
+
+  it('opens the agent when its name is a button', () => {
+    links = { agents: ['node-watcher'], dashboard: false };
+    post(answered(1));
+    ($('messages').querySelector('button.finding-agent') as HTMLElement).click();
+    expect(sent.at(-1)).toEqual({ type: 'openAgentSource', agent: 'node-watcher' });
+  });
+});
+
+describe('the place in the chat', () => {
+  /** Gives the messages pane a size, as a visible tab has and a hidden one does not. */
+  function size(el: HTMLElement, sizes: { client: number; scroll: number }): void {
+    Object.defineProperty(el, 'clientHeight', { configurable: true, get: () => sizes.client });
+    Object.defineProperty(el, 'scrollHeight', { configurable: true, get: () => sizes.scroll });
+  }
+
+  it('keeps the scroll position when the page is rendered while its tab is hidden', () => {
+    const c = answered(5);
+    const messages = $('messages');
+    const sizes = { client: 300, scroll: 1000 };
+    size(messages, sizes);
+    post(c);
+    messages.scrollTop = 200;
+    messages.dispatchEvent(new Event('scroll'));
+    // The tab hides: no size, and the element forgets where it was scrolled to.
+    sizes.client = 0;
+    sizes.scroll = 0;
+    messages.scrollTop = 0;
+    post(c);
+    sizes.client = 300;
+    sizes.scroll = 1000;
+    post(c);
+    expect(messages.scrollTop).toBe(200);
+  });
+
+  it('stays at the end when it was at the end', () => {
+    const messages = $('messages');
+    const sizes = { client: 300, scroll: 1000 };
+    size(messages, sizes);
+    const c = answered(5);
+    post(c);
+    messages.scrollTop = 690;
+    messages.dispatchEvent(new Event('scroll'));
+    post(c);
+    expect(messages.scrollTop).toBe(1000);
+  });
+
+  it('keeps the place in the page state for when the page is built again', () => {
+    const messages = $('messages');
+    size(messages, { client: 300, scroll: 1000 });
+    post(answered(5));
+    messages.scrollTop = 250;
+    messages.dispatchEvent(new Event('scroll'));
+    expect(state).toMatchObject({ scrollTop: 250, pinned: false });
+  });
+
+  it('does not lose the list width when it keeps the place', () => {
+    state = { sidebarWidth: 300 };
+    const messages = $('messages');
+    size(messages, { client: 300, scroll: 1000 });
+    post(answered(5));
+    expect(state).toMatchObject({ sidebarWidth: 300 });
   });
 });

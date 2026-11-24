@@ -13,7 +13,7 @@ export const MEMORY_MAX_BYTES = 128 * 1024 * 1024;
 
 /** A refusal by the operator's report service, said in plain words, with its status kept. */
 export class MemoryError extends KubeError {
-  constructor(message: string, status?: number, detail?: string) {
+  constructor(message: string, status?: number, detail?: string, readonly needsToken = false) {
     super(message, status, detail);
     this.name = 'MemoryError';
   }
@@ -45,7 +45,7 @@ function unauthorized(where: MemoryContext): string {
   if (where.sentToken) {
     return `The Kubemoot operator did not accept your Kubernetes token (context ${where.context}). It may have expired; get a fresh kubeconfig.`;
   }
-  return `The Kubemoot operator needs a Kubernetes bearer token, and the kubeconfig for context ${where.context} has none (it signs in with a client certificate or a password). Use a kubeconfig that signs in with a token, or set the crewforge.tokenServiceAccount setting to NAMESPACE/NAME of a ServiceAccount you may create tokens for.`;
+  return `The Kubemoot operator needs a Kubernetes bearer token to read memory, and the kubeconfig for context ${where.context} has none (it signs in with a client certificate or a password). Choose a ServiceAccount you may create tokens for, or use a kubeconfig that signs in with a token.`;
 }
 
 function notFound(body: string, where: MemoryContext): string {
@@ -83,7 +83,7 @@ export function explainStatus(status: number, body: string, where: MemoryContext
     default:
       message = `The operator refused the memory export (${status}${serverWords(body) ? ': ' : ''}${serverWords(body)}).`;
   }
-  return new MemoryError(message, status, detail);
+  return new MemoryError(message, status, detail, status === 401 && !where.sentToken && !where.serviceAccount);
 }
 
 /** What opens a tunnel; a test replaces it. */

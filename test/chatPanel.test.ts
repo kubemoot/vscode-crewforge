@@ -172,12 +172,13 @@ describe('ChatPanel', () => {
     expect((await store.load(c)).title).toBe('GPU inventory');
   });
 
-  it('deletes the conversation after asking, and closes the panel', async () => {
+  it('deletes the conversation after asking, and shows the empty ask page in the same tab when none is left', async () => {
     const c = newConversation('ctx', 'team-a', 'lab-ops');
     c.title = 'Old';
     c.messages.push({ role: 'user', content: 'q', timestamp: c.startedAt });
     await store.save(c);
     const panel = open(c);
+    await panel.webview.receive({ type: 'ready' });
 
     recorded.warningAnswers.push(undefined);
     await panel.webview.receive({ type: 'delete' });
@@ -188,9 +189,47 @@ describe('ChatPanel', () => {
     recorded.warningAnswers.push('Delete');
     await panel.webview.receive({ type: 'delete' });
     expect(fs.existsSync(store.file(c))).toBe(false);
-    expect(ChatPanel.active).toBeUndefined();
+    expect(ChatPanel.active).toBeDefined();
+    await vi.waitFor(() => expect(lastState(panel).view.conversation.messages).toEqual([]));
+    const shown = lastState(panel);
+    expect(shown.view.conversation.id).not.toBe(c.id);
+    expect(shown.history).toEqual([]);
     open(c);
-    expect(recorded.panels).toHaveLength(2);
+    expect(recorded.panels).toHaveLength(1);
+  });
+
+  it('shows the newest conversation left, in the same tab, when one is deleted', async () => {
+    const older = newConversation('ctx', 'team-a', 'lab-ops');
+    older.id = 'id-older';
+    older.title = 'Older';
+    older.startedAt = '2026-11-01T10:00:00.000Z';
+    older.messages.push({ role: 'user', content: 'older question', timestamp: older.startedAt });
+    const newer = newConversation('ctx', 'team-a', 'lab-ops');
+    newer.id = 'id-newer';
+    newer.title = 'Newer';
+    newer.startedAt = '2026-11-02T10:00:00.000Z';
+    newer.messages.push({ role: 'user', content: 'newer question', timestamp: newer.startedAt });
+    const doomed = newConversation('ctx', 'team-a', 'lab-ops');
+    doomed.id = 'id-doomed';
+    doomed.title = 'Doomed';
+    doomed.startedAt = '2026-11-03T10:00:00.000Z';
+    doomed.messages.push({ role: 'user', content: 'doomed question', timestamp: doomed.startedAt });
+    for (const c of [older, newer, doomed]) await store.save(c);
+    const panel = open(doomed);
+    await panel.webview.receive({ type: 'ready' });
+
+    recorded.warningAnswers.push('Delete');
+    await panel.webview.receive({ type: 'delete' });
+    expect(fs.existsSync(store.file(doomed))).toBe(false);
+    expect(ChatPanel.active).toBeDefined();
+    await vi.waitFor(() => expect(lastState(panel).view.conversation.title).toBe('Newer'));
+    const shown = lastState(panel);
+    expect(shown.history.map((h) => h.title)).toEqual(['Newer', 'Older']);
+    // The tab still asks: the removed conversation's mark does not block the one now shown.
+    transport.responses.push('{"conversationId":"conv-9"}');
+    transport.streams.push(fixture('turn1.sse'));
+    await panel.webview.receive({ type: 'send', text: 'a follow-up' });
+    await vi.waitFor(() => expect(lastState(panel).view.conversation.messages.at(-1)?.role).toBe('assistant'), { timeout: 5000 });
   });
 
   it('keeps the panel open and reports it when the delete fails', async () => {

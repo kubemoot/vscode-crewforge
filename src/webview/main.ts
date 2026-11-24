@@ -14,14 +14,37 @@ import { enableFocusTooltips } from './tooltip';
 import { reportErrors } from './reportErrors';
 import { shownText } from './shown';
 
+/** What the page keeps across the webview being hidden and shown: the list width, and where the person was in the chat. */
+interface PageState {
+  sidebarWidth?: number;
+  /** Where the messages were scrolled, and whether they were at the end, so coming back does not lose the place. */
+  scrollTop?: number;
+  pinned?: boolean;
+}
+
 interface VsCodeApi {
   postMessage(message: WebviewMessage): void;
-  getState(): { sidebarWidth?: number } | undefined;
-  setState(state: { sidebarWidth?: number }): void;
+  getState(): PageState | undefined;
+  setState(state: PageState): void;
 }
 declare function acquireVsCodeApi(): VsCodeApi;
 
 const vscode = acquireVsCodeApi();
+
+/** Keeps `patch` with what the page already keeps. */
+function saveState(patch: PageState): void {
+  vscode.setState({ ...vscode.getState(), ...patch });
+}
+
+/** How far from the end still counts as at the end. */
+const END_SLACK_PX = 40;
+
+/** Where the messages are scrolled, as last seen while they had a size; a hidden tab has none, so reading it then would say "top". */
+const place: { top: number; pinned: boolean } = { top: vscode.getState()?.scrollTop ?? 0, pinned: vscode.getState()?.pinned ?? true };
+
+/** The turns (by message index) whose list of agents the person opened, in the conversation shown; a re-render keeps them open. */
+const openTurns = new Set<number>();
+let shownConversation: string | undefined;
 
 // Crew answers are model output: raw HTML in them is shown as text, never rendered, and
 // only web links become anchors.
@@ -285,7 +308,11 @@ function listActions(id: string, here: ConversationState): string {
 function renderMessages(): void {
   if (!state) return;
   const { conversation, turn, busy } = state.view;
-  const atBottom = els.messages.scrollHeight - els.messages.scrollTop - els.messages.clientHeight < 40;
+  if (shownConversation !== conversation.id) {
+    shownConversation = conversation.id;
+    openTurns.clear();
+  }
+  rememberPlace();
   if (conversation.messages.length === 0 && !turn) {
     els.messages.innerHTML = emptyState(state.crewTitle === conversation.crewName ? `the ${conversation.crewName} crew` : state.crewTitle, state.about);
     return;
@@ -295,8 +322,41 @@ function renderMessages(): void {
   const focused = focusedAction();
   els.messages.innerHTML = parts.join('');
   if (focused) refocus(focused);
-  if (atBottom || turn) els.messages.scrollTop = els.messages.scrollHeight;
+  if (place.pinned || turn) els.messages.scrollTop = els.messages.scrollHeight;
+  else els.messages.scrollTop = place.top;
+  rememberPlace();
 }
+
+/** Notes where the messages are scrolled, unless they have no size now (the tab is hidden), when the last place stands. */
+function rememberPlace(): void {
+  const el = els.messages;
+  if (el.clientHeight === 0) return;
+  place.top = el.scrollTop;
+  place.pinned = el.scrollHeight - el.scrollTop - el.clientHeight < END_SLACK_PX;
+  saveState({ scrollTop: place.top, pinned: place.pinned });
+}
+
+/** Puts the messages back where they were when the tab comes back: a hidden element forgets its scroll. */
+function restorePlace(): void {
+  const el = els.messages;
+  if (el.clientHeight === 0) return;
+  const wanted = place.pinned ? el.scrollHeight : place.top;
+  if (Math.abs(el.scrollTop - wanted) > 1 && el.scrollTop < END_SLACK_PX) el.scrollTop = wanted;
+}
+els.messages.addEventListener('scroll', rememberPlace);
+if (typeof ResizeObserver === 'function') new ResizeObserver(restorePlace).observe(els.messages);
+// The Moot list of a turn is opened and closed by the person, never by a re-render.
+els.messages.addEventListener(
+  'toggle',
+  (e) => {
+    const details = e.target as HTMLDetailsElement;
+    const turn = details.dataset?.turn;
+    if (turn === undefined) return;
+    if (details.open) openTurns.add(Number(turn));
+    else openTurns.delete(Number(turn));
+  },
+  true,
+);
 
 /** The message button that has keyboard focus, as its action and index, so a re-render can give focus back. */
 function focusedAction(): { action?: string; index?: string } | undefined {
@@ -393,10 +453,10 @@ function renderMessage(m: ChatMessage, index: number, busy: boolean): string {
   if (m.role === 'system') {
     const actions = actionsFor([], m);
     const row = actions.length ? actionRow(actions, index, busy) : '';
-    return `<div class="notice" role="status"><div class="notice-text">${escapeHtml(m.content)}</div>${problemList(m)}${turnAgents(m)}<div class="message-meta">${meta}${row}</div></div>`;
+    return `<div class="notice" role="status"><div class="notice-text">${escapeHtml(m.content)}</div>${problemList(m)}${turnAgents(m, index)}<div class="message-meta">${meta}${row}</div></div>`;
   }
   const role = ROLES[m.role];
-  return `<div class="message ${role.cls}">${role.body(m)}${problemList(m)}${turnAgents(m)}
+  return `<div class="message ${role.cls}">${role.body(m)}${problemList(m)}${turnAgents(m, index)}
     <div class="message-meta">
       <span class="message-avatar" aria-hidden="true">${role.icon}</span>
       ${meta}
@@ -413,12 +473,13 @@ function problemList(m: ChatMessage): string {
 }
 
 /** The Moot of the turn a message ends: the agents that took part, folded away under a count. */
-function turnAgents(m: ChatMessage): string {
+function turnAgents(m: ChatMessage, index: number): string {
   const agents = agentsOf(m);
   if (agents.length === 0) return '';
   const cards = agents.map((a) => noteCard(a)).join('');
   const count = agents.length === 1 ? 'The Moot: 1 agent' : `The Moot: ${agents.length} agents`;
-  return `<details class="turn-agents"><summary${tipAttrs(CHAT_TEXT.agentsTookPart)}>${count}</summary><div class="findings-feed">${cards}</div></details>`;
+  const open = openTurns.has(index) ? ' open' : '';
+  return `<details class="turn-agents"${htmlAttribute('data-turn', String(index))}${open}><summary${tipAttrs(CHAT_TEXT.agentsTookPart)}>${count}</summary><div class="findings-feed">${cards}</div></details>`;
 }
 
 function noteCard(a: AgentNote): string {
@@ -492,7 +553,7 @@ function setupResizer(): void {
     };
     const up = () => {
       handle.removeEventListener('pointermove', move);
-      vscode.setState({ sidebarWidth: els.sidebar.getBoundingClientRect().width });
+      saveState({ sidebarWidth: els.sidebar.getBoundingClientRect().width });
     };
     handle.addEventListener('pointermove', move);
     handle.addEventListener('pointerup', up, { once: true });

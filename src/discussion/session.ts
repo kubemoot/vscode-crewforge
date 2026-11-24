@@ -43,6 +43,7 @@ export class ChatSession {
   load(conversation: Conversation): void {
     if (this.busy) return;
     this.conversation = conversation;
+    this.removed = false;
     this.emit();
   }
 
