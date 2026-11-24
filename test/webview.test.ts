@@ -39,6 +39,13 @@ async function loadPage(): Promise<void> {
     setState: (s: unknown) => (state = s),
   });
   vi.resetModules();
+  sizeObservers.length = 0;
+  (globalThis as unknown as { ResizeObserver: unknown }).ResizeObserver = class {
+    constructor(callback: () => void) {
+      sizeObservers.push(callback);
+    }
+    observe(): void {}
+  };
   const start = globalThis.setInterval;
   const record = (...args: Parameters<typeof setInterval>) => {
     const id = start(...args);
@@ -76,6 +83,13 @@ function post(conversation: Conversation, extra: Partial<StateMessage['view']> =
 }
 
 const $ = (id: string) => document.getElementById(id)!;
+
+/** Ends the frame in which the page groups its writes of state, as hiding the page does. */
+const saved = () => window.dispatchEvent(new Event('pagehide'));
+
+/** The callbacks of the size observers the page script made. */
+const sizeObservers: Array<() => void> = [];
+const resized = () => sizeObservers.forEach((f) => f());
 
 beforeEach(async () => {
   fresh = [];
@@ -551,6 +565,7 @@ describe('the chat page', () => {
     handle.dispatchEvent(new MouseEvent('pointermove', { clientX: 1000 }));
     expect($('sidebar').style.width).toBe('480px');
     handle.dispatchEvent(new MouseEvent('pointerup'));
+    saved();
     expect(state).toHaveProperty('sidebarWidth');
   });
 
@@ -745,11 +760,26 @@ describe('the list of agents that took part', () => {
     expect($('messages').querySelectorAll('details.turn-agents[open]')).toHaveLength(0);
   });
 
+  it('keeps a list open by its turn, even when messages come before it', () => {
+    const c = answered(1);
+    c.messages[1].threadId = 'th-7';
+    post(c);
+    toggle($('messages').querySelector<HTMLDetailsElement>('details.turn-agents')!, true);
+    const more = answered(1);
+    more.id = c.id;
+    more.messages = [{ role: 'user', content: 'earlier', timestamp: c.startedAt }, { role: 'assistant', content: 'earlier answer', timestamp: c.startedAt, agents: [{ agent: 'x', text: 'agrees', problem: false }] }, ...c.messages];
+    post(more);
+    const lists = [...$('messages').querySelectorAll<HTMLDetailsElement>('details.turn-agents')];
+    expect(lists.map((d) => d.open)).toEqual([false, true]);
+  });
+
   it('starts closed again in another conversation', () => {
     const c = answered(1);
     post(c);
     toggle($('messages').querySelector<HTMLDetailsElement>('details.turn-agents')!, true);
-    post(answered(1));
+    const other = answered(1);
+    other.id = 'another';
+    post(other);
     expect($('messages').querySelector('details.turn-agents')?.hasAttribute('open')).toBe(false);
   });
 
@@ -777,7 +807,7 @@ describe('the place in the chat', () => {
     Object.defineProperty(el, 'scrollHeight', { configurable: true, get: () => sizes.scroll });
   }
 
-  it('keeps the scroll position when the page is rendered while its tab is hidden', () => {
+  it('keeps the scroll position through the tab being hidden, a render while hidden, and being shown', () => {
     const c = answered(5);
     const messages = $('messages');
     const sizes = { client: 300, scroll: 1000 };
@@ -789,11 +819,31 @@ describe('the place in the chat', () => {
     sizes.client = 0;
     sizes.scroll = 0;
     messages.scrollTop = 0;
+    resized();
+    messages.dispatchEvent(new Event('scroll'));
     post(c);
+    // It shows again and the host posts before the size is seen: the reset is not the person scrolling.
     sizes.client = 300;
     sizes.scroll = 1000;
+    messages.dispatchEvent(new Event('scroll'));
     post(c);
+    resized();
     expect(messages.scrollTop).toBe(200);
+  });
+
+  it('starts a conversation switched to at its end, not where the last one was scrolled', () => {
+    const messages = $('messages');
+    size(messages, { client: 300, scroll: 1000 });
+    const first = answered(5);
+    post(first);
+    messages.scrollTop = 100;
+    messages.dispatchEvent(new Event('scroll'));
+    post(first);
+    expect(messages.scrollTop).toBe(100);
+    const other = answered(5);
+    other.id = 'another';
+    post(other);
+    expect(messages.scrollTop).toBe(1000);
   });
 
   it('stays at the end when it was at the end', () => {
@@ -814,6 +864,8 @@ describe('the place in the chat', () => {
     post(answered(5));
     messages.scrollTop = 250;
     messages.dispatchEvent(new Event('scroll'));
+    expect(state).toBeUndefined();
+    saved();
     expect(state).toMatchObject({ scrollTop: 250, pinned: false });
   });
 
@@ -822,6 +874,7 @@ describe('the place in the chat', () => {
     const messages = $('messages');
     size(messages, { client: 300, scroll: 1000 });
     post(answered(5));
+    saved();
     expect(state).toMatchObject({ sidebarWidth: 300 });
   });
 });

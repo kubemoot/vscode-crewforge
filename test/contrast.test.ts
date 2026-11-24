@@ -3,6 +3,7 @@ import * as path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const media = (name: string) => readFileSync(path.join(__dirname, '..', 'media', name), 'utf8');
+const status = media('status.css');
 const page = media('page.css');
 const chat = media('chat.css');
 
@@ -30,7 +31,11 @@ interface Theme {
   error: string;
   warning: string;
 }
-/** The colours VS Code's own themes give the variables the status text is mixed from, and the surfaces it sits on. */
+/**
+ * The colours VS Code's own themes give the variables the status text is mixed from, and the surfaces it sits on.
+ * These hex values are RECALLED from VS Code's theme files, not read from them, so a theme
+ * that changes them is not noticed here; the integration tests would have to read the theme JSON.
+ */
 const THEMES: Record<string, Theme> = {
   'Light Modern': { kind: 'light', bg: '#ffffff', widget: '#f8f8f8', fg: '#3b3b3b', passed: '#73c991', error: '#f85149', warning: '#bf8803' },
   'Light+': { kind: 'light', bg: '#ffffff', widget: '#f3f3f3', fg: '#616161', passed: '#73c991', error: '#a1260d', warning: '#bf8803' },
@@ -51,14 +56,11 @@ function tint(css: string, kind: Kind): number {
 
 const AA = 4.5;
 
-describe.each([
-  ['page.css', page, ['passed', 'error', 'warning'] as const],
-  ['chat.css', chat, ['error'] as const],
-])('status text in %s', (_name, css, statuses) => {
+describe('status text', () => {
   it.each(Object.entries(THEMES))('meets WCAG AA (4.5:1) on %s, on the page and on a widget surface', (_theme, t) => {
-    const share = tint(css, t.kind);
-    for (const status of statuses) {
-      const text = mix(rgb(t[status]), share, rgb(t.fg));
+    const share = tint(status, t.kind);
+    for (const key of ['passed', 'error', 'warning'] as const) {
+      const text = mix(rgb(t[key]), share, rgb(t.fg));
       expect(ratio(text, rgb(t.bg))).toBeGreaterThanOrEqual(AA);
       expect(ratio(text, rgb(t.widget))).toBeGreaterThanOrEqual(AA);
     }
@@ -74,19 +76,28 @@ describe('the stylesheets', () => {
     expect(page).toMatch(/^\.error \{ color: var\(--text-bad\)/m);
     expect(page).toMatch(/^pre\.diff \.added \{ color: var\(--text-good\)/m);
     expect(page).toMatch(/^pre\.diff \.removed \{ color: var\(--text-bad\)/m);
-    expect(chat).toMatch(/^\.finding-card\.finding-problem \.finding-summary \{ color: var\(--text-error\)/m);
-    expect(chat).toMatch(/^\.menu-item\.danger \{ color: var\(--text-error\)/m);
+    expect(chat).toMatch(/^\.finding-card\.finding-problem \.finding-summary \{ color: var\(--text-bad\)/m);
+    expect(chat).toMatch(/^\.menu-item\.danger \{ color: var\(--text-bad\)/m);
   });
 
   it('build the tokens from theme variables only, and set a share for each theme kind', () => {
-    for (const css of [page, chat]) {
-      const tokens = css.split('\n').filter((l) => /^body \{ --tint/.test(l)).join('');
-      expect(tokens).toContain('var(--vscode-foreground)');
-      expect(tokens).toContain('var(--vscode-errorForeground');
-      for (const kind of ['light', 'dark', 'hc', 'hcLight'] as Kind[]) expect(tint(css, kind)).toBeGreaterThan(0);
-    }
-    expect(page).toContain('var(--vscode-testing-iconPassed');
-    expect(page).toContain('var(--vscode-editorWarning-foreground');
+    const tokens = status.split('\n').filter((l) => /^body \{ --tint/.test(l)).join('');
+    expect(tokens).toContain('var(--vscode-foreground)');
+    expect(tokens).toContain('var(--vscode-errorForeground');
+    expect(tokens).toContain('var(--vscode-testing-iconPassed');
+    expect(tokens).toContain('var(--vscode-editorWarning-foreground');
+    for (const kind of ['light', 'dark', 'hc', 'hcLight'] as Kind[]) expect(tint(status, kind)).toBeGreaterThan(0);
+  });
+
+  it('keep the tables in one stylesheet that both pages load', () => {
+    expect(page).not.toContain('--tint');
+    expect(chat).not.toContain('--tint');
+    expect(readFileSync(path.join(__dirname, '..', 'src', 'panels', 'chatPanel.ts'), 'utf8')).toContain("'status.css'");
+    expect(readFileSync(path.join(__dirname, '..', 'src', 'dashboard', 'pagePanel.ts'), 'utf8')).toContain("'status.css'");
+  });
+
+  it('show the status beside the tinted text on a badge, so light themes do not rely on the tint', () => {
+    for (const tone of ['good', 'warn', 'bad']) expect(page).toMatch(new RegExp(String.raw`^\.badge\.${tone}::before \{ background: var\(--vscode-`, 'm'));
   });
 
   it('measure the old colours below AA, so the check can fail', () => {

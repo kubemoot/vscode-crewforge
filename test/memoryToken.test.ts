@@ -4,7 +4,10 @@ import { renderMemoryPage } from '../src/dashboard/memoryPage';
 import { KubeError, type KubeTransport } from '../src/k8s/request';
 import type { MemoryConnection } from '../src/memory/connect';
 import { explainStatus, MemoryError } from '../src/memory/relay';
-import { mintableAccounts } from '../src/memory/serviceAccounts';
+import { CHECKS_AT_ONCE, findMintableAccounts, noAccountsMessage } from '../src/memory/serviceAccounts';
+import { TOKEN_SECONDS } from '../src/discussion/gateway';
+import { readFileSync } from 'node:fs';
+import * as path from 'node:path';
 import { recorded, resetFake } from './vscodeFake';
 
 /** A cluster that lists ServiceAccounts per namespace and says which ones the caller may mint tokens for. */
@@ -33,23 +36,67 @@ class Accounts implements KubeTransport {
   }
 }
 
-describe('mintableAccounts', () => {
+describe('findMintableAccounts', () => {
   it('lists only the accounts the cluster says the caller may create a token for, across the namespaces', async () => {
     const api = new Accounts({ 'crew-demo': ['default', 'reader'], kubemoot: ['operator'] }, new Set(['crew-demo/reader', 'kubemoot/operator']));
-    expect(await mintableAccounts(api, ['crew-demo', 'kubemoot', 'crew-demo'])).toEqual(['crew-demo/reader', 'kubemoot/operator']);
-    expect(api.calls.filter((c) => c.includes('/serviceaccounts') && c.startsWith('GET'))).toHaveLength(2);
+    const found = await findMintableAccounts(api, ['crew-demo', 'kubemoot', 'crew-demo']);
+    expect(found).toEqual({ accounts: ['crew-demo/reader', 'kubemoot/operator'], unreadable: [], unanswered: 0 });
+    expect(api.calls.filter((c) => c.startsWith('GET'))).toHaveLength(2);
   });
 
-  it('skips a namespace it may not list, and an account whose check fails', async () => {
-    const api = new Accounts({ kubemoot: ['operator'] }, new Set(['kubemoot/operator']));
-    expect(await mintableAccounts(api, ['hidden', 'kubemoot'])).toEqual(['kubemoot/operator']);
+  it('reports a namespace it may not list apart from none being allowed', async () => {
+    const api = new Accounts({ kubemoot: ['operator', 'other'] }, new Set(['kubemoot/operator']));
+    expect(await findMintableAccounts(api, ['hidden', 'kubemoot'])).toEqual({ accounts: ['kubemoot/operator'], unreadable: ['hidden'], unanswered: 0 });
+    expect(await findMintableAccounts(new Accounts({ kubemoot: ['a'] }, new Set()), ['kubemoot'])).toEqual({ accounts: [], unreadable: [], unanswered: 0 });
+    expect((await findMintableAccounts(new Accounts({}, new Set()), ['../x'])).unreadable).toEqual(['../x']);
+  });
+
+  it('counts the checks the cluster did not answer', async () => {
     const broken: KubeTransport = { request: (_m, path) => (path.includes('selfsubject') ? Promise.reject(new Error('down')) : Promise.resolve('{"items":[{"metadata":{"name":"a"}},{"metadata":{}}]}')), stream: () => Promise.resolve() };
-    expect(await mintableAccounts(broken, ['x'])).toEqual([]);
-    expect(await mintableAccounts({ request: () => Promise.resolve('{}'), stream: () => Promise.resolve() }, ['x'])).toEqual([]);
+    expect(await findMintableAccounts(broken, ['x'])).toEqual({ accounts: [], unreadable: [], unanswered: 1 });
+    expect(await findMintableAccounts({ request: () => Promise.resolve('{}'), stream: () => Promise.resolve() }, ['x'])).toEqual({ accounts: [], unreadable: [], unanswered: 0 });
   });
 
-  it('refuses a namespace that is not a name', async () => {
-    expect(await mintableAccounts(new Accounts({}, new Set()), ['../x'])).toEqual([]);
+  it('runs a few access checks at a time', async () => {
+    let running = 0;
+    let most = 0;
+    const names = Array.from({ length: 12 }, (_, i) => ({ metadata: { name: `a${i}` } }));
+    const api: KubeTransport = {
+      request: async (method) => {
+        if (method === 'GET') return JSON.stringify({ items: names });
+        running++;
+        most = Math.max(most, running);
+        await new Promise((r) => setTimeout(r, 2));
+        running--;
+        return '{"status":{"allowed":true}}';
+      },
+      stream: () => Promise.resolve(),
+    };
+    expect((await findMintableAccounts(api, ['x'])).accounts).toHaveLength(12);
+    expect(most).toBe(CHECKS_AT_ONCE);
+  });
+
+  it('says why nothing was found', () => {
+    const none = { accounts: [], unreadable: [], unanswered: 0 };
+    expect(noAccountsMessage(none, ['a', 'b'])).toContain('lets you create tokens');
+    expect(noAccountsMessage({ ...none, unreadable: ['a', 'b'] }, ['a', 'b'])).toContain('could not list the ServiceAccounts in a or b');
+    expect(noAccountsMessage({ ...none, unreadable: ['a'] }, ['a', 'b'])).toContain('lets you create tokens');
+    expect(noAccountsMessage({ ...none, unanswered: 1 }, ['a'])).toContain('did not answer 1 access check,');
+    expect(noAccountsMessage({ ...none, unanswered: 3 }, ['a'])).toContain('3 access checks');
+  });
+});
+
+describe('the token settings', () => {
+  const manifest = JSON.parse(readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8')) as { contributes: { configuration: { properties: Record<string, { scope?: string; markdownDescription?: string }> } } };
+  const props = manifest.contributes.configuration.properties;
+
+  it('cannot be set by a workspace, which must not choose whose credentials mint a token', () => {
+    expect(props['crewforge.tokenServiceAccount'].scope).toBe('machine');
+    expect(props['crewforge.tokenAudiences'].scope).toBe('machine');
+  });
+
+  it('say the lifetime the code uses', () => {
+    expect(props['crewforge.tokenServiceAccount'].markdownDescription).toContain(`${{ 10: 'ten' }[TOKEN_SECONDS / 60]}-minute`);
   });
 });
 
@@ -121,12 +168,14 @@ describe('the memory page of a crew read with a certificate kubeconfig', () => {
     api = new Accounts({ 'crew-demo': [], kubemoot: [] }, new Set());
     await page.render();
     await page.actions.chooseAccount();
+    expect(recorded.info.at(-1)).toContain('lets you create tokens');
     expect(recorded.info.at(-1)).toContain('crewforge.tokenServiceAccount');
   });
 
-  it('does nothing before a read has been made', async () => {
+  it('says to read first when the page has not read yet', async () => {
     await new MemoryDashboard(crew, connect).actions.chooseAccount();
     expect(recorded.quickPickPlaceholders).toEqual([]);
+    expect(recorded.info.at(-1)).toContain('has not read yet');
   });
 
   it('opens the setting', async () => {

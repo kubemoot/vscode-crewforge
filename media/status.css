@@ -1,0 +1,7 @@
+/* Status text for both CrewForge pages (the chat and the dashboards). It keeps WCAG AA (4.5:1) in every
+   theme: the theme's status colour is mixed into its own foreground, by a share that depends on the
+   theme kind, so the text is never lighter than the theme's foreground allows. The colour itself still
+   shows in borders, dots and bars, which are not text. test/contrast.test.ts checks the shares. */
+body { --tint: 15%; --text-good: color-mix(in srgb, var(--vscode-testing-iconPassed, #388a34) var(--tint), var(--vscode-foreground)); --text-warn: color-mix(in srgb, var(--vscode-editorWarning-foreground, #bf8803) var(--tint), var(--vscode-foreground)); --text-bad: color-mix(in srgb, var(--vscode-errorForeground, #a1260d) var(--tint), var(--vscode-foreground)); }
+body.vscode-dark, body.vscode-high-contrast { --tint: 60%; }
+body.vscode-high-contrast-light { --tint: 50%; }
