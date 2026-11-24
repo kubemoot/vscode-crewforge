@@ -80,6 +80,27 @@ CrewForge says so and names the command.
    **Run Fitness on the Crew**, and **Redeploy from Source** after each edit. A deployed crew carries its fitness scenarios: its
    Fitness group runs all of them, a batch you pick, or one.
 
+### Edit a crew like code
+
+A crew is a folder of YAML and ADL in git, and the editor treats it that way.
+
+- **References.** In a crew's manifests, **Go to Definition** (F12) on a name in an
+  Agent's `promptRefs` opens the PromptModule that declares it, and on a `crewRef` opens the
+  Crew. **Find All References** from a PromptModule or Crew name lists every place that
+  names it. Typing a name in `promptRefs` or after `crewRef:` offers the names the crew
+  source declares. A name no object of the source declares is a warning in the Problems
+  panel (the module may be installed in the cluster; check the spelling). This reads a
+  chart the way it renders, and it works with no cluster.
+- **Schema.** Red Hat YAML checks the manifests against the Kubemoot schema. `kmctl create`
+  writes the workspace settings that point it at the schemas of a Kubemoot release, so a new
+  crew opens with no Problems and no cluster. Connected, the cluster's own schema is also
+  offered. Lint leaves the schema of a file the YAML extension checks to it, so a misspelled
+  field is one problem, and still checks the Helm templates the YAML extension does not read.
+- **ADL.** `.adl` files, and the `content` of a PromptModule and the `testContent` of a
+  fitness scenario in YAML (and in a chart's templates), are highlighted as ADL: keywords,
+  `DEFINE` scopes, constants, strings, comments, and `${agent.tools}` placeholders. The
+  language also gives `#` line comments and bracket pairs.
+
 ### Tooltips
 
 Every view, tree item, command, status bar item, page heading, table column, and button says

@@ -102,6 +102,16 @@ describe('lintSource', () => {
     ]);
   });
 
+  it('leaves the schema of a file to the YAML extension when it checks it, so a misspelled field is one problem', async () => {
+    const covered = (text: string) => !text.includes('{{');
+    const { findings } = await lintSource(bundle, deps(SCHEMA, { yamlChecksSchema: covered }));
+    expect(findings).toEqual([]);
+    // A Helm template the YAML extension does not read is still checked here, after the render.
+    const templated: Record<string, string> = { [`${ROOT}/templates/agents.yaml`]: `${AGENTS}\n  note: {{ .Values.x }}` };
+    const chartFindings = await lintSource(chart, deps(SCHEMA, { yamlChecksSchema: covered, readText: async (f) => templated[f] ?? Promise.reject(new Error('gone')) }));
+    expect(chartFindings.findings.filter((f) => f.source === 'schema')).toHaveLength(2);
+  });
+
   it('skips the schema check when the cluster gives no schema, and says so', async () => {
     const { findings, notes } = await lintSource(chart, deps('{}'));
     expect(findings).toHaveLength(1);

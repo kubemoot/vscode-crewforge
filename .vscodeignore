@@ -6,3 +6,5 @@
 !CHANGELOG.md
 !LICENSE
 !NOTICE
+!syntaxes/**
+!adl-language-configuration.json

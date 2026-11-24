@@ -44,6 +44,8 @@ import { ExplorerCrews } from './views/explorer';
 import { MANIFEST_SCHEME, ManifestDocuments } from './views/manifestDocuments';
 import { SchemaProvider } from './schema/schemaProvider';
 import { CrewCodeLens } from './views/codeLens';
+import { ReferenceIndex } from './language/referenceIndex';
+import { registerReferenceLanguage } from './language/register';
 import { SourceTreeProvider, type SourceNode } from './views/sourceTree';
 import { YamlCommands, type YamlTarget } from './views/yamlCommands';
 import { showError } from './views/notify';
@@ -165,6 +167,7 @@ export function activate(context: vscode.ExtensionContext): CrewForgeApi {
     revealLive: (crew) => commands.revealLive(crew),
     deps: { exec: execProgram, readText, readYamlFiles },
     schema: () => schemas.schemaText(),
+    yamlChecksSchema: (text) => schemas.checks(text),
     output,
     guard,
   });
@@ -272,6 +275,8 @@ export function activate(context: vscode.ExtensionContext): CrewForgeApi {
     sourcesView,
     new SourceWatcher(() => sources.known.map((e) => e.source.root), () => sources.reload()),
     vscode.languages.registerCodeLensProvider({ language: 'yaml' }, new CrewCodeLens(sources)),
+    // Go to Definition, Find All References, names and warnings for promptRefs and crewRef.
+    registerReferenceLanguage(context, { index: new ReferenceIndex({ entries: () => sources.known, declarations: (entry) => service.declarations(entry) }), readText }, sources.onDidLoadSources),
     vscode.workspace.registerTextDocumentContentProvider(MANIFEST_SCHEME, documents),
     vscode.commands.registerCommand('crewforge.refreshSources', () => sources.refresh()),
     vscode.commands.registerCommand('crewforge.showDrift', (target?: YamlTarget) => guard(() => yaml.compare(target))),

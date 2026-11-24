@@ -20,6 +20,8 @@ export interface LoopParts {
   deps: RenderDeps & { exec: Exec; readText: (file: string) => Promise<string> };
   /** The Kubemoot JSON Schema as text, from the cluster. */
   schema: () => Promise<string>;
+  /** Whether the YAML extension already checks a file's text against the Kubemoot schema. */
+  yamlChecksSchema?: (text: string) => boolean;
   output: vscode.OutputChannel;
   /** Runs a command body, turning a failure into an error message. */
   guard: (action: () => Promise<void>) => Promise<void>;
@@ -32,7 +34,7 @@ export interface LoopParts {
 export function registerLoop(context: vscode.ExtensionContext, parts: LoopParts): DevLoop {
   const { sources, guard } = parts;
   const diagnostics = vscode.languages.createDiagnosticCollection('crewforge');
-  const linter = new CrewLinter(diagnostics, { ...parts.deps, schema: parts.schema }, parts.output);
+  const linter = new CrewLinter(diagnostics, { ...parts.deps, schema: parts.schema, yamlChecksSchema: parts.yamlChecksSchema }, parts.output);
   const states = new LoopStates();
   const loop = new DevLoop({
     sources,

@@ -28,6 +28,13 @@ export interface LintDeps extends RenderDeps {
   readText: (file: string) => Promise<string>;
   /** The Kubemoot JSON Schema as text; `{}` when the cluster cannot be read. */
   schema: () => Promise<string>;
+  /**
+   * Whether the YAML language server already checks a file's text against the Kubemoot
+   * schema as the file is edited. Lint then leaves the schema to it, so a misspelled field
+   * is one problem, not two. A file it does not read, such as a Helm template, is still
+   * checked here, after the render.
+   */
+  yamlChecksSchema?: (text: string) => boolean;
 }
 
 /** Thrown when a tool Lint needs is not on the PATH. */
@@ -53,7 +60,7 @@ export async function lintSource(source: CrewSource, deps: LintDeps, namespace =
   }
   const validate = compiled(await deps.schema());
   if (!validate) return { findings, notes: ['The Kubemoot schema check was skipped: CrewForge could not read the schemas from the cluster.'] };
-  const schemaFindings = await Promise.all(located.filter((l) => isKubemoot(l.manifest) && l.file).map((l) => checkObject(l, validate, deps.readText)));
+  const schemaFindings = await Promise.all(located.filter((l) => isKubemoot(l.manifest) && l.file).map((l) => checkObject(l, validate, deps)));
   return { findings: [...findings, ...schemaFindings.flat()], notes: [] };
 }
 
@@ -100,13 +107,14 @@ export function compiled(text: string): ValidateFunction | undefined {
   return validate;
 }
 
-async function checkObject(l: Located, validate: ValidateFunction, readText: (file: string) => Promise<string>): Promise<Finding[]> {
+async function checkObject(l: Located, validate: ValidateFunction, deps: LintDeps): Promise<Finding[]> {
   if (validate(l.manifest)) return [];
   // Ajv keeps the last call's errors on the shared function; other objects validate
   // while this one awaits its file, so copy them before the await.
   const errors = [...(validate.errors ?? [])];
   const file = l.file as string;
-  const text = await readText(file).catch(() => '');
+  const text = await deps.readText(file).catch(() => '');
+  if (deps.yamlChecksSchema?.(text)) return [];
   return schemaIssues(l.manifest, errors).map(({ keys, message }) => ({ file, line: keyLine(text, l.line, keys), severity: 'error', message, source: 'schema' }));
 }
 

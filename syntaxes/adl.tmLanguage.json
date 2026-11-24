@@ -1,0 +1,68 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "ADL",
+  "scopeName": "source.adl",
+  "patterns": [
+    { "include": "#comment" },
+    { "include": "#define" },
+    { "include": "#constant-definition" },
+    { "include": "#keywords" },
+    { "include": "#placeholder" },
+    { "include": "#string" },
+    { "include": "#number" },
+    { "include": "#constant" }
+  ],
+  "repository": {
+    "comment": {
+      "match": "^\\s*(#)(.*)$",
+      "captures": {
+        "1": { "name": "punctuation.definition.comment.adl" },
+        "2": { "name": "comment.line.number-sign.adl" }
+      }
+    },
+    "define": {
+      "match": "\\b(DEFINE)\\s+(DOMAIN|COMPONENT)\\b(?:\\s+([\\w.-]+))?",
+      "captures": {
+        "1": { "name": "keyword.other.define.adl" },
+        "2": { "name": "storage.type.scope.adl" },
+        "3": { "name": "entity.name.section.adl" }
+      }
+    },
+    "constant-definition": {
+      "match": "\\b(DEFINE)\\s+(CONST)\\s+([A-Z][A-Z0-9_]*)\\b(?:\\s+(AS)\\b)?",
+      "captures": {
+        "1": { "name": "keyword.other.define.adl" },
+        "2": { "name": "storage.type.constant.adl" },
+        "3": { "name": "entity.name.constant.adl" },
+        "4": { "name": "keyword.operator.as.adl" }
+      }
+    },
+    "keywords": {
+      "patterns": [
+        { "match": "\\b(WHEN|THEN|ALWAYS|FOREACH|CONTAINED\\s+WITHIN)\\b", "name": "keyword.control.adl" },
+        { "match": "\\b(NEVER)\\b", "name": "keyword.control.prohibition.adl" },
+        { "match": "\\b(ASSERT)\\b", "name": "keyword.other.assert.adl" },
+        { "match": "\\b(DESCRIPTION|REQUIRES|USE|REMEMBER|DEFER)\\b", "name": "keyword.other.directive.adl" },
+        { "match": "\\b(AND|OR|NOT|REFLECTS|CONTAINS|CONTAIN)\\b", "name": "keyword.operator.word.adl" }
+      ]
+    },
+    "placeholder": {
+      "match": "\\$\\{[^}\\s]+\\}",
+      "name": "variable.other.placeholder.adl"
+    },
+    "string": {
+      "begin": "\"",
+      "end": "\"",
+      "name": "string.quoted.double.adl",
+      "patterns": [{ "match": "\\\\.", "name": "constant.character.escape.adl" }, { "include": "#placeholder" }]
+    },
+    "number": {
+      "match": "\\b\\d+(?:\\.\\d+)?(?:\\s*(?:seconds?|minutes?|hours?|ms))?\\b",
+      "name": "constant.numeric.adl"
+    },
+    "constant": {
+      "match": "\\b(?:NOTHING_TO_ADD|[A-Z][A-Z0-9]*_[A-Z0-9_]+)\\b",
+      "name": "constant.other.adl"
+    }
+  }
+}

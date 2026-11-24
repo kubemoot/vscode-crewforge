@@ -1,0 +1,22 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "ADL in Kubemoot YAML",
+  "scopeName": "kubemoot.adl.injection",
+  "injectionSelector": "L:source.yaml, L:source.helm",
+  "patterns": [{ "include": "#adl-block-scalar" }],
+  "repository": {
+    "adl-block-scalar": {
+      "comment": "The ADL of a PromptModule (content) or of a fitness scenario (testContent): the block scalar under that key, up to the first line that is not indented deeper than the key.",
+      "begin": "^(\\s*(?:-\\s+)?)(content|testContent)(\\s*:\\s*)([|>][-+0-9]*)[ \\t]*(#.*)?$",
+      "beginCaptures": {
+        "2": { "name": "entity.name.tag.yaml" },
+        "3": { "name": "punctuation.separator.key-value.mapping.yaml" },
+        "4": { "name": "keyword.control.flow.block-scalar.yaml" },
+        "5": { "name": "comment.line.number-sign.yaml" }
+      },
+      "end": "^(?!\\s*$|\\1\\s+\\S)",
+      "contentName": "meta.embedded.block.adl",
+      "patterns": [{ "include": "source.adl" }]
+    }
+  }
+}

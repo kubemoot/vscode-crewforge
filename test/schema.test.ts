@@ -90,6 +90,16 @@ describe('SchemaProvider', () => {
     expect(registered).toEqual(['crewforge-schema']);
   });
 
+  it('says whether the YAML extension checks a text, which it does only for a Kubemoot object it can parse', () => {
+    const provider = new SchemaProvider(() => client);
+    const agent = 'apiVersion: kubemoot.ai/v1alpha1\nkind: Agent\n';
+    expect(provider.checks(agent)).toBe(false);
+    recorded.extensions.set('redhat.vscode-yaml', {});
+    expect(provider.checks(agent)).toBe(true);
+    expect(provider.checks(`${agent}  name: {{ .Values.name }}\n`)).toBe(false);
+    expect(provider.checks('apiVersion: v1\nkind: ConfigMap\n')).toBe(false);
+  });
+
   it('offers the schema for open Kubemoot documents only', () => {
     recorded.textDocuments = [
       { uri: Uri.file('/w/agents.yaml'), getText: () => 'apiVersion: kubemoot.ai/v1alpha1\nkind: Agent\n' },

@@ -28,6 +28,11 @@ export class SchemaProvider {
     return api.registerContributor(SCHEMA_SCHEME, (resource) => this.requestSchema(resource), () => this.schemaText(), 'Kubemoot (from the cluster)');
   }
 
+  /** Whether the Red Hat YAML extension checks this text against the Kubemoot schema, so no other check need repeat it. */
+  checks(text: string): boolean {
+    return vscode.extensions.getExtension('redhat.vscode-yaml') !== undefined && wantsSchema(text);
+  }
+
   requestSchema(resource: string): string | undefined {
     const document = vscode.workspace.textDocuments.find((d) => d.uri.toString() === resource);
     return document && wantsSchema(document.getText()) ? SCHEMA_URI : undefined;

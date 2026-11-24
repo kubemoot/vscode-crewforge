@@ -47,6 +47,27 @@
   "main": "./dist/extension.js",
   "activationEvents": [],
   "contributes": {
+    "languages": [
+      {
+        "id": "adl",
+        "aliases": ["ADL", "Architecture Definition Language"],
+        "extensions": [".adl"],
+        "configuration": "./adl-language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "adl",
+        "scopeName": "source.adl",
+        "path": "./syntaxes/adl.tmLanguage.json"
+      },
+      {
+        "scopeName": "kubemoot.adl.injection",
+        "path": "./syntaxes/adl-injection.tmLanguage.json",
+        "injectTo": ["source.yaml", "source.helm"],
+        "embeddedLanguages": { "meta.embedded.block.adl": "adl" }
+      }
+    ],
     "viewsContainers": {
       "activitybar": [
         {
@@ -1231,8 +1252,11 @@
     "jsdom": "^31.0.1",
     "mocha": "^12.0.3",
     "ovsx": "^1.4.0",
+    "tm-grammars": "1.32.22",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.73.0",
-    "vitest": "^5.1.1"
+    "vitest": "^5.1.1",
+    "vscode-oniguruma": "2.0.1",
+    "vscode-textmate": "9.3.2"
   }
 }
