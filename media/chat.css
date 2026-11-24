@@ -15,11 +15,6 @@
   --color-error: var(--vscode-errorForeground, #f14c4c);
   --font-mono: var(--vscode-editor-font-family, monospace);
 }
-/* Failure text keeps WCAG AA (4.5:1) in every theme: the theme's colour is mixed into its own
-   foreground, by a share that depends on the theme kind. test/contrast.test.ts checks the shares. */
-body { --tint: 15%; --text-error: color-mix(in srgb, var(--vscode-errorForeground, #a1260d) var(--tint), var(--vscode-foreground)); }
-body.vscode-dark, body.vscode-high-contrast { --tint: 60%; }
-body.vscode-high-contrast-light { --tint: 50%; }
 * { box-sizing: border-box; margin: 0; }
 body { padding: 0; color: var(--color-text); background: var(--color-bg); font-family: var(--vscode-font-family); font-size: var(--vscode-font-size); }
 button { cursor: pointer; font: inherit; }
@@ -71,7 +66,7 @@ button { cursor: pointer; font: inherit; }
 .menu-list { position: absolute; right: 0; top: 100%; z-index: 5; min-width: 13rem; padding: 0.25rem; display: flex; flex-direction: column; background: var(--vscode-menu-background, var(--color-bg-tertiary)); border: 1px solid var(--vscode-menu-border, var(--color-border)); border-radius: 6px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35); }
 .menu-item { background: none; border: none; color: var(--vscode-menu-foreground, var(--color-text)); text-align: left; padding: 0.35rem 0.6rem; border-radius: 4px; white-space: nowrap; }
 .menu-item:hover, .menu-item:focus-visible { background: var(--vscode-menu-selectionBackground, var(--vscode-list-hoverBackground)); outline: none; }
-.menu-item.danger { color: var(--text-error); }
+.menu-item.danger { color: var(--text-bad); }
 .export-btn { background: none; border: none; color: var(--color-text-muted); padding: 0.4rem; border-radius: 4px; display: flex; align-items: center; }
 .export-btn:hover:not(:disabled), .menu[open] > .export-btn { background: var(--vscode-toolbar-hoverBackground); color: var(--color-text); }
 .export-btn svg { width: 16px; height: 16px; }
@@ -131,7 +126,7 @@ button { cursor: pointer; font: inherit; }
 .finding-card.finding-triaging { opacity: 0.7; }
 .finding-card.finding-evaluating { border-left-color: var(--color-accent); }
 .finding-card.finding-problem { border-left-color: var(--color-error); }
-.finding-card.finding-problem .finding-summary { color: var(--text-error); }
+.finding-card.finding-problem .finding-summary { color: var(--text-bad); }
 .finding-agent { font-family: var(--font-mono); font-weight: 500; color: var(--color-text); font-size: 0.75rem; min-width: 110px; }
 button.finding-agent { color: var(--vscode-textLink-foreground); background: none; border: none; padding: 0; text-align: left; cursor: pointer; text-decoration: underline dotted; }
 button.finding-agent:hover { text-decoration: underline; }

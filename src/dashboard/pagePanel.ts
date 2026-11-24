@@ -246,6 +246,7 @@ function shell(webview: vscode.Webview, extensionUri: vscode.Uri, title: string)
   const nonce = crypto.randomBytes(16).toString('base64');
   const script = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'dist', 'page.js'));
   const style = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', 'page.css'));
+  const status = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', 'status.css'));
   const csp = [`default-src 'none'`, `style-src ${webview.cspSource} 'nonce-${nonce}'`, `img-src ${webview.cspSource} data:`, `script-src 'nonce-${nonce}'`].join('; ');
   const wait = PAGE_WAIT.scriptStartMs / 1000;
   return `<!DOCTYPE html>
@@ -254,6 +255,7 @@ function shell(webview: vscode.Webview, extensionUri: vscode.Uri, title: string)
 <meta charset="UTF-8">
 <meta http-equiv="Content-Security-Policy" content="${csp}">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="${status}">
 <link rel="stylesheet" href="${style}">
 <style nonce="${nonce}">#stuck{visibility:hidden;animation:crewforge-stuck 0s ${wait}s forwards}@keyframes crewforge-stuck{to{visibility:visible}}</style>
 <title>${escape(title)}</title>

@@ -1160,10 +1160,12 @@
         "crewforge.tokenServiceAccount": {
           "type": "string",
           "default": "",
+          "scope": "machine",
           "markdownDescription": "`NAMESPACE/NAME` of a ServiceAccount to mint a ten-minute token for when you ask a crew, for a kubeconfig that signs in with a client certificate and so has no bearer token of its own (Talos, kind, k3s). You need `create` on `serviceaccounts/token` for it; the crew then sees that ServiceAccount as the caller. Empty sends the kubeconfig's own token. Only a crew that sets `spec.discussion.access` uses it."
         },
         "crewforge.tokenAudiences": {
           "type": "array",
+          "scope": "machine",
           "items": { "type": "string" },
           "default": [],
           "markdownDescription": "Audiences the minted token is bound to, for a crew that lists `tokenAudiences` in `spec.discussion.access`. Used only with `crewforge.tokenServiceAccount`."

@@ -5,8 +5,9 @@ import { crewTitle } from '../crew/displayName';
 import type { CrewSummary } from '../k8s/crews';
 import { isConnectionProblem } from '../k8s/request';
 import { memoryConnection, type MemoryConnection } from '../memory/connect';
+import { TOKEN_SECONDS } from '../discussion/gateway';
 import { MemoryError, type MemoryRead } from '../memory/relay';
-import { mintableAccounts, TOKEN_SETTING } from '../memory/serviceAccounts';
+import { findMintableAccounts, noAccountsMessage, TOKEN_SETTING } from '../memory/serviceAccounts';
 import { errorDetail, errorText, SELECT_CONTEXT } from '../views/errors';
 import { renderMemoryPage, type MemoryView } from './memoryPage';
 import type { PageModel } from './pagePanel';
@@ -18,6 +19,8 @@ export function exportFileName(crew: string): string {
 
 /** The read-only memory page of one crew. It reads on open and on Refresh; the operator is asked nothing in between. */
 export class MemoryDashboard implements PageModel {
+  /** The connection of the last read, to look up ServiceAccounts through; unset until the page has read. */
+  private connection?: MemoryConnection;
   private last?: MemoryRead;
   private view: MemoryView;
 
@@ -41,9 +44,6 @@ export class MemoryDashboard implements PageModel {
   refreshMs(): undefined {
     return undefined;
   }
-
-  /** The connection of the last read, to look up ServiceAccounts through. */
-  private connection?: MemoryConnection;
 
   private async read(): Promise<MemoryView> {
     const base: MemoryView = { crew: this.crew.name, title: this.view.title, namespace: this.crew.namespace, context: '' };
@@ -78,13 +78,18 @@ export class MemoryDashboard implements PageModel {
    */
   private async chooseAccount(): Promise<void> {
     const connection = this.connection;
-    if (!connection) return;
-    const found = await mintableAccounts(connection.client, [this.crew.namespace, connection.operatorNamespace]);
-    if (found.length === 0) {
-      void vscode.window.showInformationMessage(`No ServiceAccount in ${this.crew.namespace} or ${connection.operatorNamespace} lets you create tokens. Ask your cluster administrator for one, then set ${TOKEN_SETTING} to NAMESPACE/NAME.`);
+    if (!connection) {
+      void vscode.window.showInformationMessage('The memory page has not read yet. Refresh it, then choose a ServiceAccount.');
       return;
     }
-    const picked = await vscode.window.showQuickPick(found, { placeHolder: 'Read the memory as which ServiceAccount? CrewForge mints a ten-minute token for it.' });
+    const namespaces = [this.crew.namespace, connection.operatorNamespace];
+    const search = await findMintableAccounts(connection.client, namespaces);
+    const found = search.accounts;
+    if (found.length === 0) {
+      void vscode.window.showInformationMessage(noAccountsMessage(search, namespaces));
+      return;
+    }
+    const picked = await vscode.window.showQuickPick(found, { placeHolder: `Read the memory as which ServiceAccount? CrewForge mints a ${TOKEN_SECONDS / 60}-minute token for it.` });
     if (!picked) return;
     await vscode.workspace.getConfiguration('crewforge').update('tokenServiceAccount', picked, vscode.ConfigurationTarget.Global);
   }

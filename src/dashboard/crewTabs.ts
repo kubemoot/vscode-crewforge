@@ -70,7 +70,8 @@ export function renderLiveTab(objects: Manifest[] | Missing, raw: boolean): stri
 
 function liveObject(m: Manifest, raw: boolean): string {
   const tip = `Show or hide the YAML of ${m.kind} ${m.metadata.name}`;
-  return `<details><summary title="${escape(tip)}">${escape(m.metadata.name)}</summary><pre class="yaml">${escape(raw ? dumpYaml(m) : normalizedYaml(m))}</pre></details>`;
+  const key = escape(`${m.kind}/${m.metadata.name}`);
+  return `<details data-key="${key}"><summary title="${escape(tip)}">${escape(m.metadata.name)}</summary><pre class="yaml">${escape(raw ? dumpYaml(m) : normalizedYaml(m))}</pre></details>`;
 }
 
 /** The Diff tab: each object that differs, with the normalized diff inline (live, then source) and a button for the diff editor. */

@@ -454,7 +454,9 @@ export class ChatPanel {
   /** After a conversation is deleted from this computer, only its view goes: the newest one left is shown, or the empty ask page when none is. */
   private async showAfterDelete(): Promise<void> {
     const left = await this.store.list(this.connection.context, this.crew.namespace, this.crew.name);
-    if (left.length > 0) await this.open(left[0].id);
+    // The store lists newest first; the order is stated here too, since which one comes next depends on it.
+    const newest = [...left].sort((a, b) => b.startedAt.localeCompare(a.startedAt))[0];
+    if (newest) await this.open(newest.id);
     else this.session.load(newConversation(this.connection.context, this.crew.namespace, this.crew.name));
   }
 
@@ -518,6 +520,7 @@ export class ChatPanel {
     const nonce = crypto.randomBytes(16).toString('base64');
     const script = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, 'dist', 'webview.js'));
     const style = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, 'media', 'chat.css'));
+    const status = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, 'media', 'status.css'));
     const csp = [`default-src 'none'`, `style-src ${webview.cspSource}`, `img-src ${webview.cspSource} data:`, `script-src 'nonce-${nonce}'`].join('; ');
     return `<!DOCTYPE html>
 <html lang="en">
@@ -525,6 +528,7 @@ export class ChatPanel {
 <meta charset="UTF-8">
 <meta http-equiv="Content-Security-Policy" content="${csp}">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="${status}">
 <link rel="stylesheet" href="${style}">
 <title>Ask ${escapeHtml(titleOf(this.crew))}</title>
 </head>

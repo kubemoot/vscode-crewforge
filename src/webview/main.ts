@@ -13,37 +13,27 @@ import { escapeHtml, formatAgo, htmlAttribute, iconAttrs, iconTitle, icons, isWe
 import { enableFocusTooltips } from './tooltip';
 import { reportErrors } from './reportErrors';
 import { shownText } from './shown';
-
-/** What the page keeps across the webview being hidden and shown: the list width, and where the person was in the chat. */
-interface PageState {
-  sidebarWidth?: number;
-  /** Where the messages were scrolled, and whether they were at the end, so coming back does not lose the place. */
-  scrollTop?: number;
-  pinned?: boolean;
-}
+import { Keeper, observeSize, openKeys, ScrollPlace, type Scroller } from './keptState';
 
 interface VsCodeApi {
   postMessage(message: WebviewMessage): void;
-  getState(): PageState | undefined;
-  setState(state: PageState): void;
+  getState(): unknown;
+  setState(state: never): void;
 }
 declare function acquireVsCodeApi(): VsCodeApi;
 
 const vscode = acquireVsCodeApi();
 
-/** Keeps `patch` with what the page already keeps. */
-function saveState(patch: PageState): void {
-  vscode.setState({ ...vscode.getState(), ...patch });
+const keeper = new Keeper(vscode);
+
+/** The messages pane as something that scrolls. */
+function messagesScroller(): Scroller {
+  const el = els.messages;
+  return { visible: () => el.clientHeight, top: () => el.scrollTop, set: (top) => (el.scrollTop = top), content: () => el.scrollHeight };
 }
 
-/** How far from the end still counts as at the end. */
-const END_SLACK_PX = 40;
-
-/** Where the messages are scrolled, as last seen while they had a size; a hidden tab has none, so reading it then would say "top". */
-const place: { top: number; pinned: boolean } = { top: vscode.getState()?.scrollTop ?? 0, pinned: vscode.getState()?.pinned ?? true };
-
-/** The turns (by message index) whose list of agents the person opened, in the conversation shown; a re-render keeps them open. */
-const openTurns = new Set<number>();
+/** The turns whose list of agents is open in the conversation shown, taken from the page before each render so a re-render keeps them open. */
+let openTurns = new Set<string>();
 let shownConversation: string | undefined;
 
 // Crew answers are model output: raw HTML in them is shown as text, never rendered, and
@@ -96,6 +86,7 @@ const els = {
   exportBtn: $<HTMLButtonElement>('export'),
 };
 
+const place = new ScrollPlace(messagesScroller(), keeper);
 let state: StateMessage | undefined;
 
 // VS Code's webview host frame forwards each extension host message into this page with
@@ -308,11 +299,15 @@ function listActions(id: string, here: ConversationState): string {
 function renderMessages(): void {
   if (!state) return;
   const { conversation, turn, busy } = state.view;
-  if (shownConversation !== conversation.id) {
+  if (shownConversation === conversation.id) {
+    openTurns = new Set(openKeys(els.messages));
+    place.remember();
+  } else {
+    // Another conversation starts at its end, with its lists closed; the first one shown takes the place the page kept.
+    if (shownConversation !== undefined) place.reset();
     shownConversation = conversation.id;
-    openTurns.clear();
+    openTurns = new Set();
   }
-  rememberPlace();
   if (conversation.messages.length === 0 && !turn) {
     els.messages.innerHTML = emptyState(state.crewTitle === conversation.crewName ? `the ${conversation.crewName} crew` : state.crewTitle, state.about);
     return;
@@ -322,41 +317,13 @@ function renderMessages(): void {
   const focused = focusedAction();
   els.messages.innerHTML = parts.join('');
   if (focused) refocus(focused);
-  if (place.pinned || turn) els.messages.scrollTop = els.messages.scrollHeight;
-  else els.messages.scrollTop = place.top;
-  rememberPlace();
+  if (turn) els.messages.scrollTop = els.messages.scrollHeight;
+  else place.restore();
+  place.remember();
 }
 
-/** Notes where the messages are scrolled, unless they have no size now (the tab is hidden), when the last place stands. */
-function rememberPlace(): void {
-  const el = els.messages;
-  if (el.clientHeight === 0) return;
-  place.top = el.scrollTop;
-  place.pinned = el.scrollHeight - el.scrollTop - el.clientHeight < END_SLACK_PX;
-  saveState({ scrollTop: place.top, pinned: place.pinned });
-}
-
-/** Puts the messages back where they were when the tab comes back: a hidden element forgets its scroll. */
-function restorePlace(): void {
-  const el = els.messages;
-  if (el.clientHeight === 0) return;
-  const wanted = place.pinned ? el.scrollHeight : place.top;
-  if (Math.abs(el.scrollTop - wanted) > 1 && el.scrollTop < END_SLACK_PX) el.scrollTop = wanted;
-}
-els.messages.addEventListener('scroll', rememberPlace);
-if (typeof ResizeObserver === 'function') new ResizeObserver(restorePlace).observe(els.messages);
-// The Moot list of a turn is opened and closed by the person, never by a re-render.
-els.messages.addEventListener(
-  'toggle',
-  (e) => {
-    const details = e.target as HTMLDetailsElement;
-    const turn = details.dataset?.turn;
-    if (turn === undefined) return;
-    if (details.open) openTurns.add(Number(turn));
-    else openTurns.delete(Number(turn));
-  },
-  true,
-);
+els.messages.addEventListener('scroll', () => place.remember());
+observeSize(els.messages, () => place.resized());
 
 /** The message button that has keyboard focus, as its action and index, so a re-render can give focus back. */
 function focusedAction(): { action?: string; index?: string } | undefined {
@@ -478,8 +445,10 @@ function turnAgents(m: ChatMessage, index: number): string {
   if (agents.length === 0) return '';
   const cards = agents.map((a) => noteCard(a)).join('');
   const count = agents.length === 1 ? 'The Moot: 1 agent' : `The Moot: ${agents.length} agents`;
-  const open = openTurns.has(index) ? ' open' : '';
-  return `<details class="turn-agents"${htmlAttribute('data-turn', String(index))}${open}><summary${tipAttrs(CHAT_TEXT.agentsTookPart)}>${count}</summary><div class="findings-feed">${cards}</div></details>`;
+  // A turn is known by its thread when it has one, else by its place in the conversation.
+  const key = `turn:${typeof m.threadId === 'string' && m.threadId ? m.threadId : index}`;
+  const open = openTurns.has(key) ? ' open' : '';
+  return `<details class="turn-agents"${htmlAttribute('data-key', key)}${open}><summary${tipAttrs(CHAT_TEXT.agentsTookPart)}>${count}</summary><div class="findings-feed">${cards}</div></details>`;
 }
 
 function noteCard(a: AgentNote): string {
@@ -541,7 +510,7 @@ function answerOf(turn: TurnState): string {
 /** Lets the conversations pane be resized by dragging its edge; the width is remembered. */
 function setupResizer(): void {
   const handle = $('resizer');
-  const saved = Number(vscode.getState()?.sidebarWidth);
+  const saved = Number(keeper.read().sidebarWidth);
   if (saved) els.sidebar.style.width = `${saved}px`;
   handle.addEventListener('pointerdown', (down) => {
     handle.setPointerCapture(down.pointerId);
@@ -553,7 +522,7 @@ function setupResizer(): void {
     };
     const up = () => {
       handle.removeEventListener('pointermove', move);
-      saveState({ sidebarWidth: els.sidebar.getBoundingClientRect().width });
+      keeper.save({ sidebarWidth: els.sidebar.getBoundingClientRect().width });
     };
     handle.addEventListener('pointermove', move);
     handle.addEventListener('pointerup', up, { once: true });

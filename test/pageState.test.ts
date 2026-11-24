@@ -5,6 +5,7 @@ import type { PageMessage } from '../src/webview/pageProtocol';
 let sent: PageMessage[];
 let kept: unknown;
 let scrolledTo: number[];
+let writes: number;
 /** The listeners the page script put on the window and document, removed after each test so one build does not hear another's messages. */
 const added: Array<[EventTarget, string, EventListenerOrEventListenerObject]> = [];
 
@@ -23,10 +24,14 @@ async function build(state: unknown): Promise<void> {
   sent = [];
   kept = state;
   scrolledTo = [];
+  writes = 0;
   (globalThis as unknown as { acquireVsCodeApi: () => unknown }).acquireVsCodeApi = () => ({
     postMessage: (m: PageMessage) => sent.push(m),
     getState: () => kept,
-    setState: (s: unknown) => (kept = s),
+    setState: (s: unknown) => {
+      writes++;
+      kept = s;
+    },
   });
   globalThis.scrollTo = ((_x: number, y: number) => void scrolledTo.push(y)) as unknown as typeof globalThis.scrollTo;
   vi.resetModules();
@@ -42,13 +47,13 @@ function removeListeners(): void {
 afterEach(removeListeners);
 
 const deliver = (html: string) => window.dispatchEvent(new MessageEvent('message', { data: { type: 'render', html }, origin: window.origin }));
-const PAGE = '<details id="a"><summary>A</summary>x</details><details id="b"><summary>B</summary>y</details><details class="menu" id="m"><summary>More</summary></details>';
+const PAGE = '<details id="a" data-key="first"><summary>A</summary>x</details><details id="b"><summary>B</summary>y</details><details class="menu" id="m"><summary>More</summary></details>';
 
 describe('the dashboard page keeps its place while its tab is hidden', () => {
   beforeEach(() => build(undefined));
 
   it('puts back the scroll position and the open sections on the first render after it is built again', async () => {
-    await build({ scrollY: 420, open: [1] });
+    await build({ scrollTop: 420, pinned: false, open: ['B'] });
     deliver(PAGE);
     expect((document.getElementById('b') as HTMLDetailsElement).open).toBe(true);
     expect((document.getElementById('a') as HTMLDetailsElement).open).toBe(false);
@@ -61,10 +66,14 @@ describe('the dashboard page keeps its place while its tab is hidden', () => {
     a.open = true;
     (document.getElementById('m') as HTMLDetailsElement).open = true;
     a.dispatchEvent(new Event('toggle'));
-    expect(kept).toMatchObject({ open: [0] });
+    expect(kept).toBeUndefined();
+    window.dispatchEvent(new Event('pagehide'));
+    expect(kept).toMatchObject({ open: ['first'] });
+    Object.defineProperty(globalThis, 'innerHeight', { configurable: true, value: 800 });
     Object.defineProperty(globalThis, 'scrollY', { configurable: true, value: 90 });
     window.dispatchEvent(new Event('scroll'));
-    expect(kept).toMatchObject({ scrollY: 90, open: [0] });
+    window.dispatchEvent(new Event('pagehide'));
+    expect(kept).toMatchObject({ scrollTop: 90, pinned: false, open: ['first'] });
   });
 
   it('leaves the page alone when a read brings the same page, and keeps the open sections when it changes', () => {
@@ -78,6 +87,22 @@ describe('the dashboard page keeps its place while its tab is hidden', () => {
     expect((document.getElementById('a') as HTMLDetailsElement).open).toBe(true);
     expect(root.querySelector('p')?.textContent).toBe('more');
     expect(sent.filter((m) => m.type === 'shown')).toHaveLength(3);
+  });
+
+  it('writes a burst of changes once, in the next frame', async () => {
+    // Writes still waiting from earlier tests land first.
+    await new Promise((r) => setTimeout(r, 50));
+    writes = 0;
+    deliver(PAGE);
+    const a = document.getElementById('a') as HTMLDetailsElement;
+    for (let i = 0; i < 5; i++) {
+      a.open = !a.open;
+      a.dispatchEvent(new Event('toggle'));
+    }
+    expect(writes).toBe(0);
+    await vi.waitFor(() => expect(writes).toBe(1));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(writes).toBe(1);
   });
 
   it('works when the host gives no state API', async () => {

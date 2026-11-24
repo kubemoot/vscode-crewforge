@@ -19,7 +19,7 @@ export interface CallerSettings {
 }
 
 /** How long a minted token lives, and how soon before its end a new one is minted. */
-const TOKEN_SECONDS = 600;
+export const TOKEN_SECONDS = 600;
 const RENEW_BEFORE_MS = 120_000;
 
 /** A failure to be the caller the settings ask for, such as a ServiceAccount CrewForge may not mint a token for. */
