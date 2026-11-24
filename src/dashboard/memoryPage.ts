@@ -1,5 +1,5 @@
 import { ACTIONS, MEMORY_TOPIC, TERMS } from '../definitions';
-import { actionBar, banner, heading, escape, moment, note, section, SELECT_CONTEXT_BUTTON, table } from './html';
+import { actionBar, banner, heading, escape, moment, note, section, SELECT_CONTEXT_BUTTON, table, type ButtonSpec } from './html';
 import { groupByTopic, leftOutByReason, type ParsedExport, type SelectionReport } from '../memory/ompi';
 import { META_SEPARATOR } from '../webview/render';
 
@@ -16,6 +16,8 @@ export interface MemoryView {
   error?: string;
   /** Whether the failure suggests picking another context. */
   contextProblem?: boolean;
+  /** Whether the failure is that the operator wants a bearer token and the kubeconfig has none: a ServiceAccount can be chosen. */
+  needsToken?: boolean;
 }
 
 function when(iso: string, thread: string): string {
@@ -48,6 +50,12 @@ export function leftOutSection(parsed: ParsedExport, report: SelectionReport | u
   return note(head) + table(['Reason', 'Entries'], reasons.map((r) => [escape(r.reason), String(r.count)]));
 }
 
+/** What the page offers when the operator wants a bearer token the kubeconfig does not have. */
+const TOKEN_BUTTONS: ButtonSpec[] = [
+  { action: 'chooseAccount', label: 'Choose a ServiceAccount...', title: ACTIONS.chooseAccount, primary: true },
+  { action: 'openTokenSetting', label: 'Open Setting', title: ACTIONS.openTokenSetting, primary: true },
+];
+
 /** The memory page of one crew. Every value is escaped. */
 export function renderMemoryPage(view: MemoryView): string {
   const head = heading('h1', `${escape(view.title)} memory`, TERMS.memory);
@@ -55,6 +63,7 @@ export function renderMemoryPage(view: MemoryView): string {
     { action: 'exportZip', label: 'Export...', title: ACTIONS.exportMemory, disabled: view.parsed ? undefined : 'Nothing was read to export', primary: true },
     { action: 'refresh', label: 'Refresh', title: ACTIONS.refreshMemory, primary: true },
     ...(view.contextProblem ? [{ ...SELECT_CONTEXT_BUTTON, primary: true }] : []),
+    ...(view.needsToken ? TOKEN_BUTTONS : []),
   ]);
   if (view.error || !view.parsed) return head + actions + banner(view.error ?? 'The memory could not be read.');
   const { manifest } = view.parsed;

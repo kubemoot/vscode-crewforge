@@ -75,6 +75,8 @@ describe('MemoryDashboard', () => {
   const connect = (): MemoryConnection => ({
     context: 'lab',
     config: {} as never,
+    client: {} as never,
+    operatorNamespace: 'kubemoot',
     relay: {
       read: async () => {
         reads++;

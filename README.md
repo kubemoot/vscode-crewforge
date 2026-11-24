@@ -102,7 +102,11 @@ your kubeconfig's bearer token, so Kubernetes RBAC decides: you need `get` on th
 port-forward needs `get` on services, `list` on pods and `create` on `pods/portforward` in
 the operator's namespace (`kubemoot`; set `crewforge.operatorNamespace` otherwise). A
 kubeconfig that signs in with a client certificate uses the same `crewforge.tokenServiceAccount`
-setting as the chat (see below), which mints a short-lived token for the memory view too. An operator without the endpoint is reported as too old.
+setting as the chat (see below), which mints a short-lived token for the memory view too. When the
+kubeconfig has no token and no ServiceAccount is set, the memory page says so and offers **Choose a
+ServiceAccount...** (it lists the ServiceAccounts in the crew's and the operator's namespace that you
+may create tokens for, and keeps your pick in that setting) and **Open Setting**. An operator without
+the endpoint is reported as too old.
 
 The status bar always shows the context CrewForge is connected to. If the cluster cannot
 be reached, CrewForge says so in plain words and offers **Select Kubernetes Context**.

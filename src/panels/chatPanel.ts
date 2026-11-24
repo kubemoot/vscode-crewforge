@@ -436,9 +436,9 @@ export class ChatPanel {
   }
 
   /**
-   * Deletes the conversation from this computer after asking, and closes the panel. Not
-   * while a turn runs: stopping it saves the conversation again. A failed delete leaves
-   * the panel open and is reported like any other failed action.
+   * Deletes the conversation from this computer after asking; the tab stays and shows the
+   * next conversation. Not while a turn runs: stopping it saves the conversation again. A
+   * failed delete leaves the conversation shown and is reported like any other failed action.
    */
   private async deleteConversation(): Promise<void> {
     const choice = await vscode.window.showWarningMessage(
@@ -447,8 +447,15 @@ export class ChatPanel {
       DELETE,
     );
     if (choice !== DELETE) return;
-    if (await this.session.remove((c) => this.store.remove(c))) this.panel.dispose();
+    if (await this.session.remove((c) => this.store.remove(c))) await this.showAfterDelete();
     else void vscode.window.showInformationMessage('Stop the turn before deleting the conversation.');
+  }
+
+  /** After a conversation is deleted from this computer, only its view goes: the newest one left is shown, or the empty ask page when none is. */
+  private async showAfterDelete(): Promise<void> {
+    const left = await this.store.list(this.connection.context, this.crew.namespace, this.crew.name);
+    if (left.length > 0) await this.open(left[0].id);
+    else this.session.load(newConversation(this.connection.context, this.crew.namespace, this.crew.name));
   }
 
   private history: ConversationMeta[] = [];
