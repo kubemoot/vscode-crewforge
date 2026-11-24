@@ -3,7 +3,7 @@ import { KubeConfig, PortForward } from '@kubernetes/client-node';
 import { listenForward, type LocalForward, type PodTunnel } from '../discussion/forward';
 import { TokenSource, type CallerSettings } from '../discussion/gateway';
 import { checkName } from '../k8s/paths';
-import { ConnectionError, KubeError, type KubeTransport } from '../k8s/request';
+import { ConnectionError, KubeError, ResponseTooLargeError, type KubeTransport } from '../k8s/request';
 import { resolveReportTarget } from './operatorTarget';
 import { parseExport, parseReport, type ParsedExport, type SelectionReport } from './ompi';
 
@@ -27,6 +27,8 @@ export interface MemoryContext {
   sentToken: boolean;
   /** NAMESPACE/NAME of the ServiceAccount a token was minted for, when the settings ask for one. */
   serviceAccount?: string;
+  /** The read went through the API server's aggregated report API, with the kubeconfig's own credentials. */
+  viaApiServer?: boolean;
 }
 
 /** The server's words, one short line. */
@@ -39,6 +41,9 @@ function inParens(text: string): string {
 }
 
 function unauthorized(where: MemoryContext): string {
+  if (where.viaApiServer) {
+    return `The cluster did not accept your credentials for the Kubemoot report API (context ${where.context}). They may have expired; get a fresh kubeconfig.`;
+  }
   if (where.serviceAccount) {
     return `The Kubemoot operator did not accept the token minted for service account ${where.serviceAccount}. The account needs get on the Crew ${where.crew} in ${where.namespace}.`;
   }
@@ -62,6 +67,14 @@ function unavailable(status: number, body: string): string {
   return `The operator cannot serve the memory export right now (${status}${words ? ': ' : ''}${words}). Check that the Kubemoot operator is Ready, then refresh.`;
 }
 
+/**
+ * Whether a refusal should offer to mint a ServiceAccount token: a 401 with no token sent.
+ * A refusal by the API server is about the kubeconfig's own credentials, which a minted token would not change.
+ */
+function offersToken(status: number, where: MemoryContext): boolean {
+  return status === 401 && !where.viaApiServer && !where.sentToken && !where.serviceAccount;
+}
+
 /** What a response with a failing status means, in plain words naming what is missing. */
 export function explainStatus(status: number, body: string, where: MemoryContext): MemoryError {
   const detail = `GET memory-export returned ${status}: ${serverWords(body)}`;
@@ -71,7 +84,9 @@ export function explainStatus(status: number, body: string, where: MemoryContext
       message = unauthorized(where);
       break;
     case 403:
-      message = `Reading the memory of crew ${where.crew} needs get on the Crew ${where.crew} (kubemoot.ai crews) in namespace ${where.namespace}. Your account does not have it.`;
+      message = where.viaApiServer
+        ? `Reading the memory of crew ${where.crew} needs get on the Crew ${where.crew} (kubemoot.ai crews) in namespace ${where.namespace}, and get on crews/memory-export in the ${REPORTS_GROUP} group, which the operator chart's reports-api ClusterRole grants. Your account lacks one of them.`
+        : `Reading the memory of crew ${where.crew} needs get on the Crew ${where.crew} (kubemoot.ai crews) in namespace ${where.namespace}. Your account does not have it.`;
       break;
     case 404:
       message = notFound(body, where);
@@ -83,8 +98,15 @@ export function explainStatus(status: number, body: string, where: MemoryContext
     default:
       message = `The operator refused the memory export (${status}${serverWords(body) ? ': ' : ''}${serverWords(body)}).`;
   }
-  return new MemoryError(message, status, detail, status === 401 && !where.sentToken && !where.serviceAccount);
+  return new MemoryError(message, status, detail, offersToken(status, where));
 }
+
+/** The aggregated API the operator serves its reports under, reached through the API server. */
+export const REPORTS_GROUP = 'reports.kubemoot.ai';
+export const REPORTS_PATH = `/apis/${REPORTS_GROUP}/v1alpha1`;
+
+/** Reads a path as bytes through the API server. */
+type BinaryFetcher = NonNullable<KubeTransport['requestBinary']>;
 
 /** What opens a tunnel; a test replaces it. */
 export interface RelayParts {
@@ -151,6 +173,8 @@ export class MemoryRelay {
   async read(namespace: string, crew: string): Promise<MemoryRead> {
     const ns = checkName('namespace', namespace);
     const name = checkName('crew', crew);
+    const fetchBytes = await this.reportsFetcher(ns, name);
+    if (fetchBytes) return this.readThroughApiServer(fetchBytes, ns, name);
     const target = await resolveReportTarget(this.api, this.operatorNamespace).catch((err: unknown) => {
       throw explainForward(err, this.operatorNamespace);
     });
@@ -160,6 +184,47 @@ export class MemoryRelay {
     } finally {
       await forward.close();
     }
+  }
+
+  /**
+   * The way to read through the API server's report API, or undefined when the port-forward
+   * is the way: the settings ask for a minted ServiceAccount token (only the port-forward
+   * carries it), the transport reads no binary, or the API is absent (404) or not ready (503).
+   * Discovery is asked once, with no retry, so an unready API does not delay the fallback.
+   * Any other refusal is thrown, so a fallback does not hide it.
+   */
+  private async reportsFetcher(namespace: string, crew: string): Promise<BinaryFetcher | undefined> {
+    const fetchBytes = this.api.requestBinary?.bind(this.api);
+    if (this.serviceAccount || !fetchBytes) return undefined;
+    const reply = await fetchBytes(REPORTS_PATH, this.maxBytes);
+    if (reply.status === 404 || reply.status === 503) return undefined;
+    if (reply.status < 200 || reply.status >= 300) throw explainStatus(reply.status, reply.body.toString('utf8'), this.apiServerContext(namespace, crew));
+    try {
+      const list = JSON.parse(reply.body.toString('utf8')) as { groupVersion?: string };
+      return list.groupVersion === `${REPORTS_GROUP}/v1alpha1` ? fetchBytes : undefined;
+    } catch {
+      return undefined; // not the report API's discovery document
+    }
+  }
+
+  private apiServerContext(namespace: string, crew: string): MemoryContext {
+    return { namespace, crew, context: this.config.getCurrentContext(), sentToken: false, viaApiServer: true };
+  }
+
+  private async readThroughApiServer(fetchBytes: BinaryFetcher, namespace: string, crew: string): Promise<MemoryRead> {
+    const base = `${REPORTS_PATH}/namespaces/${namespace}/crews/${encodeURIComponent(crew)}/memory-export`;
+    const where = this.apiServerContext(namespace, crew);
+    const zip = await this.fetchBinary(fetchBytes, base, where);
+    const report = parseReport((await this.fetchBinary(fetchBytes, `${base}?report=true`, where)).toString('utf8')) ?? undefined;
+    return { zip, parsed: parseExport(zip), report };
+  }
+
+  private async fetchBinary(fetchBytes: BinaryFetcher, path: string, where: MemoryContext): Promise<Buffer> {
+    const reply = await fetchBytes(path, this.maxBytes, { Accept: 'application/zip, application/json' }).catch((err: unknown) => {
+      throw err instanceof ResponseTooLargeError ? new MemoryError('The memory export is too large.', undefined, err.message) : err;
+    });
+    if (reply.status >= 200 && reply.status < 300) return reply.body;
+    throw explainStatus(reply.status, reply.body.toString('utf8'), where);
   }
 
   private async fetchBoth(forward: LocalForward, namespace: string, crew: string): Promise<MemoryRead> {
