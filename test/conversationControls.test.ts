@@ -96,7 +96,6 @@ afterEach(() => {
 
 describe('conversation actions', () => {
   it.each([
-    ['stop', 'Stopped'],
     ['pause', 'Paused'],
     ['resume', 'Resumed'],
   ])('%s sends the control for the conversation shown and says what it reached', async (action, said) => {
@@ -107,28 +106,52 @@ describe('conversation actions', () => {
     expect(recorded.info).toContain(`${said} "Which nodes?" (2 running turns).`);
   });
 
-  it('tells the page which conversations it paused, until they are resumed, stopped, or the person declines', async () => {
+  it.each([
+    ['stopped', /Stopped\. The crew abandoned the turn/],
+    ['cancelled', /Cancelled\. The question was still waiting in the queue/],
+    ['nothing_to_stop', /Nothing to stop/],
+  ])('says what a stop did when the gateway answers %s', async (outcome, said) => {
     const panel = open(await saved('1', 'conv-1'));
-    const paused = () => (panel.webview.posted.at(-1) as { paused: string[] }).paused;
-    const reply = (action: string) => gateway.responses.push(JSON.stringify({ conversationId: 'conv-1', action, threads: ['t1'] }));
-    reply('pause');
-    await act(panel, 'pause');
-    expect(paused()).toEqual(['conv-1']);
-    reply('resume');
-    await act(panel, 'resume');
-    expect(paused()).toEqual([]);
-    reply('pause');
-    await act(panel, 'pause');
-    reply('stop');
+    gateway.responses.push(JSON.stringify({ conversationId: 'conv-1', action: 'stop_requested', threads: ['t1'], outcome, message: 'x' }));
     await act(panel, 'stop');
-    expect(paused()).toEqual([]);
+    expect(gateway.calls.filter((c) => c.method === 'POST')).toEqual([{ method: 'POST', path: '/api/v1/discussions/lab-ops/conv-1/stop', body: undefined }]);
+    expect(recorded.info.at(-1)).toMatch(said);
+    expect(recorded.warnings).toEqual([]);
+  });
+
+  it('warns, and does not say stopped, when the crew did not confirm the stop', async () => {
+    const panel = open(await saved('1', 'conv-1'));
+    gateway.responses.push(JSON.stringify({ conversationId: 'conv-1', action: 'stop_requested', threads: ['t1'], outcome: 'unconfirmed', message: 'x' }));
+    await act(panel, 'stop');
+    expect(recorded.warnings.at(-1)).toContain('did not confirm the stop in time');
+    expect(recorded.info.some((m) => m.includes('Stopped'))).toBe(false);
+  });
+
+  it('tells the page where each conversation stands, as the crew says, and that a question waits in the queue', async () => {
+    gateway.states['conv-1'] = { conversationId: 'conv-1', state: 'queued', turns: [{ state: 'queued', question: 'q', queuePosition: 3 }] };
+    const panel = open(await saved('1', 'conv-1'));
+    await panel.webview.receive({ type: 'ready' });
+    await vi.waitFor(() => expect(lastState(panel).states).toEqual({ 'conv-1': 'queued' }));
+    expect(lastState(panel).queued).toEqual({ 'conv-1': 2 });
+    gateway.states['conv-1'] = { conversationId: 'conv-1', state: 'finished', turns: [{ state: 'finished' }] };
+    gateway.responses.push(JSON.stringify({ conversationId: 'conv-1', action: 'stop_requested', threads: [], outcome: 'cancelled' }));
+    await act(panel, 'stop');
+    expect(lastState(panel).states).toEqual({ 'conv-1': 'finished' });
+    expect(lastState(panel).queued).toEqual({});
+  });
+
+  it('offers nothing it cannot know: a conversation the gateway has no state for has none', async () => {
+    const panel = open(await saved('1', 'conv-1'));
+    await panel.webview.receive({ type: 'ready' });
+    await vi.waitFor(() => expect(gateway.stateReads.length).toBeGreaterThan(0));
+    expect(lastState(panel).states).toEqual({});
   });
 
   it('says one running turn in the singular', async () => {
     const panel = open(await saved('1', 'conv-1'));
-    gateway.responses.push('{"conversationId":"conv-1","action":"stop","threads":["t1"]}');
-    await act(panel, 'stop');
-    expect(recorded.info).toContain('Stopped "Which nodes?" (1 running turn).');
+    gateway.responses.push('{"conversationId":"conv-1","action":"pause","threads":["t1"]}');
+    await act(panel, 'pause');
+    expect(recorded.info).toContain('Paused "Which nodes?" (1 running turn).');
   });
 
   it('acts on a saved conversation from the list, not the one shown', async () => {
@@ -172,6 +195,10 @@ describe('conversation actions', () => {
     gateway.responses.push(failure(409, '{"error":"the conversation has no running discussion"}'));
     await act(panel, 'resume');
     expect(recorded.errors.at(-1)).toContain('The conversation has no turn running to resume');
+    gateway.responses.push(failure(409, '{"error":"The crew has just taken the question and its discussion has not begun"}'));
+    await act(panel, 'stop');
+    expect(recorded.errors.at(-1)).toContain('just taken the question');
+    expect(recorded.errors.at(-1)).toContain('Stop again in a moment');
     gateway.responses.push(failure(500, '{"error":"boom"}'));
     await act(panel, 'pause');
     expect(recorded.errors.at(-1)).toContain('The crew lab-ops failed to pause the conversation.');

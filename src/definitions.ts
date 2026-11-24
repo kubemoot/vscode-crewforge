@@ -253,6 +253,7 @@ export const CHAT = {
   newConversation: { label: 'New conversation', what: 'starts an empty conversation with this crew; the current one stays saved' },
   toggleList: { label: 'Show or hide conversations', what: 'opens or closes the list of conversations saved on this computer' },
   stop: { label: 'Stop on the crew', what: 'ends the moot running for this conversation; the saved messages stay' },
+  cancel: { label: 'Cancel on the crew', what: 'removes this question from the crew\'s queue before the crew sees it; the saved messages stay' },
   pause: { label: 'Pause on the crew', what: 'pauses the conversation\'s running turns on the crew until you resume them; nothing is deleted' },
   resume: { label: 'Resume on the crew', what: 'resumes the conversation\'s paused turns on the crew' },
   erase: { label: 'Delete from the crew', what: 'erases this conversation from every store on the cluster; asks first. CrewForge\'s copy on this computer stays' },

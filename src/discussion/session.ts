@@ -4,6 +4,7 @@ import { agentProblems, cardText } from './cardText';
 import { ask, DEFAULT_TIMING, streamTurn, type TurnEnd, type TurnTiming } from './client';
 import { initialTurn, reduce, type TurnState } from './reducer';
 import { acceleratorOf, type DiscussionEvent } from './types';
+import { STOPPED_NOTICE } from './stopped';
 
 /** What a chat panel renders. */
 export interface SessionView {
@@ -113,12 +114,8 @@ export class ChatSession {
 
   private async finish(end: TurnEnd, startedAt: number): Promise<void> {
     const c = this.conversation;
-    const synthesis = this.turn?.synthesis;
-    const answered = Boolean(synthesis);
-    const problems = [...agentProblems(this.turn?.cards ?? []), ...endProblems(end, answered)];
-    const ended = { timestamp: now(), durationMs: Date.now() - startedAt, ...(problems.length > 0 ? { problems } : {}), ...turnRecord(this.turn) };
+    const { synthesis, notice, ended } = endOfTurn(this.turn, end, startedAt);
     if (synthesis) c.messages.push({ role: 'assistant', content: synthesis, agentName: 'Crew', ...ended });
-    const notice = noticeFor(end, answered);
     if (notice) c.messages.push({ role: 'system', content: notice, ...ended });
     // Saved before the turn ends on screen, so the refreshed conversation list includes it.
     try {
@@ -134,6 +131,17 @@ export class ChatSession {
   private emit(): void {
     this.onChange(this.view);
   }
+}
+
+/** What a finished turn adds to the conversation: its answer, the notice that stands where there is none, and what ends the turn. */
+function endOfTurn(turn: TurnState | undefined, end: TurnEnd, startedAt: number) {
+  // A turn the person stopped has no answer, and nothing went wrong in it: the agents were told to abandon the work.
+  const stopped = turn?.stopped === true;
+  const synthesis = stopped ? undefined : turn?.synthesis;
+  const answered = Boolean(synthesis);
+  const problems = stopped ? [] : [...agentProblems(turn?.cards ?? []), ...endProblems(end, answered)];
+  const ended = { timestamp: now(), durationMs: Date.now() - startedAt, ...(problems.length > 0 ? { problems } : {}), ...turnRecord(turn, !stopped) };
+  return { synthesis, notice: stopped ? STOPPED_NOTICE : noticeFor(end, answered), ended };
 }
 
 /** The line shown when a turn ends without a normal answer, or undefined when it has one. */
@@ -158,8 +166,8 @@ export function endProblems(end: TurnEnd, answered: boolean): string[] {
 }
 
 /** What the message ending a turn keeps of it: its thread, and each agent's last card. */
-export function turnRecord(turn?: TurnState): Pick<ChatMessage, 'threadId' | 'agents'> {
-  const agents = (turn?.cards ?? []).map((card) => {
+export function turnRecord(turn?: TurnState, withAgents = true): Pick<ChatMessage, 'threadId' | 'agents'> {
+  const agents = (withAgents ? (turn?.cards ?? []) : []).map((card) => {
     const { text, problem } = cardText(card);
     return { agent: card.agent, text, problem };
   });

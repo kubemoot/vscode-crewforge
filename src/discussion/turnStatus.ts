@@ -1,5 +1,6 @@
 import { WORKING_STATUSES } from './cardText';
 import type { TurnState } from './reducer';
+import { queueNote } from './stopped';
 
 /**
  * One line saying where the turn stands, from what the stream has reported: the
@@ -7,19 +8,19 @@ import type { TurnState } from './reducer';
  * working, then the coordinator writing the answer, or the stream reconnecting after a
  * drop. Always ends with the elapsed time.
  */
-export function turnStatus(turn: TurnState, now = Date.now()): string {
-  return `${stage(turn)} · ${elapsed(now - turn.startedAt)}`;
+export function turnStatus(turn: TurnState, now = Date.now(), queuedAhead?: number): string {
+  return `${stage(turn, queuedAhead)} · ${elapsed(now - turn.startedAt)}`;
 }
 
-function stage(turn: TurnState): string {
-  return waitingStage(turn) ?? agentsStage(turn);
+function stage(turn: TurnState, queuedAhead?: number): string {
+  return waitingStage(turn, queuedAhead) ?? agentsStage(turn);
 }
 
-/** The stages before any agent has reported, or undefined once one has. */
-function waitingStage(turn: TurnState): string | undefined {
+/** The stages before any agent has reported, or undefined once one has. `queuedAhead` is how many questions wait ahead of this one in the crew's queue, when the crew says so. */
+function waitingStage(turn: TurnState, queuedAhead?: number): string | undefined {
   if (turn.reconnecting) return 'Lost the connection to the crew; reconnecting';
   if (!turn.connected) return 'Sending the question';
-  if (!turn.threadId) return 'Waiting for the coordinator to pick up the question';
+  if (!turn.threadId) return queuedAhead === undefined ? 'Waiting for the coordinator to pick up the question' : queueNote(queuedAhead);
   if (turn.cards.length > 0) return undefined;
   return turn.restarted ? 'The coordinator restarted; it is choosing which agents to ask again' : 'The coordinator is choosing which agents to ask';
 }

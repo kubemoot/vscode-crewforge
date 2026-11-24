@@ -127,3 +127,21 @@ describe('reduce', () => {
     expect(JSON.stringify(s)).toBe(frozen);
   });
 });
+
+describe('a turn the person stopped', () => {
+  const stoppedText = 'Stopped by the person who asked; this is not an answer.';
+
+  it('is not an answer, whether the stop arrives on the synthesis or on done', () => {
+    const viaSynthesis = fold([{ type: 'synthesis', content: stoppedText, outcome: 'stopped' }, { type: 'done', outcome: 'stopped' }]);
+    expect(viaSynthesis).toMatchObject({ stopped: true, done: true });
+    expect(viaSynthesis.synthesis).toBeUndefined();
+    const viaDone = fold([{ type: 'done', outcome: 'stopped' }]);
+    expect(viaDone).toMatchObject({ stopped: true, done: true });
+  });
+
+  it('leaves an ordinary answer alone', () => {
+    const s = fold([{ type: 'synthesis', content: 'All good.' }, { type: 'done' }]);
+    expect(s.synthesis).toBe('All good.');
+    expect(s.stopped).toBeUndefined();
+  });
+});

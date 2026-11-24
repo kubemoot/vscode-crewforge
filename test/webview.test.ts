@@ -7,6 +7,7 @@ import { ConversationStore } from '../src/store/conversations';
 import type { StateMessage, WebviewMessage } from '../src/webview/protocol';
 import { CHAT, iconTip, TERMS } from '../src/definitions';
 import { META_SEPARATOR } from '../src/webview/render';
+import { STOPPED_NOTICE } from '../src/discussion/stopped';
 import { controlsWithoutTooltip } from './tooltipCheck';
 import { recorded, resetFake, Uri } from './vscodeFake';
 
@@ -58,11 +59,13 @@ let availability: StateMessage['availability'];
 
 /** The conversations the host says have something new; a test changes it before posting. */
 let fresh: string[] = [];
-/** The conversations the host says CrewForge paused; a test changes it before posting. */
-let paused: string[] = [];
+/** Where the host says each conversation stands on the crew; a test changes it before posting. */
+let states: StateMessage['states'] = {};
+/** How many questions the host says wait ahead of a queued question; a test changes it before posting. */
+let queued: StateMessage['queued'] = {};
 
 function stateMessage(conversation: Conversation, extra: Partial<StateMessage['view']> = {}, history: StateMessage['history'] = []): StateMessage {
-  return { type: 'state', view: { conversation, busy: false, ...extra }, crewTitle: conversation.crewName, history, about: '2 agents', links, availability, fresh, paused };
+  return { type: 'state', view: { conversation, busy: false, ...extra }, crewTitle: conversation.crewName, history, about: '2 agents', links, availability, fresh, states, queued };
 }
 
 /** Delivers a message as VS Code's host frame does: with the page's own origin. */
@@ -74,7 +77,8 @@ const $ = (id: string) => document.getElementById(id)!;
 
 beforeEach(async () => {
   fresh = [];
-  paused = [];
+  states = {};
+  queued = {};
   await loadPage();
 });
 afterEach(() => {
@@ -379,14 +383,68 @@ describe('the chat page', () => {
     expect(shownControls()).toEqual([true, true, false, true]);
   });
 
-  it('offers Resume and Stop once the conversation is paused, even when its turn still runs', () => {
+  it('offers Resume and Stop once the crew says the conversation is paused, even when its turn still runs', () => {
     const c = newConversation('ctx', 'team-a', 'lab-ops');
     c.conversationId = 'conv-1';
-    paused = ['conv-1'];
+    states = { 'conv-1': 'paused' };
     post(c, { busy: true });
     expect(shownControls()).toEqual([true, false, true, true]);
     post(c);
     expect(shownControls()).toEqual([true, false, true, true]);
+  });
+
+  it('offers Stop and Pause for a conversation the crew says runs elsewhere, with no turn in this panel', () => {
+    const c = newConversation('ctx', 'team-a', 'lab-ops');
+    c.conversationId = 'conv-1';
+    states = { 'conv-1': 'running' };
+    post(c);
+    expect(shownControls()).toEqual([true, true, false, true]);
+  });
+
+  it('offers only Cancel for a question waiting in the crew queue, and says where it waits', () => {
+    const c = newConversation('ctx', 'team-a', 'lab-ops');
+    c.conversationId = 'conv-1';
+    states = { 'conv-1': 'queued' };
+    queued = { 'conv-1': 2 };
+    post(c);
+    expect(shownControls()).toEqual([true, false, false, true]);
+    const stop = $('conv-stop') as HTMLButtonElement;
+    expect(stop.textContent).toBe('Cancel');
+    expect(stop.title).toBe(iconTip(CHAT.cancel));
+    expect($('note').textContent).toBe("Waiting in the crew's queue: 2 questions ahead.");
+    states = { 'conv-1': 'running' };
+    post(c);
+    expect(stop.textContent).toBe('Stop');
+  });
+
+  it('shows no controls once the crew says the conversation finished or was stopped, whatever the panel saw before', () => {
+    const c = newConversation('ctx', 'team-a', 'lab-ops');
+    c.conversationId = 'conv-1';
+    for (const s of ['finished', 'stopped'] as const) {
+      states = { 'conv-1': s };
+      post(c);
+      expect(shownControls()).toEqual([false, false, false, true]);
+    }
+  });
+
+  it('says where the turn waits in the crew queue instead of waiting in silence', () => {
+    const c = newConversation('ctx', 'team-a', 'lab-ops');
+    c.conversationId = 'conv-1';
+    c.messages.push({ role: 'user', content: 'q', timestamp: c.startedAt });
+    states = { 'conv-1': 'queued' };
+    queued = { 'conv-1': 0 };
+    post(c, { busy: true, turn: { startedAt: Date.now(), connected: true, cards: [], done: false } });
+    expect($('messages').textContent).toContain("Waiting in the crew's queue: next to be taken.");
+  });
+
+  it('shows a turn the person stopped as stopped, not as an answer', () => {
+    const c = newConversation('ctx', 'team-a', 'lab-ops');
+    c.messages.push({ role: 'user', content: 'q', timestamp: c.startedAt }, { role: 'system', content: STOPPED_NOTICE, timestamp: c.startedAt });
+    post(c);
+    expect($('messages').querySelector('.notice')?.textContent).toContain('Stopped by you');
+    expect($('messages').querySelector('.message.crew')).toBeNull();
+    post(c, { busy: true, turn: { startedAt: Date.now(), connected: true, cards: [], done: true, stopped: true } });
+    expect($('messages').textContent).toContain(STOPPED_NOTICE);
   });
 
   it('sends the action of each control to the host, with its label and tooltip', () => {
@@ -404,7 +462,7 @@ describe('the chat page', () => {
     const c = newConversation('ctx', 'team-a', 'lab-ops');
     const meta = (id: string, conversationId?: string) => ({ id, title: id, startedAt: c.startedAt, crewName: 'lab-ops', namespace: 'team-a', context: 'ctx', ...(conversationId ? { conversationId } : {}) });
     const actions = (item: Element) => [...item.querySelectorAll<HTMLElement>('.conv-action')].map((b) => b.dataset.convAction);
-    paused = ['conv-2'];
+    states = { 'conv-2': 'paused' };
     post(c, {}, [meta('old-1', 'conv-1'), meta('old-2', 'conv-2'), meta('old-3')]);
     const items = [...$('history').querySelectorAll('.discussion-item')];
     expect(actions(items[0])).toEqual(['erase']);

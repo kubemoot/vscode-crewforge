@@ -5,6 +5,7 @@ import { dashboardUrl, streamTimeoutMs, type Connection } from '../connection';
 import { unreachable, type CrewAvailability } from '../discussion/availability';
 import { DEFAULT_TIMING } from '../discussion/client';
 import { ConversationEvents, type ConversationNews } from '../discussion/events';
+import { isActive, readConversationState, waitingTurn, type ConversationStatus, type RemoteState } from '../discussion/remoteState';
 import { ChatSession, type SessionView } from '../discussion/session';
 import { KubeError, type KubeTransport } from '../k8s/request';
 import { titleOf } from '../crew/displayName';
@@ -16,13 +17,18 @@ import { crewAbout } from '../views/treeModel';
 import type { HostMessage, WebviewMessage } from '../webview/protocol';
 import { CHAT, CHAT_TEXT } from '../definitions';
 import { escapeHtml, htmlAttribute, iconAttrs, iconButton, iconTitle, icons, tipAttrs } from '../webview/render';
-import { ConversationActions, isConversationAction, type ConversationActionId, type ConversationTarget } from './conversationActions';
+import { ConversationActions, isConversationAction, type ConversationTarget } from './conversationActions';
 import { messageText, type PanelState } from './panelState';
 import { tabIcon } from './tabIcon';
 import type { Located } from '../source/locate';
 import { errorText } from '../views/errors';
 import { showError } from '../views/notify';
 import { trimEnd } from '../text';
+
+/** How often a conversation in flight on the crew is read again, and how often the listed ones are, and how many listed ones are read. */
+const STATE_READ_MS = 4000;
+const STATE_REFRESH_MS = 15_000;
+const STATE_READS = 20;
 
 /** What a chat can link to in the workspace. */
 export interface ChatLinks {
@@ -89,8 +95,12 @@ export class ChatPanel {
   private events?: ConversationEvents;
   /** The gateway's ids of the conversations the crew said have something new, until they are opened or asked in. */
   private readonly fresh = new Set<string>();
-  /** The conversations this panel paused on the crew; the crew offers no way to read it back. */
-  private readonly paused = new Set<string>();
+  /** Where each conversation stands on the crew, as its gateway's state read last said. */
+  private readonly states = new Map<string, RemoteState>();
+  /** How many questions are ahead of each conversation's waiting question, as the state read last said. */
+  private readonly queued = new Map<string, number>();
+  private statesReadAt = 0;
+  private statesTimer?: ReturnType<typeof setTimeout>;
 
   private constructor(
     private readonly extensionUri: vscode.Uri,
@@ -299,15 +309,62 @@ export class ChatPanel {
       void vscode.window.showInformationMessage('This conversation has not reached the crew yet. Ask the crew something first.');
       return;
     }
-    if (await this.actions.run(action, target)) this.recordControl(action, target.conversationId);
+    const acted = await this.actions.run(action, target);
     this.markSeen(target.conversationId);
+    if (acted) await this.readStates([target.conversationId]);
     await this.post(this.session.view);
   }
 
-  /** Remembers a pause, and forgets it once the conversation is resumed, stopped, or deleted. */
-  private recordControl(action: ConversationActionId, conversationId: string): void {
-    if (action === 'pause') this.paused.add(conversationId);
-    else this.paused.delete(conversationId);
+  /**
+   * Reads where conversations stand from the crew's gateway, so the menus offer what the crew
+   * says: Stop and Pause for a conversation running elsewhere, Cancel for a question still in
+   * the queue. A conversation it cannot read keeps no state, and the page goes by its own turn.
+   */
+  private async readStates(ids: string[]): Promise<void> {
+    this.statesReadAt = Date.now();
+    const read = await Promise.all(ids.map(async (id) => [id, await readConversationState(this.gateway, this.crew.namespace, this.crew.name, id)] as const));
+    if (this.disposed) return;
+    let changed = false;
+    for (const [id, status] of read) changed = this.record(id, status) || changed;
+    if (changed) void this.post(this.session.view);
+    this.keepReading();
+  }
+
+  /** Remembers what a read said about one conversation. True when that differs from before. */
+  private record(id: string, status: ConversationStatus | undefined): boolean {
+    const before = `${this.states.get(id) ?? ''}|${this.queued.get(id) ?? ''}`;
+    if (status) this.states.set(id, status.state);
+    else this.states.delete(id);
+    const waiting = waitingTurn(status);
+    if (waiting) this.queued.set(id, Math.max((waiting.queuePosition ?? 1) - 1, 0));
+    else this.queued.delete(id);
+    return before !== `${this.states.get(id) ?? ''}|${this.queued.get(id) ?? ''}`;
+  }
+
+  /** The conversations to read now: the one shown and each listed one the crew last said was in flight, else every listed one once in a while. */
+  private idsToRead(everything: boolean): string[] {
+    const ids = new Set<string>();
+    const shown = this.session.view.conversation.conversationId;
+    if (shown) ids.add(shown);
+    for (const h of this.history.slice(0, STATE_READS)) {
+      if (h.conversationId && (everything || isActive(this.states.get(h.conversationId)))) ids.add(h.conversationId);
+    }
+    return [...ids];
+  }
+
+  /** Reads the crew's state when a post finds it stale: every listed conversation between turns, and the shown one while its question has not been picked up, since it may wait in the crew's queue. */
+  private readStatesFor(view: SessionView): void {
+    const age = Date.now() - this.statesReadAt;
+    if (!view.busy && age > STATE_REFRESH_MS) void this.readStates(this.idsToRead(true));
+    const waiting = view.busy && view.turn && !view.turn.threadId ? view.conversation.conversationId : undefined;
+    if (waiting && age > STATE_READ_MS) void this.readStates([waiting]);
+  }
+
+  /** Reads again in a few seconds while anything is queued, running or paused, and stops when nothing is. */
+  private keepReading(): void {
+    clearTimeout(this.statesTimer);
+    if (this.disposed || ![...this.states.values()].some((s) => isActive(s))) return;
+    this.statesTimer = setTimeout(() => void this.readStates(this.idsToRead(false)), STATE_READ_MS);
   }
 
   /** The gateway's conversation behind the one shown, or behind the saved conversation `id`. */
@@ -417,10 +474,11 @@ export class ChatPanel {
     if (turnEnded) {
       void this.readAvailability?.();
       const shown = this.session.view.conversation.conversationId;
-      if (shown) this.paused.delete(shown);
+      if (shown) void this.readStates([shown]);
     }
     if (!view.busy) this.history = await this.store.list(this.connection.context, this.crew.namespace, this.crew.name);
     if (this.disposed) return;
+    this.readStatesFor(view);
     const links = { agents: [...this.agentSources.keys()], dashboard: dashboardUrl() !== '' };
     const message: HostMessage = {
       type: 'state',
@@ -431,13 +489,15 @@ export class ChatPanel {
       links,
       availability: this.availability,
       fresh: [...this.fresh],
-      paused: [...this.paused],
+      states: Object.fromEntries(this.states),
+      queued: Object.fromEntries(this.queued),
     };
     await this.panel.webview.postMessage(message);
   }
 
   private dispose(): void {
     this.disposed = true;
+    clearTimeout(this.statesTimer);
     if (this.availabilityTimer) clearInterval(this.availabilityTimer);
     this.session.stop();
     this.events?.stop();
