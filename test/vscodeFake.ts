@@ -92,6 +92,31 @@ export class Range {
   ) {}
 }
 
+export class Position {
+  constructor(
+    public line: number,
+    public character: number,
+  ) {}
+}
+
+export class Location {
+  constructor(
+    public uri: Uri,
+    public range: Range,
+  ) {}
+}
+
+export const CompletionItemKind = { Reference: 17 } as const;
+
+export class CompletionItem {
+  detail?: string;
+  range?: Range;
+  constructor(
+    public label: string,
+    public kind?: number,
+  ) {}
+}
+
 export class CodeLens {
   constructor(
     public range: Range,
@@ -107,6 +132,18 @@ export const languages = {
   },
   registerCodeLensProvider(_selector: unknown, provider: unknown) {
     recorded.codeLensProviders.push(provider);
+    return { dispose: () => undefined };
+  },
+  registerDefinitionProvider(selector: unknown, provider: unknown) {
+    recorded.languageProviders.push({ kind: 'definition', selector, provider });
+    return { dispose: () => undefined };
+  },
+  registerReferenceProvider(selector: unknown, provider: unknown) {
+    recorded.languageProviders.push({ kind: 'references', selector, provider });
+    return { dispose: () => undefined };
+  },
+  registerCompletionItemProvider(selector: unknown, provider: unknown, ...triggers: string[]) {
+    recorded.languageProviders.push({ kind: 'completion', selector, provider, triggers });
     return { dispose: () => undefined };
   },
   setTextDocumentLanguage<T extends { languageId?: string }>(document: T, languageId: string) {
@@ -187,6 +224,8 @@ export const recorded = {
   progress: [] as string[],
   extensions: new Map<string, unknown>(),
   codeLensProviders: [] as unknown[],
+  /** Definition, reference and completion providers registered, in order. */
+  languageProviders: [] as { kind: string; selector: unknown; provider: unknown; triggers?: string[] }[],
   textDocuments: [] as { uri: Uri; getText(): string; isDirty?: boolean }[],
   /** The answer applyEdit gives; false makes it fail. */
   applyEditResult: true,
@@ -212,6 +251,8 @@ export const recorded = {
   statusBarItems: [] as FakeStatusBarItem[],
   editorListeners: [] as Listener<unknown>[],
   saveListeners: [] as Listener<{ uri: Uri }>[],
+  /** Listeners of the text document events, by event. */
+  documentListeners: { open: [], change: [], close: [] } as { open: Listener<unknown>[]; change: Listener<unknown>[]; close: Listener<unknown>[] },
   /** Nodes revealed in tree views, with the view's id. */
   revealed: [] as { view: string; node: unknown; options?: unknown }[],
   /** Values stored in the fake workspace state. */
@@ -257,6 +298,8 @@ export function resetFake(): void {
   recorded.progress = [];
   recorded.extensions.clear();
   recorded.codeLensProviders = [];
+  recorded.languageProviders = [];
+  recorded.documentListeners = { open: [], change: [], close: [] };
   recorded.textDocuments = [];
   recorded.applyEditResult = true;
   recorded.cancel = undefined;
@@ -543,6 +586,18 @@ export const workspace = {
       const nodeFs = await import('node:fs/promises');
       await nodeFs.rename(from.fsPath, to.fsPath);
     },
+  },
+  onDidOpenTextDocument(listener: Listener<unknown>) {
+    recorded.documentListeners.open.push(listener);
+    return { dispose() {} };
+  },
+  onDidChangeTextDocument(listener: Listener<unknown>) {
+    recorded.documentListeners.change.push(listener);
+    return { dispose() {} };
+  },
+  onDidCloseTextDocument(listener: Listener<unknown>) {
+    recorded.documentListeners.close.push(listener);
+    return { dispose() {} };
   },
   onDidSaveTextDocument(listener: Listener<{ uri: Uri }>) {
     recorded.saveListeners.push(listener);

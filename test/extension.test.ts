@@ -354,7 +354,7 @@ describe('the inner loop in the extension', () => {
   it('adds a status bar item and the Problems collection, and follows the active editor and saves', async () => {
     expect(recorded.statusBarItems).toHaveLength(2);
     expect(recorded.statusBarItems[1].command).toMatchObject({ command: 'crewforge.selectContext' });
-    expect(recorded.diagnostics.map((d) => d.name)).toEqual(['crewforge']);
+    expect(recorded.diagnostics.map((d) => d.name)).toEqual(['crewforge', 'crewforge-references']);
     await loadBundle();
     const source = await loadBundle();
     const provider = recorded.treeViews[1].options.treeDataProvider as { getTreeItem: (n: unknown) => { description?: string; contextValue?: string } };
