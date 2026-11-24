@@ -15,7 +15,7 @@ beforeAll(async () => {
     req.on('data', (c) => (body += c));
     req.on('end', () => {
       seen.push({ method: req.method, url: req.url, auth: req.headers.authorization, accept: req.headers.accept, body });
-      route(req.url ?? '', res);
+      if (!binaryRoute(req.url ?? '', res)) route(req.url ?? '', res);
     });
   });
   await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
@@ -28,6 +28,21 @@ let busyLeft = 0;
 
 /** Waits until the test server has received a request for `url` since the `before`th one. */
 const received = (url: string, before: number) => vi.waitFor(() => expect(seen.slice(before).map((s) => s.url)).toContain(url));
+
+/** The binary routes: a zip, and a refusal of one. True when it answered. */
+function binaryRoute(url: string, res: http.ServerResponse): boolean {
+  if (url.endsWith('/zip')) {
+    res.writeHead(200, { 'Content-Type': 'application/zip' });
+    res.end(Buffer.from([0x50, 0x4b, 0x03, 0x04, 0xff, 0xfe, 0x00, 0x80]));
+    return true;
+  }
+  if (url.endsWith('/refused-zip')) {
+    res.writeHead(403);
+    res.end('the caller may not read this resource');
+    return true;
+  }
+  return false;
+}
 
 function route(url: string, res: http.ServerResponse): void {
   if (url.endsWith('/busy')) {
@@ -76,6 +91,25 @@ function client(server = base, timeoutMs?: number): KubeClient {
   });
   return new KubeClient(kc, timeoutMs);
 }
+
+describe('KubeClient.requestBinary', () => {
+  it('returns the bytes untouched, with the kubeconfig token and the headers asked for', async () => {
+    const reply = await client().requestBinary('/apis/zip', 1024, { Accept: 'application/zip' });
+    expect(reply.status).toBe(200);
+    expect([...reply.body]).toEqual([0x50, 0x4b, 0x03, 0x04, 0xff, 0xfe, 0x00, 0x80]);
+    expect(seen.at(-1)).toMatchObject({ method: 'GET', url: '/apis/zip', auth: 'Bearer secret-token', accept: 'application/zip' });
+  });
+
+  it('returns a refusal with its status and words instead of throwing', async () => {
+    const reply = await client().requestBinary('/apis/refused-zip', 1024);
+    expect(reply.status).toBe(403);
+    expect(reply.body.toString()).toBe('the caller may not read this resource');
+  });
+
+  it('stops reading a response larger than the limit', async () => {
+    await expect(client().requestBinary('/apis/zip', 4)).rejects.toThrow();
+  });
+});
 
 describe('KubeClient', () => {
   it('sends the kubeconfig token and a JSON body, and returns the body', async () => {

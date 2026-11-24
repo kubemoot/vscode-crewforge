@@ -96,7 +96,15 @@ export left out (a fact that holds a credential is never exported as memory) sho
 with the reason, never their text. **Refresh** reads again; **Export to Folder...** saves the
 crew's OMPI export as `<crew>-memory-ompi.zip` in a folder you pick.
 
-CrewForge reads the export from the Kubemoot operator's report service
+When the operator serves its aggregated report API (`reports.kubemoot.ai`, a chart value), CrewForge
+reads the export through the API server with your own kubeconfig, whatever it signs in with (a client
+certificate, OIDC or a token): no port-forward and no ServiceAccount token. Kubernetes RBAC decides:
+you need `get` on the Crew, and the API server's own check of the report path, which the operator
+chart's `reports-api` ClusterRole grants. An absent or not-ready report API is not an error:
+CrewForge falls back to the way below, and so does a `crewforge.tokenServiceAccount` setting.
+Any other failure, such as the API server refusing your credentials, is reported and does not fall back.
+
+Otherwise CrewForge reads the export from the Kubemoot operator's report service
 (`GET /memory-export/{namespace}/{crew}`), through a port-forward to the operator's pod with
 your kubeconfig's bearer token, so Kubernetes RBAC decides: you need `get` on the Crew. The
 port-forward needs `get` on services, `list` on pods and `create` on `pods/portforward` in

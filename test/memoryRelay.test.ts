@@ -5,7 +5,7 @@ import * as path from 'node:path';
 import type { Readable, Writable } from 'node:stream';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { KubeConfig } from '@kubernetes/client-node';
-import { ConnectionError, KubeError } from '../src/k8s/request';
+import { ConnectionError, KubeError, ResponseTooLargeError, type BinaryResponse } from '../src/k8s/request';
 import type { PodTunnel } from '../src/discussion/forward';
 import { resolveReportTarget } from '../src/memory/operatorTarget';
 import { explainStatus, MemoryError, MemoryRelay } from '../src/memory/relay';
@@ -238,5 +238,110 @@ describe('MemoryRelay', () => {
   it('refuses a crew name that is not a name before opening anything', async () => {
     await expect(relay().read('crew-demo', '../x')).rejects.toThrow(/not a valid Kubernetes name/);
     expect(opened).toEqual([]);
+  });
+});
+
+/** A cluster that serves binary reads, as the real client does, with the report API answering where asked. */
+class BinaryCluster extends FakeCluster {
+  binaries = new Map<string, BinaryResponse>();
+  binaryCalls: { path: string; headers?: Record<string, string> }[] = [];
+  failBinary?: Error;
+  async requestBinary(path: string, _max: number, headers?: Record<string, string>): Promise<BinaryResponse> {
+    this.binaryCalls.push({ path, headers });
+    if (this.failBinary && path.includes('memory-export')) throw this.failBinary;
+    return this.binaries.get(path) ?? { status: 404, body: Buffer.from('404 page not found') };
+  }
+}
+
+describe('MemoryRelay through the API server', () => {
+  const reports = '/apis/reports.kubemoot.ai/v1alpha1';
+  const discovery = JSON.stringify({ kind: 'APIResourceList', groupVersion: 'reports.kubemoot.ai/v1alpha1', resources: [] });
+  const base = `${reports}/namespaces/crew-demo/crews/demo/memory-export`;
+  const config = { getCurrentContext: () => 'lab' } as unknown as KubeConfig;
+  const noTunnel = { tunnel: () => { throw new Error('the port-forward must not be opened'); } };
+  const portForward = /services\/kubemoot-operator-report/;
+
+  function served(): BinaryCluster {
+    const c = new BinaryCluster();
+    c.binaries.set(reports, { status: 200, body: Buffer.from(discovery) });
+    c.binaries.set(base, { status: 200, body: fixture('memory-export.zip') });
+    c.binaries.set(`${base}?report=true`, { status: 200, body: fixture('memory-report.json') });
+    return c;
+  }
+  const read = (c: FakeCluster, settings?: { tokenServiceAccount: string; tokenAudiences: string[] }) =>
+    new MemoryRelay(c, config, 'kubemoot', noTunnel, undefined, settings).read('crew-demo', 'demo');
+
+  it('reads the export with the kubeconfig credentials, with no port-forward and no token', async () => {
+    const c = served();
+    const got = await read(c);
+    expect(got.parsed.facts).toHaveLength(3);
+    expect(got.report?.leftOut).toHaveLength(3);
+    expect(c.binaryCalls.map((b) => b.path)).toEqual([reports, base, `${base}?report=true`]);
+    expect(c.binaryCalls[1].headers?.Accept).toMatch(/application\/zip/);
+    expect(c.calls.some((call) => call.method === 'POST')).toBe(false);
+  });
+
+  it.each([404, 503])('falls back to the port-forward, asking discovery once, when the report API answers %i', async (status) => {
+    const c = served();
+    c.binaries.set(reports, { status, body: Buffer.from('{"kind":"Status"}') });
+    await expect(read(c)).rejects.toThrow(portForward);
+    expect(c.binaryCalls.map((b) => b.path)).toEqual([reports]);
+  });
+
+  it('does not hide a refusal of the credentials behind a fallback', async () => {
+    const c = served();
+    c.binaries.set(reports, { status: 401, body: Buffer.from('Unauthorized') });
+    const err = (await read(c).catch((e: unknown) => e)) as MemoryError;
+    expect(err).toBeInstanceOf(MemoryError);
+    expect(err.message).toMatch(/did not accept your credentials/);
+    expect(err.needsToken).toBe(false);
+  });
+
+  it('says so when the API server refuses the discovery for lack of rights', async () => {
+    const c = served();
+    c.binaries.set(reports, { status: 500, body: Buffer.from('boom') });
+    await expect(read(c)).rejects.toThrow(/refused the memory export \(500: boom\)/);
+  });
+
+  it('keeps the port-forward when the settings ask for a minted ServiceAccount token', async () => {
+    const c = served();
+    await expect(read(c, { tokenServiceAccount: 'ops/crewforge', tokenAudiences: [] })).rejects.toThrow(portForward);
+    expect(c.binaryCalls).toHaveLength(0);
+  });
+
+  it('keeps the port-forward for a transport that reads no binary', async () => {
+    const c = new FakeCluster();
+    await expect(read(c)).rejects.toThrow(portForward);
+    expect(c.calls.some((call) => call.path.startsWith('/apis/reports.kubemoot.ai'))).toBe(false);
+  });
+
+  it.each([['another group', JSON.stringify({ groupVersion: 'other/v1' })], ['no JSON', '<html>']])('uses the port-forward for %s as discovery', async (_n, body) => {
+    const c = served();
+    c.binaries.set(reports, { status: 200, body: Buffer.from(body) });
+    await expect(read(c)).rejects.toThrow(portForward);
+    expect(c.binaryCalls).toHaveLength(1);
+  });
+
+  it.each([
+    [401, /cluster did not accept your credentials for the Kubemoot report API \(context lab\)/],
+    [403, /get on crews\/memory-export in the reports.kubemoot.ai group.*reports-api ClusterRole/],
+    [404, /found no memory export for crew demo/],
+    [503, /cannot serve the memory export right now/],
+  ])('explains a %i of the data path in its own words', async (status, message) => {
+    const c = served();
+    c.binaries.set(base, { status, body: Buffer.from('refused') });
+    await expect(read(c)).rejects.toThrow(message);
+  });
+
+  it('explains a failed report fetch after the zip arrived', async () => {
+    const c = served();
+    c.binaries.set(`${base}?report=true`, { status: 503, body: Buffer.from('later') });
+    await expect(read(c)).rejects.toThrow(/cannot serve the memory export right now/);
+  });
+
+  it('names the export when it is larger than the limit', async () => {
+    const c = served();
+    c.failBinary = new ResponseTooLargeError(10);
+    await expect(read(c)).rejects.toThrow('The memory export is too large.');
   });
 });

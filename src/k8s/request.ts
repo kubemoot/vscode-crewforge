@@ -19,6 +19,20 @@ export class KubeError extends Error {
 /** How long one request may wait for the API server before it fails as timed out. Streams have no such limit. */
 export const REQUEST_TIMEOUT_MS = 20_000;
 
+/** A response larger than the caller allowed. */
+export class ResponseTooLargeError extends Error {
+  constructor(readonly limit: number) {
+    super(`The response is larger than ${limit} bytes.`);
+    this.name = 'ResponseTooLargeError';
+  }
+}
+
+/** A response read as bytes. */
+export interface BinaryResponse {
+  status: number;
+  body: Buffer;
+}
+
 /** The two things CrewForge asks of the API server. */
 export interface KubeTransport {
   /**
@@ -26,6 +40,11 @@ export interface KubeTransport {
    * with an AbortError when `signal` aborts. A PATCH body is a JSON merge patch.
    */
   request(method: string, path: string, body?: unknown, signal?: AbortSignal, headers?: Record<string, string>): Promise<string>;
+  /**
+   * A GET whose whole response body is wanted as bytes (a zip), with the status whatever it
+   * is: the caller explains a refusal. Optional because only the real client reads binary.
+   */
+  requestBinary?(path: string, maxBytes: number, headers?: Record<string, string>): Promise<BinaryResponse>;
   /** A long GET whose body arrives in chunks; resolves when the server ends it or `signal` aborts. */
   stream(path: string, onChunk: (text: string) => void, signal: AbortSignal): Promise<void>;
 }
@@ -51,7 +70,19 @@ export class KubeClient implements KubeTransport {
     }
   }
 
-  private async once(method: string, path: string, body?: unknown, signal?: AbortSignal, extra?: Record<string, string>): Promise<RawResponse> {
+  async requestBinary(path: string, maxBytes: number, headers?: Record<string, string>): Promise<BinaryResponse> {
+    const res = await this.once('GET', path, undefined, undefined, headers, maxBytes);
+    return { status: res.status, body: res.bytes };
+  }
+
+  private async once(
+    method: string,
+    path: string,
+    body?: unknown,
+    signal?: AbortSignal,
+    extra?: Record<string, string>,
+    maxBytes?: number,
+  ): Promise<RawResponse> {
     const payload = body === undefined ? undefined : JSON.stringify(body);
     const headers: Record<string, string> = {
       ...(payload ? { 'Content-Type': method === 'PATCH' ? 'application/merge-patch+json' : 'application/json' } : {}),
@@ -69,7 +100,7 @@ export class KubeClient implements KubeTransport {
         reject(err);
       };
       const req = send(options, (res) => {
-        readResponse(res).then(succeed, fail);
+        readResponse(res, maxBytes).then(succeed, fail);
       });
       const onAbort = () => {
         req.destroy();
@@ -169,23 +200,36 @@ interface RawResponse {
   status: number;
   retryAfter?: string;
   text: string;
+  bytes: Buffer;
 }
 
 /** The status, Retry-After header, and whole body of a response. */
-async function readResponse(res: http.IncomingMessage): Promise<RawResponse> {
+async function readResponse(res: http.IncomingMessage, maxBytes?: number): Promise<RawResponse> {
   const header = res.headers['retry-after'];
   const retryAfter = Array.isArray(header) ? header[0] : header;
-  const text = await collect(res);
-  return { status: res.statusCode ?? 0, retryAfter, text };
+  const bytes = await collectBytes(res, maxBytes);
+  return { status: res.statusCode ?? 0, retryAfter, text: bytes.toString('utf8'), bytes };
 }
 
-function collect(res: http.IncomingMessage): Promise<string> {
+function collectBytes(res: http.IncomingMessage, maxBytes = Infinity): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const parts: Buffer[] = [];
-    res.on('data', (b: Buffer) => parts.push(b));
-    res.on('end', () => resolve(Buffer.concat(parts).toString('utf8')));
+    let size = 0;
+    res.on('data', (b: Buffer) => {
+      size += b.length;
+      if (size > maxBytes) {
+        res.destroy(new ResponseTooLargeError(maxBytes));
+        return;
+      }
+      parts.push(b);
+    });
+    res.on('end', () => resolve(Buffer.concat(parts)));
     res.on('error', reject);
   });
+}
+
+async function collect(res: http.IncomingMessage): Promise<string> {
+  return (await collectBytes(res)).toString('utf8');
 }
 
 const MAX_ATTEMPTS = 5;
