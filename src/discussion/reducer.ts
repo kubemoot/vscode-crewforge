@@ -1,4 +1,4 @@
-import { acceleratorOf, eventErrorText, type DiscussionEvent } from './types';
+import { acceleratorOf, eventErrorText, OUTCOME_STOPPED, type DiscussionEvent } from './types';
 
 /** What one agent is doing in the current turn, as the stream has told us. */
 export interface AgentCard {
@@ -21,6 +21,8 @@ export interface TurnState {
   /** One card per agent, in the order agents first appeared. */
   cards: AgentCard[];
   synthesis?: string;
+  /** The person stopped the turn: it has no answer, and `synthesis` stays empty. */
+  stopped?: boolean;
   done: boolean;
   error?: string;
   /** Why the stream dropped, while the client reconnects; cleared when it is back. */
@@ -59,8 +61,9 @@ const handlers: Record<string, Handler> = {
       signal: e.signal ?? c.signal,
       summary: e.summary || firstLine(e.content) || c.summary,
     })),
-  synthesis: (s, e) => ({ ...s, synthesis: e.content ?? s.synthesis }),
-  done: (s) => ({ ...s, done: true }),
+  // The text of a turn the person stopped says so; it is not the crew's answer.
+  synthesis: (s, e) => (e.outcome === OUTCOME_STOPPED ? { ...s, stopped: true } : { ...s, synthesis: e.content ?? s.synthesis }),
+  done: (s, e) => ({ ...s, done: true, ...(e.outcome === OUTCOME_STOPPED ? { stopped: true } : {}) }),
   error: (s, e) => ({ ...s, done: true, error: eventErrorText(e) }),
 };
 

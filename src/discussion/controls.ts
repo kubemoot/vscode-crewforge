@@ -10,11 +10,18 @@ export const CONTROLLER_ROLE = 'kubemoot-conversation-controller';
 /** The longest reason the gateway takes. */
 export const MAX_REASON = 200;
 
-/** The gateway's answer to a stop, pause or resume: what it sent, and to which threads. */
+/** What a stop did: the turn stopped, a queued question was removed, every turn had finished, or the crew did not confirm. */
+export type StopOutcome = 'stopped' | 'cancelled' | 'nothing_to_stop' | 'unconfirmed';
+
+/** The gateway's answer to a stop, pause or resume: what it sent, and to which threads. A stop also says what happened. */
 export interface ConversationControl {
   conversationId: string;
   action: ControlAction;
   threads: string[];
+  /** On a stop: what happened. Absent from a gateway older than the stop outcome. */
+  outcome?: StopOutcome;
+  /** On a stop: what happened in the gateway's words. */
+  message?: string;
 }
 
 /** What a delete removed from each store that held the conversation. */
@@ -71,6 +78,29 @@ function parse<T>(text: string, what: string): T {
   } catch {
     throw new Error(`The gateway answered ${what} with something that is not JSON: ${text.slice(0, 200)}`);
   }
+}
+
+/** What a person reads of a control, and whether the crew did not do what was asked (a stop it did not confirm). */
+export interface ControlReport {
+  text: string;
+  /** The stop is not confirmed: the work may still be running. */
+  warn: boolean;
+}
+
+const STOP_TEXT: Record<StopOutcome, string> = {
+  stopped: 'Stopped. The crew abandoned the turn; what it had gathered stays in the trace.',
+  cancelled: 'Cancelled. The question was still waiting in the queue and the crew never saw it.',
+  nothing_to_stop: 'Nothing to stop: every turn had already finished.',
+  unconfirmed: 'The crew did not confirm the stop in time. The work may still be running.',
+};
+
+const PAST: Record<ControlAction, string> = { stop: 'Stopped', pause: 'Paused', resume: 'Resumed' };
+
+/** The result of a stop, pause or resume in words: a stop by what the gateway says happened, the others by the threads they reached. */
+export function reportControl(action: ControlAction, title: string, sent: ConversationControl): ControlReport {
+  if (action === 'stop' && sent.outcome) return { text: `"${title}": ${STOP_TEXT[sent.outcome] ?? sent.message ?? sent.outcome}`, warn: sent.outcome === 'unconfirmed' };
+  const turns = sent.threads?.length ?? 0;
+  return { text: `${PAST[action]} "${title}" (${turns} running turn${turns === 1 ? '' : 's'}).`, warn: false };
 }
 
 /** Sends a stop, pause or resume to the conversation's running threads. */
@@ -152,6 +182,9 @@ function notFound(err: KubeError, request: Request): KubeError {
 function conflict(err: KubeError, request: Request, said: string): KubeError {
   if (request.action === 'delete') {
     return new ControlError('The conversation still has a turn running. Stop it first, or choose Stop and delete.', 409, err.detail, false, true);
+  }
+  if (request.action === 'stop') {
+    return new ControlError('The crew has just taken the question and its discussion has not begun, so there is no turn to stop yet. Stop again in a moment.', 409, err.detail);
   }
   const why = said ? ` (${said})` : '';
   return new ControlError(`The conversation has no turn running to ${request.action}${why}.`, 409, err.detail);

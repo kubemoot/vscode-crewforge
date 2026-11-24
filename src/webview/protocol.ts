@@ -1,4 +1,5 @@
 import type { CrewAvailability } from '../discussion/availability';
+import type { RemoteState } from '../discussion/remoteState';
 import type { SessionView } from '../discussion/session';
 import type { ConversationActionId } from '../panels/conversationActions';
 import type { ConversationMeta } from '../store/conversation';
@@ -18,8 +19,10 @@ export type StateMessage = {
   availability?: CrewAvailability;
   /** The gateway's ids of the conversations the crew said have something new since they were last opened. */
   fresh: string[];
-  /** The gateway's ids of the conversations CrewForge paused and has not resumed or stopped. */
-  paused: string[];
+  /** Where each conversation stands on the crew, by the gateway's id, as the crew's state read says; absent for one it could not read. */
+  states: Record<string, RemoteState>;
+  /** Where a question that waits in the crew's queue stands, by the gateway's id: how many questions are ahead of it. */
+  queued: Record<string, number>;
 };
 
 /** The agents whose source is open in the workspace, and whether a dashboard URL is set. */

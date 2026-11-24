@@ -2,6 +2,8 @@ import { marked } from 'marked';
 import { cardText } from '../discussion/cardText';
 import { canControl, controlsFor, conversationState, type ConversationState } from '../discussion/conversationState';
 import { turnStatus } from '../discussion/turnStatus';
+import { queueNote, STOPPED_NOTICE } from '../discussion/stopped';
+import type { RemoteState } from '../discussion/remoteState';
 import type { AgentCard, TurnState } from '../discussion/reducer';
 import { agentsOf, problemsOf, type AgentNote, type ChatMessage, type ConversationMeta } from '../store/conversation';
 import type { ConversationActionId } from '../panels/conversationActions';
@@ -156,7 +158,7 @@ els.messages.addEventListener('click', (e) => {
 setInterval(() => {
   const label = document.querySelector('.loading-text');
   const turn = state?.view.turn;
-  if (label && turn) label.textContent = turnStatus(turn);
+  if (label && turn) label.textContent = turnStatus(turn, Date.now(), queuedAhead());
 }, 1000);
 
 setupResizer();
@@ -188,7 +190,14 @@ function inputState(): { stop: boolean; canSend: boolean; note?: string } {
   if (state?.view.busy) return { stop: true, canSend: false, note: 'The crew is answering' };
   const availability = state?.availability;
   if (availability && availability.state !== 'ready') return { stop: false, canSend: false, note: availability.reason };
-  return { stop: false, canSend: els.input.value.trim() !== '', note: freshNote() };
+  const ahead = queuedAhead();
+  return { stop: false, canSend: els.input.value.trim() !== '', note: ahead === undefined ? freshNote() : queueNote(ahead) };
+}
+
+/** How many questions wait ahead of the question of the conversation shown, when the crew says it waits in its queue. */
+function queuedAhead(): number | undefined {
+  const id = state?.view.conversation.conversationId;
+  return id && state?.states[id] === 'queued' ? (state.queued[id] ?? 0) : undefined;
 }
 
 /** Says so when the crew reported something new in the conversation shown, which is not in the chat itself. */
@@ -219,7 +228,6 @@ function autoGrow(): void {
 function render(): void {
   if (!state) return;
   const { conversation, busy } = state.view;
-  const paused = new Set(state.paused);
   els.title.textContent = state.crewTitle;
   els.title.title = conversationTitleTip(conversation.crewName);
   const technical = state.crewTitle === conversation.crewName ? '' : `${conversation.crewName} · `;
@@ -232,15 +240,25 @@ function render(): void {
   els.rename.disabled = busy;
   els.deleteBtn.disabled = busy;
   // The crew knows a conversation by the id its gateway gave; one that has not reached it has nothing to act on.
-  const here = conversationState(busy, paused.has(conversation.conversationId ?? ''));
-  for (const { action, el } of els.convButtons) el.hidden = !conversation.conversationId || !canControl(here, action);
-  els.history.innerHTML = renderHistory(state.history, conversation.id, new Set(state.fresh), paused, busy);
+  const here = conversationState(conversation.conversationId ? state.states[conversation.conversationId] : undefined, busy);
+  for (const { action, el } of els.convButtons) {
+    el.hidden = !conversation.conversationId || !canControl(here, action);
+    if (action === 'stop') setStopLabel(el, here);
+  }
+  els.history.innerHTML = renderHistory(state.history, conversation.id, new Set(state.fresh), state.states, busy);
   renderMessages();
   renderSend();
   vscode.postMessage({ type: 'shown', text: shownText(document.body) });
 }
 
-function renderHistory(history: ConversationMeta[], activeId: string, fresh: Set<string>, paused: Set<string>, busy: boolean): string {
+/** A question still in the queue is cancelled, not stopped: the button says which. */
+function setStopLabel(el: HTMLButtonElement, here: ConversationState): void {
+  const label = here === 'queued' ? CHAT.cancel : CHAT.stop;
+  el.textContent = here === 'queued' ? 'Cancel' : 'Stop';
+  el.title = iconTip(label);
+}
+
+function renderHistory(history: ConversationMeta[], activeId: string, fresh: Set<string>, states: Record<string, RemoteState>, busy: boolean): string {
   if (history.length === 0) return '<div class="no-discussions"><p>No saved conversations yet</p></div>';
   return history
     .map((h) => {
@@ -250,7 +268,7 @@ function renderHistory(history: ConversationMeta[], activeId: string, fresh: Set
         <button class="discussion-btn" data-id="${escapeHtml(h.id)}"${htmlAttribute('title', openConversationTip(h.title, formatAgo(h.startedAt)))}>
           <span class="conv-title">${badge}${escapeHtml(h.title)}</span>
           <span class="conv-date">${escapeHtml(formatAgo(h.startedAt))}</span>
-        </button>${h.conversationId ? listActions(h.id, conversationState(busy && h.id === activeId, paused.has(h.conversationId))) : ''}</div>`;
+        </button>${h.conversationId ? listActions(h.id, conversationState(states[h.conversationId], busy && h.id === activeId)) : ''}</div>`;
     })
     .join('');
 }
@@ -258,7 +276,7 @@ function renderHistory(history: ConversationMeta[], activeId: string, fresh: Set
 /** The menu of what a saved conversation on the crew can be told to do, shown on hover or focus. */
 function listActions(id: string, here: ConversationState): string {
   const order: ConversationActionId[] = [...controlsFor(here), 'erase'];
-  const entries = order.map((action) => LIST_ACTIONS.find((a) => a.action === action)!).map(
+  const entries = order.map((action) => LIST_ACTIONS.find((a) => a.action === action)!).map((a) => (a.action === 'stop' && here === 'queued' ? { ...a, label: 'Cancel', tip: CHAT.cancel } : a)).map(
     (a) => `<button type="button" class="menu-item conv-action" role="menuitem"${htmlAttribute('data-conv-action', a.action)}${htmlAttribute('data-id', id)}${iconTitle(a.tip)}>${escapeHtml(a.label)}</button>`,
   );
   return `<details class="menu conv-actions"><summary${iconAttrs(CHAT.menu)}>${icons.more}</summary><div class="menu-list" role="menu">${entries.join('')}</div></details>`;
@@ -448,10 +466,15 @@ function renderTurn(turn: TurnState): string {
     })
     .join('');
   const feed = cards ? `<div class="findings-feed">${cards}</div>` : '';
-  const answer = turn.synthesis
-    ? `<div class="message-text markdown-content">${marked.parse(turn.synthesis, { async: false })}</div>`
-    : `<div class="loading-indicator"><div class="loading-spinner" aria-hidden="true"></div><span class="loading-text"${tipAttrs(CHAT_TEXT.status)}>${escapeHtml(turnStatus(turn))}</span></div>`;
+  const answer = answerOf(turn);
   return `<div class="message crew turn">${feed}${answer}</div>`;
+}
+
+/** What fills the turn's bubble: the answer, the line saying the person stopped it, or the status while it works. */
+function answerOf(turn: TurnState): string {
+  if (turn.synthesis) return `<div class="message-text markdown-content">${marked.parse(turn.synthesis, { async: false })}</div>`;
+  if (turn.stopped) return `<div class="message-text">${escapeHtml(STOPPED_NOTICE)}</div>`;
+  return `<div class="loading-indicator"><div class="loading-spinner" aria-hidden="true"></div><span class="loading-text"${tipAttrs(CHAT_TEXT.status)}>${escapeHtml(turnStatus(turn, Date.now(), queuedAhead()))}</span></div>`;
 }
 
 /** Lets the conversations pane be resized by dragging its edge; the width is remembered. */

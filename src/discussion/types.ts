@@ -19,6 +19,8 @@ export interface DiscussionEvent {
   model?: string;
   /** Why an agent is waiting or stood aside, such as accelerator-busy (gpu-busy from an older gateway) or model-too-large. */
   reason?: string;
+  /** On a synthesis or done event: `stopped` when the person stopped the turn, so the content is the text that says so and not an answer. */
+  outcome?: string;
   /**
    * The SSE id the event arrived under (not part of the JSON): where a reconnecting
    * client resumes once this event is handled.
@@ -44,6 +46,9 @@ export type EventType =
   /** Not from the gateway: the client lost the stream before the answer and is reconnecting. */
   | 'reconnecting'
   | (string & {});
+
+/** The outcome of a turn the person stopped. */
+export const OUTCOME_STOPPED = 'stopped';
 
 /** Reports whether an event ends a turn's stream. */
 export function isTerminal(e: DiscussionEvent): boolean {

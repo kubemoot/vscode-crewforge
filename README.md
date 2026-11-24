@@ -134,7 +134,17 @@ itself, through the same gateway connection and token as **Ask**. The **...** me
 header, and the one on each saved conversation in the list (on hover or focus), offer:
 
 - **Stop**, **Pause** and **Resume** send the control to the conversation's running turns.
-  A conversation with nothing running answers 409, and CrewForge says so.
+  Which of them a menu offers comes from the crew's own state read
+  (`GET /api/v1/discussions/{crew}/{conversationId}/state`), read when the chat opens, every few
+  seconds while a turn is queued, running or paused, and after each action, so a conversation
+  running elsewhere (the dashboard, `kmctl`) offers **Stop** and **Pause** too. A question that
+  still waits in the crew's queue offers **Cancel** alone and the chat says where it waits
+  ("2 questions ahead"). A crew whose gateway cannot say leaves the menu to the turn in this chat.
+- **Stop** says what happened, in the gateway's outcome: stopped, cancelled (the question was
+  still queued), nothing to stop, or a warning that the crew did not confirm and the work may
+  still be running. A question the crew has just taken answers 409 (stop again in a moment).
+- A turn you stopped is saved as "Stopped by you. The crew did not answer this turn.", never as
+  the crew's answer.
 - **Delete from the crew** asks first, then removes the conversation from every place the crew
   keeps it (history, the agents' messages, workspace, scheduled reminders, learned memory facts)
   and shows what it removed in each store and what it cannot remove (logs and backups). A

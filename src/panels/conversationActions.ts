@@ -3,6 +3,7 @@ import {
   CONTROLLER_ROLE,
   controlConversation,
   ControlError,
+  reportControl,
   eraseConversation,
   type EraseOptions,
   erasureLines,
@@ -31,8 +32,6 @@ export interface ConversationTarget {
   title: string;
 }
 
-const PAST: Record<ControlAction, string> = { stop: 'Stopped', pause: 'Paused', resume: 'Resumed' };
-
 /**
  * Stops, pauses, resumes or deletes a conversation on one crew through its gateway. The
  * gateway lets the owner act without a reason; anyone else needs the
@@ -57,7 +56,8 @@ export class ConversationActions {
     for (;;) {
       try {
         const sent = await controlConversation(this.client, this.namespace, this.crew, target.conversationId, action, reason);
-        void vscode.window.showInformationMessage(`${PAST[action]} "${target.title}" (${plural(sent.threads?.length ?? 0, 'running turn')}).`);
+        const report = reportControl(action, target.title, sent);
+        void (report.warn ? vscode.window.showWarningMessage(report.text) : vscode.window.showInformationMessage(report.text));
         return true;
       } catch (err) {
         if (!needsReason(err) || reason !== undefined) throw err;
@@ -109,10 +109,6 @@ export class ConversationActions {
 
 function needsReason(err: unknown): boolean {
   return err instanceof ControlError && err.needsReason;
-}
-
-function plural(count: number, noun: string): string {
-  return `${count} ${noun}${count === 1 ? '' : 's'}`;
 }
 
 /** Asks why the person acts on another caller's conversation; undefined when they cancel. The gateway audits it. */

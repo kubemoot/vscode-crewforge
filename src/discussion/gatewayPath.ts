@@ -50,6 +50,12 @@ export function controlPath(namespace: string, crew: string, conversationId: str
   return `${gatewayBase(namespace, crew)}/${encodeURIComponent(conversationId)}/${action}`;
 }
 
+/** GET here for where the conversation and each of its turns stand: queued, running, paused, stopped or finished. */
+export function statePath(namespace: string, crew: string, conversationId: string): string {
+  if (!conversationId) throw new Error('conversationId is required');
+  return `${gatewayBase(namespace, crew)}/${encodeURIComponent(conversationId)}/state`;
+}
+
 /** DELETE here to erase the conversation; `force` erases one that is still running, stopping it first. */
 export function erasePath(namespace: string, crew: string, conversationId: string, force = false): string {
   if (!conversationId) throw new Error('conversationId is required');
