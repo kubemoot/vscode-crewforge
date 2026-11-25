@@ -3,7 +3,7 @@ import * as http from 'node:http';
 import * as net from 'node:net';
 import type { Readable, Writable } from 'node:stream';
 import { KubeConfig } from '@kubernetes/client-node';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ask, streamTurn } from '../src/discussion/client';
 import type { PodTunnel } from '../src/discussion/forward';
 import { CallerError, explainGateway, GatewayClient, parseServiceAccount, TokenSource, type CallerSettings, type GatewayContext } from '../src/discussion/gateway';
@@ -162,6 +162,7 @@ afterEach(async () => {
 
 class DirectTunnel extends EventEmitter implements PodTunnel {
   calls: { namespace: string; pod: string; ports: number[] }[] = [];
+  closes = 0;
   constructor(private readonly port: number) {
     super();
   }
@@ -171,7 +172,10 @@ class DirectTunnel extends EventEmitter implements PodTunnel {
     input.pipe(upstream);
     upstream.pipe(output);
     const ws = new EventEmitter() as EventEmitter & { close(): void };
-    ws.close = () => upstream.destroy();
+    ws.close = () => {
+      this.closes++;
+      upstream.destroy();
+    };
     upstream.on('close', () => ws.emit('close'));
     return ws;
   }
@@ -272,9 +276,10 @@ describe('GatewayClient', () => {
   });
 
   it('closes the forward, and closing twice is harmless', async () => {
-    const { gw } = await client(withToken());
+    const { tunnel, gw } = await client(withToken());
     await ask(gw, 'team-a', 'demo', 'hi');
     await gw.close();
     await gw.close();
+    await vi.waitFor(() => expect(tunnel.closes).toBe(1));
   });
 });
