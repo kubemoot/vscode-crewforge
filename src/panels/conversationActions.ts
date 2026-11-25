@@ -19,11 +19,11 @@ import { confirmModal } from '../views/confirm';
 /** What a person can do to a conversation on the crew, beyond what they ask in it. */
 export type ConversationActionId = ControlAction | 'erase';
 
-const ACTIONS: readonly string[] = ['stop', 'pause', 'resume', 'erase'];
+const ACTIONS: ReadonlySet<string> = new Set(['stop', 'pause', 'resume', 'erase']);
 
 /** Whether a value from the page names an action; the page is not trusted. */
 export function isConversationAction(value: unknown): value is ConversationActionId {
-  return typeof value === 'string' && ACTIONS.includes(value);
+  return typeof value === 'string' && ACTIONS.has(value);
 }
 
 /** The conversation an action is for: the gateway's id, and the name a person knows it by. */

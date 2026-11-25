@@ -198,7 +198,7 @@ function failed(err: KubeError, request: Request): KubeError {
 }
 
 function unavailable(err: KubeError, request: Request, said: string): KubeError {
-  const why = said || 'its gateway is not ready';
+  const why = said === '' ? 'its gateway is not ready' : said;
   return new ControlError(`The crew ${request.crew} could not ${verbOf(request)} the conversation right now (${why}). Try again in a moment.`, 503, err.detail);
 }
 

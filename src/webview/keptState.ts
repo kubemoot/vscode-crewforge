@@ -38,7 +38,7 @@ export class Keeper {
 
   /** What is kept, with changes not yet written. */
   read(): Kept {
-    return { ...((this.api.getState?.() as Kept | undefined) ?? {}), ...this.pending };
+    return { ...(this.api.getState?.() as Kept | undefined), ...this.pending };
   }
 
   save(patch: Kept): void {

@@ -29,8 +29,8 @@ export interface DeclSite extends TextSpan {
 
 const NAME = String.raw`[A-Za-z0-9][\w.-]*`;
 const NAME_ONLY = new RegExp(`^${NAME}$`);
-const FLOW_LIST = new RegExp(String.raw`^(\s*)promptRefs:\s*\[(.*)\]\s*(?:#.*)?$`);
-const BLOCK_KEY = new RegExp(String.raw`^(\s*)promptRefs:\s*(?:#.*)?$`);
+const FLOW_LIST = /^(\s*)promptRefs:\s*\[(.*)\]\s*(?:#.*)?$/;
+const BLOCK_KEY = /^(\s*)promptRefs:\s*(?:#.*)?$/;
 const BLOCK_ITEM = new RegExp(String.raw`^(\s*)-\s*(["']?)(${NAME})\2\s*(?:#.*)?$`);
 const CREW_REF = new RegExp(String.raw`^\s*crewRef:\s*(["']?)(${NAME})\1\s*(?:#.*)?$`);
 const BLOCK_SCALAR = /:\s*[|>][-+0-9]*\s*(?:#.*)?$/;

@@ -22,11 +22,11 @@ export interface ConversationStatus {
   turns: TurnStatus[];
 }
 
-const STATES: readonly string[] = ['queued', 'running', 'paused', 'stopped', 'finished'];
+const STATES: ReadonlySet<string> = new Set(['queued', 'running', 'paused', 'stopped', 'finished']);
 
 function isStatus(body: unknown): body is ConversationStatus {
   const s = body as ConversationStatus | null;
-  return typeof s === 'object' && s !== null && STATES.includes(s.state) && Array.isArray(s.turns);
+  return typeof s === 'object' && s !== null && STATES.has(s.state) && Array.isArray(s.turns);
 }
 
 /**

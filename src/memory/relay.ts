@@ -11,6 +11,9 @@ import { parseExport, parseReport, type ParsedExport, type SelectionReport } fro
 export const MEMORY_REQUEST_MS = 30_000;
 export const MEMORY_MAX_BYTES = 128 * 1024 * 1024;
 
+/** The caller settings of a relay that mints no token: the kubeconfig's own is used. */
+const NO_CALLER_SETTINGS: CallerSettings = { tokenServiceAccount: '', tokenAudiences: [] };
+
 /** A refusal by the operator's report service, said in plain words, with its status kept. */
 export class MemoryError extends KubeError {
   constructor(message: string, status?: number, detail?: string, readonly needsToken = false) {
@@ -159,7 +162,7 @@ export class MemoryRelay {
     private readonly operatorNamespace: string,
     private readonly parts: RelayParts = realParts,
     private readonly timeoutMs = MEMORY_REQUEST_MS,
-    settings: CallerSettings = { tokenServiceAccount: '', tokenAudiences: [] },
+    settings: CallerSettings = NO_CALLER_SETTINGS,
     private readonly maxBytes = MEMORY_MAX_BYTES,
   ) {
     this.tokens = new TokenSource(api, config, settings);
