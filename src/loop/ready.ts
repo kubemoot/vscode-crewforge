@@ -42,7 +42,7 @@ export function readiness(r: CrewReadiness): ReadyVerdict {
   const failed = failedReason(crew, agents);
   if (failed) return { state: 'failed', message: failed };
   if (!observed(crew)) return { state: 'waiting', message: 'Waiting for the operator to see this deploy' };
-  if (!r.agents) return !notReconciled(crew) ? { state: 'ready', message: 'Crew ready' } : { state: 'waiting', message: `Crew ${crew.phase}` };
+  if (!r.agents) return notReconciled(crew) ? { state: 'waiting', message: `Crew ${crew.phase}` } : { state: 'ready', message: 'Crew ready' };
   return agentsVerdict(crew, agents);
 }
 
